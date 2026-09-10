@@ -8,15 +8,15 @@ const BASE_POSSESSIONS := 112
 
 func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int) -> Dictionary:
 	var rng = SeededRngClass.new(seed)
-	var home_players := _players_for_club(players, home_club.id)
-	var away_players := _players_for_club(players, away_club.id)
+	var home_players: Array = _players_for_club(players, home_club.id)
+	var away_players: Array = _players_for_club(players, away_club.id)
 	assert(home_players.size() >= 11 and away_players.size() >= 11)
 
-	var home_lineup := _select_lineup(home_players)
-	var away_lineup := _select_lineup(away_players)
-	var home_strength := _lineup_strength(home_lineup) + 2.0
-	var away_strength := _lineup_strength(away_lineup)
-	var strength_share := clampf(home_strength / maxf(home_strength + away_strength, 1.0), 0.35, 0.65)
+	var home_lineup: Array = _select_lineup(home_players)
+	var away_lineup: Array = _select_lineup(away_players)
+	var home_strength: float = _lineup_strength(home_lineup) + 2.0
+	var away_strength: float = _lineup_strength(away_lineup)
+	var strength_share: float = clampf(home_strength / maxf(home_strength + away_strength, 1.0), 0.35, 0.65)
 
 	var result := {
 		"seed": seed,
@@ -35,8 +35,8 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	}
 
 	for sequence_index in range(BASE_POSSESSIONS):
-		var minute := clampi(int((float(sequence_index) / BASE_POSSESSIONS) * MATCH_MINUTES) + 1, 1, 90)
-		var side := "home" if rng.randf() < strength_share else "away"
+		var minute: int = clampi(int((float(sequence_index) / BASE_POSSESSIONS) * MATCH_MINUTES) + 1, 1, 90)
+		var side: String = "home" if rng.randf() < strength_share else "away"
 		var lineup: Array = home_lineup if side == "home" else away_lineup
 		var opponent: Array = away_lineup if side == "home" else home_lineup
 		_simulate_possession(result, side, lineup, opponent, minute, rng)
@@ -54,11 +54,11 @@ func apply_to_fixture(fixture: Dictionary, result: Dictionary) -> void:
 
 func _simulate_possession(result: Dictionary, side: String, lineup: Array, opponent: Array, minute: int, rng) -> void:
 	var stats: Dictionary = result.stats[side]
-	var pass_attempts := rng.randi_range(1, 7)
+	var pass_attempts: int = rng.randi_range(1, 7)
 	var passer: Dictionary = rng.pick(lineup)
 	for _i in range(pass_attempts):
 		stats.passes += 1
-		var pass_probability := clampf(0.66 + (_player_quality(passer) - 50.0) * 0.0025, 0.54, 0.88)
+		var pass_probability: float = clampf(0.66 + (_player_quality(passer) - 50.0) * 0.0025, 0.54, 0.88)
 		if rng.chance(pass_probability):
 			stats.completed_passes += 1
 			result.events.append({"minute": minute, "type": "pass", "side": side, "player_id": passer.id, "outcome": "complete"})
@@ -67,22 +67,22 @@ func _simulate_possession(result: Dictionary, side: String, lineup: Array, oppon
 			result.events.append({"minute": minute, "type": "pass", "side": side, "player_id": passer.id, "outcome": "incomplete"})
 			return
 
-	var team_quality := _lineup_strength(lineup)
-	var opponent_quality := _lineup_strength(opponent)
-	var shot_probability := clampf(0.13 + (team_quality - opponent_quality) * 0.003, 0.08, 0.24)
+	var team_quality: float = _lineup_strength(lineup)
+	var opponent_quality: float = _lineup_strength(opponent)
+	var shot_probability: float = clampf(0.13 + (team_quality - opponent_quality) * 0.003, 0.08, 0.24)
 	if not rng.chance(shot_probability):
 		return
 
 	var shooter: Dictionary = _pick_shooter(lineup, rng)
-	var xg := _shot_xg(shooter, rng)
+	var xg: float = _shot_xg(shooter, rng)
 	stats.shots += 1
 	stats.xg += xg
-	var on_target_probability := clampf(0.30 + (_player_quality(shooter) - 50.0) * 0.003, 0.22, 0.55)
-	var on_target := rng.chance(on_target_probability)
+	var on_target_probability: float = clampf(0.30 + (_player_quality(shooter) - 50.0) * 0.003, 0.22, 0.55)
+	var on_target: bool = rng.chance(on_target_probability)
 	if on_target:
 		stats.shots_on_target += 1
-	var goal_probability := xg * (0.75 + _player_quality(shooter) / 200.0)
-	var goal := on_target and rng.chance(goal_probability)
+	var goal_probability: float = xg * (0.75 + _player_quality(shooter) / 200.0)
+	var goal: bool = on_target and rng.chance(goal_probability)
 	if goal:
 		stats.goals += 1
 		if side == "home":
@@ -101,9 +101,9 @@ func _simulate_possession(result: Dictionary, side: String, lineup: Array, oppon
 func _maybe_card(result: Dictionary, possession_side: String, defenders: Array, minute: int, rng) -> void:
 	if not rng.chance(0.021):
 		return
-	var defending_side := "away" if possession_side == "home" else "home"
+	var defending_side: String = "away" if possession_side == "home" else "home"
 	var player: Dictionary = rng.pick(defenders)
-	var red := rng.chance(0.035)
+	var red: bool = rng.chance(0.035)
 	result.stats[defending_side].cards += 1
 	if red:
 		result.stats[defending_side].red_cards += 1
@@ -121,9 +121,9 @@ func _apply_subs_for_side(result: Dictionary, side: String, squad: Array, lineup
 	for player in squad:
 		if not lineup_ids.has(player.id):
 			bench.append(player)
-	var count := mini(3, bench.size())
+	var count: int = mini(3, bench.size())
 	for i in range(count):
-		var minute := 60 + i * 10 + rng.randi_range(-3, 3)
+		var minute: int = 60 + i * 10 + rng.randi_range(-3, 3)
 		var player_out: Dictionary = lineup[lineup.size() - 1 - i]
 		var player_in: Dictionary = bench[i]
 		result.substitutions.append({"minute": minute, "side": side, "player_out": player_out.id, "player_in": player_in.id})
@@ -132,7 +132,7 @@ func _apply_subs_for_side(result: Dictionary, side: String, squad: Array, lineup
 func _finalize_possession(result: Dictionary) -> void:
 	var home_passes: float = result.stats.home.passes
 	var away_passes: float = result.stats.away.passes
-	var total := maxf(home_passes + away_passes, 1.0)
+	var total: float = maxf(home_passes + away_passes, 1.0)
 	result.stats.home.possession = snappedf(home_passes / total * 100.0, 0.1)
 	result.stats.away.possession = snappedf(100.0 - result.stats.home.possession, 0.1)
 	result.stats.home.xg = snappedf(result.stats.home.xg, 0.01)
@@ -157,7 +157,7 @@ func _rating_for(player_id: String, side: String, result: Dictionary) -> float:
 			rating -= 0.012
 		elif event.type == "card":
 			rating -= 0.25 if event.card == "yellow" else 1.0
-	var goal_difference := result.home_goals - result.away_goals
+	var goal_difference: int = result.home_goals - result.away_goals
 	if side == "away":
 		goal_difference *= -1
 	rating += clampf(goal_difference * 0.08, -0.4, 0.4)
@@ -171,7 +171,7 @@ func _players_for_club(players: Array, club_id: String) -> Array:
 	return result
 
 func _select_lineup(players: Array) -> Array:
-	var sorted := players.duplicate()
+	var sorted: Array = players.duplicate()
 	sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.current_ability > b.current_ability)
 	return sorted.slice(0, 11)
 
@@ -192,7 +192,7 @@ func _pick_shooter(lineup: Array, rng) -> Dictionary:
 	return rng.pick(attacking if not attacking.is_empty() else lineup)
 
 func _shot_xg(shooter: Dictionary, rng) -> float:
-	var base := rng.randf_range(0.04, 0.34)
+	var base: float = rng.randf_range(0.04, 0.34)
 	if shooter.position == "ST":
 		base += 0.035
 	return clampf(base, 0.02, 0.55)
