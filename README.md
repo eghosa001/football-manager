@@ -35,6 +35,10 @@ godot --path .
 
 The current UI is intentionally only a smoke-test screen. It generates the world and displays one deterministic sample match.
 
+## Persistence
+
+`SaveRepository` is the storage boundary. `SaveStore` provides the dependency-free atomic binary save implementation used by default. `SqliteSaveStore` supports Godot-SQLite v4.9 when its addon is present at `res://addons/godot-sqlite/`; CI downloads that release and verifies its SHA-256 before running the live SQLite round-trip test. The third-party binary is not committed to this repository.
+
 ## Tests
 
 Core Phase 1/2 tests:
@@ -49,7 +53,7 @@ Phase 3 season/persistence acceptance tests:
 godot --headless --path . --script res://tests/phase3_test_runner.gd
 ```
 
-SQLite integration is tested in CI against the checksum-pinned Godot-SQLite v4.9 addon:
+SQLite integration, with the Godot-SQLite addon installed:
 
 ```bash
 godot --headless --path . --script res://tests/sqlite_integration_test.gd
