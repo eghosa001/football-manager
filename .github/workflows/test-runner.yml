@@ -1,9 +1,109 @@
 name: test self-hosted
-on: workflow_dispatch
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-hosted-tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 120
     steps:
-      - run: echo Hello from self-hosted
-      - run: hostname
-      - run: whoami
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Verify engine
+        shell: powershell
+        run: |
+          godot --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Import project
+        shell: powershell
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'godot-import.log'
+          godot --headless --editor --path . --import --quit 2>&1 | Tee-Object -FilePath $log
+          $status = $LASTEXITCODE
+          if ($status -ne 0) { exit $status }
+          if (Select-String -Path $log -Pattern 'SCRIPT ERROR:|ERROR:|Assertion failed' -Quiet) {
+            Get-Content $log
+            throw 'Godot reported errors during import.'
+          }
+
+      - name: Run full phase test suite
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $suites = @(
+            'tests/test_runner.gd',
+            'tests/phase3_test_runner.gd',
+            'tests/phase45_test_runner.gd',
+            'tests/phase67_test_runner.gd',
+            'tests/phase89_test_runner.gd',
+            'tests/phase1011_test_runner.gd'
+          )
+          New-Item -ItemType Directory -Force -Path test_artifacts | Out-Null
+          $failed = @()
+          foreach ($suite in $suites) {
+            Write-Host "===== $suite ====="
+            $logName = ($suite.Replace('/', '_') -replace '\.gd$', '.log')
+            $log = Join-Path 'test_artifacts' $logName
+            godot --headless --path . --script "res://$suite" 2>&1 | Tee-Object -FilePath $log
+            $status = $LASTEXITCODE
+            $hasErrors = Select-String -Path $log -Pattern 'SCRIPT ERROR:|ERROR:|Assertion failed' -Quiet
+            $hasPass = Select-String -Path $log -Pattern 'PASS' -Quiet
+            if ($status -ne 0 -or $hasErrors -or -not $hasPass) {
+              $failed += $suite
+              Write-Host "FAILED: $suite (exit $status, errors=$hasErrors, pass=$hasPass)"
+            }
+          }
+          if ($failed.Count -gt 0) {
+            Write-Host "Self-hosted suite failures ($($failed.Count)):"
+            $failed | ForEach-Object { Write-Host " - $_" }
+            exit 1
+          }
+
+      - name: Run career performance test
+        shell: powershell
+        run: |
+          $log = 'test_artifacts/career_performance_test.log'
+          godot --headless --path . --script res://tests/career_performance_test.gd 2>&1 | Tee-Object -FilePath $log
+          $status = $LASTEXITCODE
+          if ($status -ne 0 -or (Select-String -Path $log -Pattern 'SCRIPT ERROR:|ERROR:|Assertion failed' -Quiet) -or -not (Select-String -Path $log -Pattern 'PASS' -Quiet)) {
+            exit 1
+          }
+
+      - name: Verify tests did not modify tracked source
+        shell: powershell
+        run: |
+          git diff --quiet -- .
+          if ($LASTEXITCODE -ne 0) {
+            git diff -- .
+            throw 'Tests modified tracked repository files.'
+          }
+
+      - name: Upload self-hosted logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-hosted-test-logs
+          path: test_artifacts/**
+          if-no-files-found: ignore
+          retention-days: 14
