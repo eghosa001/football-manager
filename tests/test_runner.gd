@@ -33,6 +33,25 @@ func _expect(condition: bool, message: String) -> void:
 		failures += 1
 		push_error("[TEST] %s" % message)
 
+func _deep_equal(left: Variant, right: Variant) -> bool:
+	if typeof(left) != typeof(right):
+		return false
+	if left is Dictionary:
+		if left.size() != right.size():
+			return false
+		for key in left.keys():
+			if not right.has(key) or not _deep_equal(left[key], right[key]):
+				return false
+		return true
+	if left is Array:
+		if left.size() != right.size():
+			return false
+		for i in range(left.size()):
+			if not _deep_equal(left[i], right[i]):
+				return false
+		return true
+	return left == right
+
 func _test_rng() -> void:
 	var a = SeededRngClass.new(12345)
 	var b = SeededRngClass.new(12345)
@@ -69,8 +88,8 @@ func _test_world_generation() -> Dictionary:
 	_expect(a.staff.size() == 400, "Expected five staff per club")
 	_expect(a.contracts.size() == 2000, "Expected one basic contract per player")
 	_expect(a.competitions.size() == 4, "Expected one competition per country")
-	_expect(a == b, "Same seed must generate identical world")
-	_expect(a != c, "Different seed must generate a different world")
+	_expect(_deep_equal(a, b), "Same seed must generate identical world")
+	_expect(not _deep_equal(a, c), "Different seed must generate a different world")
 	return a
 
 func _test_fixtures(world: Dictionary) -> void:
@@ -90,7 +109,7 @@ func _test_match_engine(world: Dictionary) -> void:
 	var away: Dictionary = world.clubs[1]
 	var first: Dictionary = engine.simulate_match(home, away, world.players, 827183927)
 	var second: Dictionary = engine.simulate_match(home, away, world.players, 827183927)
-	_expect(first == second, "Match seed must reproduce identical match state and event stream")
+	_expect(_deep_equal(first, second), "Match seed must reproduce identical match state and event stream")
 	_expect(first.lineups.home.size() == 11 and first.lineups.away.size() == 11, "Each starting lineup must contain 11 players")
 	_expect(first.substitutions.size() <= 6, "Default match must not exceed three substitutions per side")
 	_expect(first.stats.home.possession + first.stats.away.possession >= 99.9, "Possession should sum to approximately 100")
