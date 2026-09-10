@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main, phase-1-2-world-match-engine]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      full_match_validation:
+        description: Run 100,000-match validation
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Verify engine
+        run: godot --version
+
+      - name: Import project
+        run: godot --headless --editor --path . --quit
+
+      - name: Run Phase 1/2 tests
+        run: godot --headless --path . --script res://tests/test_runner.gd
+
+      - name: Run 100k match validation
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_match_validation }}
+        run: godot --headless --path . --script res://tests/test_runner.gd -- --full-match-validation
