@@ -11,7 +11,7 @@ var checks := 0
 func _init() -> void:
 	print("[TEST] Football Dynasty Phase 1/2")
 	_test_calendar()
-	var world := _test_world_generation()
+	var world: Dictionary = _test_world_generation()
 	_test_fixtures(world)
 	_test_match_engine(world)
 	_test_league_table(world)
@@ -87,9 +87,9 @@ func _test_league_table(world: Dictionary) -> void:
 			competition_fixtures.append(fixture)
 	for i in range(10):
 		var fixture: Dictionary = competition_fixtures[i]
-		var result := engine.simulate_match(_club(world.clubs, fixture.home_club_id), _club(world.clubs, fixture.away_club_id), world.players, 10_000 + i)
+		var result: Dictionary = engine.simulate_match(_club(world.clubs, fixture.home_club_id), _club(world.clubs, fixture.away_club_id), world.players, 10_000 + i)
 		engine.apply_to_fixture(fixture, result)
-	var table := LeagueTableClass.build(competition.club_ids, competition_fixtures)
+	var table: Array = LeagueTableClass.build(competition.club_ids, competition_fixtures)
 	_expect(table.size() == 20, "League table should contain all 20 clubs")
 	var previous_points := 999
 	for row in table:
@@ -104,8 +104,8 @@ func _test_match_distribution(world: Dictionary, sample_size: int = 2_000) -> vo
 	var total_cards := 0.0
 	var home_wins := 0
 	for i in range(sample_size):
-		var home_index := (i * 2) % world.clubs.size()
-		var away_index := (home_index + 1 + (i % 7)) % world.clubs.size()
+		var home_index: int = (i * 2) % world.clubs.size()
+		var away_index: int = (home_index + 1 + (i % 7)) % world.clubs.size()
 		if away_index == home_index:
 			away_index = (away_index + 1) % world.clubs.size()
 		var result: Dictionary = engine.simulate_match(world.clubs[home_index], world.clubs[away_index], world.players, 900_000 + i)
@@ -114,10 +114,10 @@ func _test_match_distribution(world: Dictionary, sample_size: int = 2_000) -> vo
 		total_cards += result.stats.home.cards + result.stats.away.cards
 		if result.home_goals > result.away_goals:
 			home_wins += 1
-	var avg_goals := total_goals / sample_size
-	var avg_shots := total_shots / sample_size
-	var avg_cards := total_cards / sample_size
-	var home_win_rate := float(home_wins) / sample_size
+	var avg_goals: float = total_goals / sample_size
+	var avg_shots: float = total_shots / sample_size
+	var avg_cards: float = total_cards / sample_size
+	var home_win_rate: float = float(home_wins) / sample_size
 	print("[MATCH VALIDATION] n=%d goals=%.2f shots=%.2f cards=%.2f home_win=%.3f" % [sample_size, avg_goals, avg_shots, avg_cards, home_win_rate])
 	_expect(avg_goals >= 1.5 and avg_goals <= 4.0, "Average goals outside broad football range")
 	_expect(avg_shots >= 8.0 and avg_shots <= 30.0, "Average shots outside broad football range")
