@@ -1,7 +1,7 @@
 class_name SeasonRunner
 extends RefCounted
 
-const MatchEngineClass = preload("res://simulation/match/abstract_match_engine.gd")
+const MatchEngineClass = preload("res://simulation/match/tactical_match_engine.gd")
 const LeagueTableClass = preload("res://simulation/competitions/league_table.gd")
 const CalendarClass = preload("res://core/calendar/calendar_service.gd")
 const LeagueSystemClass = preload("res://application/season/league_system.gd")
