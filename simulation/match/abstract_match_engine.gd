@@ -54,11 +54,11 @@ func apply_to_fixture(fixture: Dictionary, result: Dictionary) -> void:
 
 func _simulate_possession(result: Dictionary, side: String, lineup: Array, opponent: Array, minute: int, rng) -> void:
 	var stats: Dictionary = result.stats[side]
-	var pass_attempts: int = rng.randi_range(1, 7)
+	var pass_attempts: int = rng.randi_range(1, 4)
 	var passer: Dictionary = rng.pick(lineup)
 	for _i in range(pass_attempts):
 		stats.passes += 1
-		var pass_probability: float = clampf(0.66 + (_player_quality(passer) - 50.0) * 0.0025, 0.54, 0.88)
+		var pass_probability: float = clampf(0.72 + (_player_quality(passer) - 50.0) * 0.0025, 0.60, 0.90)
 		if rng.chance(pass_probability):
 			stats.completed_passes += 1
 			result.events.append({"minute": minute, "type": "pass", "side": side, "player_id": passer.id, "outcome": "complete"})
@@ -69,7 +69,7 @@ func _simulate_possession(result: Dictionary, side: String, lineup: Array, oppon
 
 	var team_quality: float = _lineup_strength(lineup)
 	var opponent_quality: float = _lineup_strength(opponent)
-	var shot_probability: float = clampf(0.13 + (team_quality - opponent_quality) * 0.003, 0.08, 0.24)
+	var shot_probability: float = clampf(0.38 + (team_quality - opponent_quality) * 0.004, 0.24, 0.52)
 	if not rng.chance(shot_probability):
 		return
 
@@ -77,12 +77,12 @@ func _simulate_possession(result: Dictionary, side: String, lineup: Array, oppon
 	var xg: float = _shot_xg(shooter, rng)
 	stats.shots += 1
 	stats.xg += xg
-	var on_target_probability: float = clampf(0.30 + (_player_quality(shooter) - 50.0) * 0.003, 0.22, 0.55)
-	var on_target: bool = rng.chance(on_target_probability)
+	var goal_probability: float = clampf(xg * (0.82 + _player_quality(shooter) / 300.0), 0.01, 0.70)
+	var goal: bool = rng.chance(goal_probability)
+	var on_target_probability: float = clampf(0.30 + (_player_quality(shooter) - 50.0) * 0.003, 0.24, 0.52)
+	var on_target: bool = goal or rng.chance(on_target_probability)
 	if on_target:
 		stats.shots_on_target += 1
-	var goal_probability: float = xg * (0.75 + _player_quality(shooter) / 200.0)
-	var goal: bool = on_target and rng.chance(goal_probability)
 	if goal:
 		stats.goals += 1
 		if side == "home":
@@ -192,10 +192,10 @@ func _pick_shooter(lineup: Array, rng) -> Dictionary:
 	return rng.pick(attacking if not attacking.is_empty() else lineup)
 
 func _shot_xg(shooter: Dictionary, rng) -> float:
-	var base: float = rng.randf_range(0.04, 0.34)
+	var base: float = rng.randf_range(0.02, 0.23)
 	if shooter.position == "ST":
-		base += 0.035
-	return clampf(base, 0.02, 0.55)
+		base += 0.02
+	return clampf(base, 0.01, 0.45)
 
 func _ids(players: Array) -> Array:
 	var ids: Array = []
