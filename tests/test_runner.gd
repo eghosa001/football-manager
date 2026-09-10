@@ -4,12 +4,14 @@ const WorldGeneratorClass = preload("res://simulation/world/world_generator.gd")
 const MatchEngineClass = preload("res://simulation/match/abstract_match_engine.gd")
 const LeagueTableClass = preload("res://simulation/competitions/league_table.gd")
 const CalendarClass = preload("res://core/calendar/calendar_service.gd")
+const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
 
 var failures := 0
 var checks := 0
 
 func _init() -> void:
 	print("[TEST] Football Dynasty Phase 1/2")
+	_test_rng()
 	_test_calendar()
 	var world: Dictionary = _test_world_generation()
 	_test_fixtures(world)
@@ -31,6 +33,23 @@ func _expect(condition: bool, message: String) -> void:
 		failures += 1
 		push_error("[TEST] %s" % message)
 
+func _test_rng() -> void:
+	var a = SeededRngClass.new(12345)
+	var b = SeededRngClass.new(12345)
+	var c = SeededRngClass.new(54321)
+	var same := true
+	var different := false
+	for _i in range(100):
+		var av: int = a.randi_range(0, 1_000_000)
+		var bv: int = b.randi_range(0, 1_000_000)
+		var cv: int = c.randi_range(0, 1_000_000)
+		if av != bv:
+			same = false
+		if av != cv:
+			different = true
+	_expect(same, "Same RNG seed must reproduce the same sequence")
+	_expect(different, "Different RNG seed must produce a different sequence")
+
 func _test_calendar() -> void:
 	var calendar = CalendarClass.new()
 	calendar.set_date(2028, 2, 28)
@@ -50,8 +69,8 @@ func _test_world_generation() -> Dictionary:
 	_expect(a.staff.size() == 400, "Expected five staff per club")
 	_expect(a.contracts.size() == 2000, "Expected one basic contract per player")
 	_expect(a.competitions.size() == 4, "Expected one competition per country")
-	_expect(_world_signature(a) == _world_signature(b), "Same seed must generate identical world")
-	_expect(_world_signature(a) != _world_signature(c), "Different seed must generate a different world")
+	_expect(a == b, "Same seed must generate identical world")
+	_expect(a != c, "Different seed must generate a different world")
 	return a
 
 func _test_fixtures(world: Dictionary) -> void:
@@ -71,7 +90,7 @@ func _test_match_engine(world: Dictionary) -> void:
 	var away: Dictionary = world.clubs[1]
 	var first: Dictionary = engine.simulate_match(home, away, world.players, 827183927)
 	var second: Dictionary = engine.simulate_match(home, away, world.players, 827183927)
-	_expect(_match_signature(first) == _match_signature(second), "Match seed must reproduce identical event stream")
+	_expect(first == second, "Match seed must reproduce identical match state and event stream")
 	_expect(first.lineups.home.size() == 11 and first.lineups.away.size() == 11, "Each starting lineup must contain 11 players")
 	_expect(first.substitutions.size() <= 6, "Default match must not exceed three substitutions per side")
 	_expect(first.stats.home.possession + first.stats.away.possession >= 99.9, "Possession should sum to approximately 100")
@@ -123,38 +142,6 @@ func _test_match_distribution(world: Dictionary, sample_size: int = 2_000) -> vo
 	_expect(avg_shots >= 8.0 and avg_shots <= 30.0, "Average shots outside broad football range")
 	_expect(avg_cards >= 0.5 and avg_cards <= 6.0, "Average cards outside broad football range")
 	_expect(home_win_rate >= 0.25 and home_win_rate <= 0.65, "Home win rate outside broad range")
-
-func _world_signature(world: Dictionary) -> String:
-	var parts: Array[String] = [str(world.seed), world.date]
-	for country in world.countries:
-		parts.append("C:%s:%s:%s:%d" % [country.id, country.name, country.code, country.youth_rating])
-	for club in world.clubs:
-		parts.append("B:%s:%s:%s:%d" % [club.id, club.country_id, club.name, club.reputation])
-	for player in world.players:
-		parts.append("P:%s:%s:%s:%s:%d:%s:%d:%d" % [player.id, player.club_id, player.first_name, player.last_name, player.age, player.position, player.current_ability, player.potential])
-	for staff_member in world.staff:
-		parts.append("S:%s:%s:%s:%s:%d" % [staff_member.id, staff_member.club_id, staff_member.name, staff_member.role, staff_member.ability])
-	for competition in world.competitions:
-		parts.append("L:%s:%s:%s:%s" % [competition.id, competition.country_id, competition.name, ",".join(competition.club_ids)])
-	for contract in world.contracts:
-		parts.append("K:%s:%s:%s:%d:%d:%d" % [contract.id, contract.player_id, contract.club_id, contract.start_year, contract.end_year, contract.weekly_wage])
-	for fixture in world.fixtures:
-		parts.append("F:%s:%s:%d:%s:%s" % [fixture.id, fixture.competition_id, fixture.round, fixture.home_club_id, fixture.away_club_id])
-	return "|".join(parts)
-
-func _match_signature(result: Dictionary) -> String:
-	var parts: Array[String] = [
-		str(result.seed), result.home_club_id, result.away_club_id,
-		str(result.home_goals), str(result.away_goals),
-		",".join(result.lineups.home), ",".join(result.lineups.away)
-	]
-	for event in result.events:
-		parts.append("E:%d:%s:%s:%s:%s:%s:%s:%.3f" % [
-			event.get("minute", 0), event.get("type", ""), event.get("side", ""),
-			event.get("player_id", ""), event.get("outcome", ""), event.get("card", ""),
-			event.get("player_in", ""), float(event.get("xg", 0.0))
-		])
-	return "|".join(parts)
 
 func _club(clubs: Array, club_id: String) -> Dictionary:
 	for club in clubs:
