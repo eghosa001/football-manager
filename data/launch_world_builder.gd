@@ -16,7 +16,7 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 	if data.is_empty() or not loader.validate_seed(data).is_empty(): return {}
 	var world := {"seed":seed,"date":"2026-07-01","season_year":2026,"countries":[],"clubs":[],"players":[],"staff":[],"competitions":[],"contracts":[],"fixtures":[]}
 	var countries: Array = data.countries
-	var count := countries.size() if max_countries <= 0 else mini(max_countries, countries.size())
+	var count: int = countries.size() if max_countries <= 0 else mini(max_countries, countries.size())
 	for country_index in range(count):
 		var raw_country: Dictionary = countries[country_index]
 		var country_id := String(raw_country.id)
@@ -35,7 +35,8 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 				club["tier"] = tier_index + 1
 				club["stadium_capacity"] = _range(seed, _key(club_id)+1, 5000, 55000)
 				club["training_facilities"] = _range(seed, _key(club_id)+2, 30, 80)
-				world.clubs.append(club); club_ids.append(club_id)
+				world.clubs.append(club)
+				club_ids.append(club_id)
 				_generate_staff(world, club, seed)
 				_generate_players(world, club, country_id, players_per_club, seed)
 			var competition_id := "%s-league-%d" % [country_id, tier_index + 1]
@@ -44,7 +45,7 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 			competition["promotion_places"] = int(tier.get("promotion", 0))
 			competition["relegation_places"] = int(tier.get("relegation", 0))
 			world.competitions.append(competition)
-			world.fixtures.append_array(_round_robin(competition_id, club_ids, seed, country_index, tier_index))
+			world.fixtures.append_array(_round_robin(competition_id, club_ids))
 	return world
 
 func _generate_staff(world: Dictionary, club: Dictionary, seed: int) -> void:
@@ -65,15 +66,23 @@ func _generate_players(world: Dictionary, club: Dictionary, country_id: String, 
 		world.players.append(player)
 		world.contracts.append(DomainModelsClass.contract("contract-"+id,id,String(club.id),2026,_range(seed,key+6,2027,2031),_range(seed,key+7,300,30000)))
 
-func _round_robin(competition_id: String, club_ids: Array, seed: int, country_index: int, tier_index: int) -> Array:
-	var teams := club_ids.duplicate(); var fixtures: Array = []; var n := teams.size()
+func _round_robin(competition_id: String, club_ids: Array) -> Array:
+	var teams: Array = club_ids.duplicate()
+	var fixtures: Array = []
+	var n: int = teams.size()
 	for leg in range(2):
-		for round_index in range(n-1):
+		for round_index in range(n - 1):
 			for pair in range(int(n / 2)):
-				var a := String(teams[pair]); var b := String(teams[n-1-pair])
-				var home := a if (round_index+pair+leg)%2==0 else b; var away := b if home==a else a
+				var a: String = String(teams[pair])
+				var b: String = String(teams[n - 1 - pair])
+				var home: String = a if (round_index + pair + leg) % 2 == 0 else b
+				var away: String = b if home == a else a
 				fixtures.append(DomainModelsClass.fixture("fixture-%s-%d-%d-%d" % [competition_id,leg,round_index,pair],competition_id,leg*(n-1)+round_index+1,home,away))
-			var fixed := teams[0]; var rotating: Array = teams.slice(1); rotating.push_front(rotating.pop_back()); teams=[fixed]; teams.append_array(rotating)
+			var fixed_team: String = String(teams[0])
+			var rotating: Array = teams.slice(1)
+			rotating.push_front(rotating.pop_back())
+			teams = [fixed_team]
+			teams.append_array(rotating)
 	return fixtures
 
 func _club_word(index: int) -> String:
