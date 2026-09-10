@@ -4,6 +4,7 @@ const WorldGeneratorClass = preload("res://simulation/world/world_generator.gd")
 const LivingWorldClass = preload("res://simulation/world/living_world.gd")
 const CareerCycleClass = preload("res://application/career/career_cycle.gd")
 const ModLoaderClass = preload("res://tools/modding/mod_loader.gd")
+const ModEditorClass = preload("res://tools/modding/mod_editor.gd")
 const SettingsStoreClass = preload("res://application/settings/settings_store.gd")
 const LocalizationClass = preload("res://game/localization/localization_service.gd")
 const ReleaseGuardClass = preload("res://application/release/release_guard.gd")
@@ -15,7 +16,7 @@ var checks := 0
 func _init() -> void:
 	print("[TEST] Football Dynasty Phase 10/11")
 	_test_living_world_determinism_and_bounds()
-	_test_modding_safety()
+	_test_modding_safety_and_authoring()
 	_test_settings_localization_and_release_contract()
 	_test_save_schema_migration()
 	_test_hundred_year_release_soak()
@@ -57,14 +58,15 @@ func _test_living_world_determinism_and_bounds() -> void:
 	for club in a.clubs:
 		_expect(int(club.reputation) >= 10 and int(club.reputation) <= 95, "Club reputation must remain bounded")
 
-func _test_modding_safety() -> void:
+func _test_modding_safety_and_authoring() -> void:
 	var world: Dictionary = WorldGeneratorClass.new().create_world(102001, 1, 4, 20)
 	var loader = ModLoaderClass.new()
+	var editor = ModEditorClass.new()
 	var club_id: String = String(world.clubs[0].id)
 	var good := {"metadata": {"id": "test-mod", "version": "1.0"}, "patches": {"clubs": [{"id": club_id, "name": "Dynasty Test Club", "reputation": 999}]}}
 	var result: Dictionary = loader.apply_mod(world, good)
 	_expect(result.ok and result.applied == 1, "Whitelisted mod patch must apply")
-	_expect(String(world.clubs[0].name) == "Dynasty Test Club", "Mod editor must update allowed string fields")
+	_expect(String(world.clubs[0].name) == "Dynasty Test Club", "Mod loader must update allowed string fields")
 	_expect(int(world.clubs[0].reputation) == 100, "Mod numeric fields must be range-clamped")
 	_expect(world.get("active_mods", []).size() == 1, "Applied mod metadata must be recorded")
 	var before: Dictionary = world.duplicate(true)
@@ -72,6 +74,16 @@ func _test_modding_safety() -> void:
 	var rejected: Dictionary = loader.apply_mod(world, bad)
 	_expect(not rejected.ok, "Unsafe mod field must be rejected")
 	_expect(world == before, "Rejected mods must not partially mutate world state")
+	var authored: Dictionary = editor.create_mod("author-test", "Author Test", "1.0")
+	var patch_result: Dictionary = editor.add_patch(authored, "clubs", club_id, {"name": "Author Club", "reputation": 74})
+	_expect(patch_result.ok, "Mod editor must author a whitelisted patch")
+	var mod_path := "user://phase10_author_mod.json"
+	_expect(editor.export_mod(mod_path, patch_result.mod) == OK, "Mod editor must export validated JSON")
+	var imported: Dictionary = editor.import_mod(mod_path)
+	_expect(imported.ok and imported.patches.has("clubs"), "Exported mod must round-trip through loader")
+	var invalid_patch: Dictionary = editor.add_patch(authored, "clubs", club_id, {"cash": 10})
+	_expect(not invalid_patch.ok, "Mod editor must reject unsafe authored fields before export")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(mod_path))
 
 func _test_settings_localization_and_release_contract() -> void:
 	var settings_store = SettingsStoreClass.new()
