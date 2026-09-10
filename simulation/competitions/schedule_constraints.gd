@@ -40,4 +40,17 @@ func validate_rest(fixtures: Array, min_rest_days: int = 2) -> Array[String]:
 	return errors
 
 func _date_to_ordinal(date: Dictionary) -> int:
-	return int(date.get("year", 2026)) * 372 + int(date.get("month", 1)) * 31 + int(date.get("day", 1))
+	var year := int(date.get("year", 2026))
+	var month := clampi(int(date.get("month", 1)), 1, 12)
+	var day := maxi(1, int(date.get("day", 1)))
+	var days_before_year := 365 * (year - 1) + int((year - 1) / 4) - int((year - 1) / 100) + int((year - 1) / 400)
+	var month_lengths := [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+	if _is_leap_year(year):
+		month_lengths[1] = 29
+	var days_before_month := 0
+	for index in range(month - 1):
+		days_before_month += int(month_lengths[index])
+	return days_before_year + days_before_month + day
+
+func _is_leap_year(year: int) -> bool:
+	return year % 400 == 0 or (year % 4 == 0 and year % 100 != 0)
