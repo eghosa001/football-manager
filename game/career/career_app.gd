@@ -6,7 +6,7 @@ const DayRunnerClass = preload("res://application/career/day_runner.gd")
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const CareerQueryClass = preload("res://application/career/career_query.gd")
 const CareerViewsClass = preload("res://game/career/career_views.gd")
-const WorldGeneratorClass = preload("res://simulation/world/world_generator.gd")
+const LaunchWorldBuilderClass = preload("res://data/launch_world_builder.gd")
 const SettingsStoreClass = preload("res://application/settings/settings_store.gd")
 const LocalizationServiceClass = preload("res://game/localization/localization_service.gd")
 
@@ -57,8 +57,7 @@ func _show_settings() -> void:
 	var root := _clear()
 	_add_heading(root, "Settings", 28)
 	var language := OptionButton.new()
-	for code in LocalizationServiceClass.SUPPORTED:
-		language.add_item(String(code).to_upper())
+	for code in LocalizationServiceClass.SUPPORTED: language.add_item(String(code).to_upper())
 	language.select(maxi(0, LocalizationServiceClass.SUPPORTED.find(String(settings.get("language", "en")))))
 	root.add_child(_labeled("Language", language))
 	var ui_scale := HSlider.new(); ui_scale.min_value = 0.75; ui_scale.max_value = 2.0; ui_scale.step = 0.05; ui_scale.value = float(settings.get("ui_scale",1.0)); root.add_child(_labeled("UI scale", ui_scale))
@@ -91,11 +90,16 @@ func _show_new_career() -> void:
 	_add_heading(root, "New Career", 28)
 	var name_label := Label.new(); name_label.text = "Manager name"; root.add_child(name_label)
 	_manager_name_input = LineEdit.new(); _manager_name_input.text = "Manager"; _manager_name_input.placeholder_text = "Enter manager name"; root.add_child(_manager_name_input)
-	var club_label := Label.new(); club_label.text = "Choose club"; root.add_child(club_label)
+	var club_label := Label.new(); club_label.text = "Choose club — launch database"; root.add_child(club_label)
 	_club_selector = OptionButton.new()
-	_wizard_clubs = WorldGeneratorClass.new().create_world(12345).clubs
-	for club in _wizard_clubs: _club_selector.add_item(String(club.name))
+	var preview: Dictionary = LaunchWorldBuilderClass.new().build(12345, 0, 25)
+	_wizard_clubs = preview.get("clubs", [])
+	for club in _wizard_clubs:
+		var country_name := _country_name(preview.get("countries", []), String(club.get("country_id", "")))
+		var tier := int(club.get("tier", 1))
+		_club_selector.add_item("%s — %s T%d" % [String(club.get("name", "Club")), country_name, tier])
 	root.add_child(_club_selector)
+	var database_info := Label.new(); database_info.text = "%d countries • %d clubs • multi-tier leagues and domestic cups" % [preview.get("countries", []).size(), _wizard_clubs.size()]; root.add_child(database_info)
 	var buttons := HBoxContainer.new(); root.add_child(buttons)
 	_add_button(buttons, "Create Career", _create_career_from_wizard)
 	_add_button(buttons, "Back", _show_main_menu)
@@ -105,7 +109,9 @@ func _create_career_from_wizard() -> void:
 	if manager_name == "": manager_name = "Manager"
 	var selected := clampi(_club_selector.selected, 0, maxi(0, _wizard_clubs.size()-1))
 	var club_id := String(_wizard_clubs[selected].id) if not _wizard_clubs.is_empty() else ""
-	session.new_career(manager_name, club_id, 12345)
+	var snap: Dictionary = session.new_career(manager_name, club_id, 12345, 0)
+	if snap.is_empty():
+		_show_main_menu(); return
 	InboxServiceClass.new().add_message(session.world, "board", "Welcome to the club", "Your first season is ready. Review the squad, tactics, training and recruitment before the opening fixture.")
 	_show_career()
 
@@ -220,10 +226,13 @@ func _save() -> void:
 func _apply_runtime_settings() -> void:
 	var scale := float(settings.get("ui_scale", 1.0))
 	self.scale = Vector2.ONE * scale
-	if bool(settings.get("high_contrast", false)):
-		modulate = Color(1.0, 1.0, 1.0, 1.0)
-	else:
-		modulate = Color.WHITE
+	if bool(settings.get("high_contrast", false)): modulate = Color(1.0, 1.0, 1.0, 1.0)
+	else: modulate = Color.WHITE
+
+func _country_name(countries: Array, country_id: String) -> String:
+	for country in countries:
+		if String(country.get("id", "")) == country_id: return String(country.get("name", country_id))
+	return country_id
 
 func _labeled(text: String, control: Control) -> Control:
 	var row := HBoxContainer.new()
