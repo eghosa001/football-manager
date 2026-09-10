@@ -5,10 +5,10 @@ extends RefCounted
 # replay behaviour explicit and independent of engine RNG implementation changes.
 const MODULUS := 2_147_483_647
 const MULTIPLIER := 48_271
-const HEX := "0123456789abcdef"
 
 var seed_value: int
 var _state: int
+var _id_counter := 0
 
 func _init(seed: int) -> void:
 	seed_value = seed
@@ -47,17 +47,10 @@ func shuffled_copy(values: Array) -> Array:
 		result[j] = temp
 	return result
 
-func stable_id(_namespace: String = "") -> String:
-	var bytes: Array[int] = []
-	for _i in range(16):
-		bytes.append(randi_range(0, 255))
-	bytes[6] = (bytes[6] & 0x0f) | 0x40
-	bytes[8] = (bytes[8] & 0x3f) | 0x80
-	var text := ""
-	for i in range(16):
-		if i in [4, 6, 8, 10]:
-			text += "-"
-		var value: int = bytes[i]
-		text += HEX[(value >> 4) & 0x0f]
-		text += HEX[value & 0x0f]
-	return text
+func stable_id(namespace: String = "entity") -> String:
+	# IDs are generated independently of the simulation random stream. This means
+	# adding an entity ID later cannot silently change match/development randomness.
+	_id_counter += 1
+	var source := str(seed_value) + ":" + namespace + ":" + str(_id_counter)
+	var hex: String = source.md5_text()
+	return hex.substr(0, 8) + "-" + hex.substr(8, 4) + "-4" + hex.substr(13, 3) + "-8" + hex.substr(17, 3) + "-" + hex.substr(20, 12)
