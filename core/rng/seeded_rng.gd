@@ -2,7 +2,9 @@ class_name SeededRng
 extends RefCounted
 
 # Counter-based deterministic PRNG. Each draw is a pure function of the seed and
-# draw index, so replay does not depend on mutable engine RNG internals.
+# draw index, so replay does not depend on mutable engine RNG internals. The
+# nonlinear modular mixing prevents the strong seed/key correlations produced by
+# an affine generator while staying inside signed 64-bit integer range.
 const MODULUS := 2_147_483_647
 const MULTIPLIER_A := 48_271
 const MULTIPLIER_B := 69_621
@@ -21,8 +23,10 @@ static func value_for(seed: int, draw_index: int) -> int:
 	var normalized_seed: int = posmod(seed, MODULUS)
 	var normalized_index: int = posmod(draw_index + 1, MODULUS)
 	var value: int = posmod(normalized_seed * MULTIPLIER_A + normalized_index * MULTIPLIER_B + OFFSET, MODULUS)
-	value = posmod(value * MULTIPLIER_A + normalized_index * 7_919 + OFFSET, MODULUS)
-	value = posmod(value * MULTIPLIER_B + normalized_seed * 104_729 + OFFSET, MODULUS)
+	value = posmod(value * value + normalized_index * 104_729 + normalized_seed * 8_191 + OFFSET, MODULUS)
+	var index_square: int = posmod(normalized_index * normalized_index, MODULUS)
+	value = posmod(value * MULTIPLIER_A + index_square * MULTIPLIER_B + normalized_seed * 7_919 + OFFSET, MODULUS)
+	value = posmod(value * value + normalized_seed * 104_729 + normalized_index * 7_919 + OFFSET, MODULUS)
 	return value
 
 static func unit_for(seed: int, draw_index: int) -> float:

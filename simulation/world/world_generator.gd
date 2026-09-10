@@ -19,6 +19,7 @@ func create_world(seed: int, country_count: int = 4, clubs_per_country: int = 20
 	var world := {
 		"seed": seed,
 		"date": "2026-07-01",
+		"season_year": 2026,
 		"countries": [],
 		"clubs": [],
 		"players": [],
@@ -48,7 +49,9 @@ func create_world(seed: int, country_count: int = 4, clubs_per_country: int = 20
 
 		var competition_id := _id("competition", seed, [country_index])
 		var competition_name := "%s Premier Division" % COUNTRY_NAMES[country_index]
-		world.competitions.append(Models.competition(competition_id, country_id, competition_name, club_ids))
+		var competition: Dictionary = Models.competition(competition_id, country_id, competition_name, club_ids)
+		competition["tier"] = 1
+		world.competitions.append(competition)
 		world.fixtures.append_array(_round_robin_fixtures(seed, country_index, competition_id, club_ids))
 
 	_validate_references(world)
@@ -57,8 +60,8 @@ func create_world(seed: int, country_count: int = 4, clubs_per_country: int = 20
 func _generate_staff(world: Dictionary, seed: int, country_index: int, club_index: int, club_id: String) -> void:
 	for role_index in range(STAFF_ROLES.size()):
 		var base_key := 1_000_000 + country_index * 100_000 + club_index * 1_000 + role_index * 10
-		var first_name := FIRST_NAMES[_rand_int(seed, base_key + 1, 0, FIRST_NAMES.size() - 1)]
-		var last_name := LAST_NAMES[_rand_int(seed, base_key + 2, 0, LAST_NAMES.size() - 1)]
+		var first_name: String = FIRST_NAMES[_rand_int(seed, base_key + 1, 0, FIRST_NAMES.size() - 1)]
+		var last_name: String = LAST_NAMES[_rand_int(seed, base_key + 2, 0, LAST_NAMES.size() - 1)]
 		var ability := _rand_int(seed, base_key + 3, 35, 80)
 		var staff_id := _id("staff", seed, [country_index, club_index, role_index])
 		world.staff.append(Models.staff(staff_id, club_id, first_name + " " + last_name, STAFF_ROLES[role_index], ability))
@@ -70,8 +73,8 @@ func _generate_players(world: Dictionary, seed: int, country_index: int, club_in
 		var ca := _rand_int(seed, base_key + 2, 35, 78)
 		var potential_gain := _rand_int(seed, base_key + 3, 0, 25)
 		var potential := mini(100, ca + potential_gain)
-		var first_name := FIRST_NAMES[_rand_int(seed, base_key + 4, 0, FIRST_NAMES.size() - 1)]
-		var last_name := LAST_NAMES[_rand_int(seed, base_key + 5, 0, LAST_NAMES.size() - 1)]
+		var first_name: String = FIRST_NAMES[_rand_int(seed, base_key + 4, 0, FIRST_NAMES.size() - 1)]
+		var last_name: String = LAST_NAMES[_rand_int(seed, base_key + 5, 0, LAST_NAMES.size() - 1)]
 		var position: String = POSITIONS[player_index % POSITIONS.size()]
 		var player_id := _id("player", seed, [country_index, club_index, player_index])
 		var player: Dictionary = Models.player(player_id, club_id, first_name, last_name, age, position, ca, potential)
@@ -94,7 +97,9 @@ func _round_robin_fixtures(seed: int, country_index: int, competition_id: String
 				var home: String = a if (round_index + pair_index + leg) % 2 == 0 else b
 				var away: String = b if home == a else a
 				var fixture_id := _id("fixture", seed, [country_index, leg, round_index, pair_index])
-				fixtures.append(Models.fixture(fixture_id, competition_id, leg * (team_count - 1) + round_index + 1, home, away))
+				var fixture: Dictionary = Models.fixture(fixture_id, competition_id, leg * (team_count - 1) + round_index + 1, home, away)
+				fixture["season_year"] = 2026
+				fixtures.append(fixture)
 			var fixed: String = teams[0]
 			var rotating: Array = teams.slice(1)
 			rotating.push_front(rotating.pop_back())
