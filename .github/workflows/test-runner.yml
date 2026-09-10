@@ -1,0 +1,9 @@
+name: test self-hosted
+on: workflow_dispatch
+jobs:
+  test:
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - run: echo Hello from self-hosted
+      - run: hostname
+      - run: whoami
