@@ -43,12 +43,15 @@ func player_profile(world: Dictionary, player_id: String, observer_club_id: Stri
 	var own_player := observer_club_id != "" and String(player.get("club_id", "")) == observer_club_id
 	var report := {}
 	if not own_player:
-		report = ScoutingServiceClass.new().player_report(world, player, 50, int(world.get("seed", 1)) + _stable_key(player_id))
+		# ScoutingService ensures collections exist, so run it on deep copies to keep
+		# presentation queries strictly read-only.
+		report = ScoutingServiceClass.new().player_report(world.duplicate(true), player.duplicate(true), 50, int(world.get("seed", 1)) + _stable_key(player_id))
 	var contract := _contract_for_player(world.get("contracts", []), player_id)
 	var history: Array = []
 	for row in world.get("player_history", []):
 		if String(row.get("player_id", "")) == player_id:
 			history.append(row.duplicate(true))
+	var medical_status: Dictionary = MedicalSystemClass.new().availability(player.duplicate(true))
 	return {
 		"id":player_id,
 		"name":_player_name(player),
@@ -67,7 +70,7 @@ func player_profile(world: Dictionary, player_id: String, observer_club_id: Stri
 		"morale":int(player.get("morale", 50)),
 		"happiness":int(player.get("happiness", player.get("morale", 50))),
 		"fitness":int(player.get("fitness", 100)),
-		"medical":MedicalSystemClass.new().availability(player),
+		"medical":medical_status,
 		"contract":contract.duplicate(true),
 		"history":history,
 		"scouting_knowledge":float(report.get("knowledge", 1.0 if own_player else 0.0)),
@@ -93,13 +96,13 @@ func medical(world: Dictionary, club_id: String) -> Array:
 	var rows: Array = []
 	for player in world.get("players", []):
 		if String(player.get("club_id", "")) != club_id or bool(player.get("retired", false)): continue
-		var status: Dictionary = MedicalSystemClass.new().availability(player)
+		var status: Dictionary = MedicalSystemClass.new().availability(player.duplicate(true))
 		if not bool(status.available): rows.append({"id":player.id,"name":_player_name(player),"status":status})
 	return rows
 
 func training(world: Dictionary, club_id: String) -> Dictionary:
 	var club := _find(world.get("clubs", []), club_id)
-	return {"schedule":club.get("training_schedule", ["recovery","technical","tactical","physical","set_pieces","match_prep","rest"]).duplicate(),"intensity":float(club.get("training_intensity", 0.65)),"facilities":int(club.get("training_facilities", 50))}
+	return {"schedule":club.get("training_schedule", ["recovery","technical","tactical","physical","set_pieces","match_prep","rest"]).duplicate(),"intensity":float(club.get("training_intensity", 0.65)),"facilities":int(club.get("training_facilities", club.get("facilities", {}).get("training", 50)))}
 
 func scouting(world: Dictionary, club_id: String) -> Dictionary:
 	var assignments: Array = []
@@ -162,14 +165,14 @@ func world_search(world: Dictionary, text: String, limit: int = 30) -> Array:
 			rows.append({"type":"club","id":club.id,"name":club.name})
 			if rows.size() >= limit: return rows
 	for player in world.get("players", []):
-		var name := _player_name(player)
-		if q == "" or name.to_lower().contains(q):
-			rows.append({"type":"player","id":player.id,"name":name})
+		var player_name := _player_name(player)
+		if q == "" or player_name.to_lower().contains(q):
+			rows.append({"type":"player","id":player.id,"name":player_name})
 			if rows.size() >= limit: return rows
 	for member in world.get("staff", []):
-		var name := String(member.get("name", ""))
-		if q == "" or name.to_lower().contains(q):
-			rows.append({"type":"staff","id":member.id,"name":name})
+		var staff_name := String(member.get("name", ""))
+		if q == "" or staff_name.to_lower().contains(q):
+			rows.append({"type":"staff","id":member.id,"name":staff_name})
 			if rows.size() >= limit: return rows
 	return rows
 
