@@ -21,6 +21,25 @@ func unread(world: Dictionary) -> Array:
 			result.append(message)
 	return result
 
+func generate_daily(world: Dictionary, match_results: Array) -> Array:
+	ensure_world(world)
+	var generated: Array = []
+	var human: Dictionary = world.get("human_manager", {})
+	var club_id := String(human.get("club_id", ""))
+	for item in match_results:
+		var fixture: Dictionary = item.get("fixture", {})
+		if club_id == "" or (String(fixture.get("home_club_id", "")) != club_id and String(fixture.get("away_club_id", "")) != club_id):
+			continue
+		var result: Dictionary = item.get("result", {})
+		generated.append(add_message(world, "match", "Match completed", "%d-%d" % [int(result.get("home_goals", 0)), int(result.get("away_goals", 0))]))
+	var injuries := 0
+	for player in world.get("players", []):
+		if String(player.get("club_id", "")) == club_id and int(player.get("injured_days", 0)) > 0:
+			injuries += 1
+	if injuries > 0:
+		generated.append(add_message(world, "medical", "Medical update", "%d squad players are currently unavailable." % injuries))
+	return generated
+
 func mark_read(world: Dictionary, message_id: int) -> Error:
 	var message := _find(world, message_id)
 	if message.is_empty(): return ERR_DOES_NOT_EXIST
