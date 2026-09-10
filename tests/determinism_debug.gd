@@ -7,8 +7,13 @@ func _init() -> void:
 	var generator = WorldGeneratorClass.new()
 	var a: Dictionary = generator.create_world(12345)
 	var b: Dictionary = generator.create_world(12345)
+	var c: Dictionary = WorldGeneratorClass.new().create_world(12345)
 	var world_diff := _first_difference(a, b)
-	print("[DETERMINISM DEBUG] world: %s" % ("<identical>" if world_diff == "" else world_diff))
+	var fresh_diff := _first_difference(a, c)
+	print("[DETERMINISM DEBUG] world same generator: %s" % ("<identical>" if world_diff == "" else world_diff))
+	print("[DETERMINISM DEBUG] world fresh generator: %s" % ("<identical>" if fresh_diff == "" else fresh_diff))
+	print("[DETERMINISM DEBUG] first players: %s %s | %s %s | %s %s" % [a.players[0].first_name, a.players[0].last_name, b.players[0].first_name, b.players[0].last_name, c.players[0].first_name, c.players[0].last_name])
+
 	var engine = MatchEngineClass.new()
 	var first: Dictionary = engine.simulate_match(a.clubs[0], a.clubs[1], a.players, 827183927)
 	var second: Dictionary = engine.simulate_match(a.clubs[0], a.clubs[1], a.players, 827183927)
@@ -32,12 +37,13 @@ func _first_difference(left: Variant, right: Variant, path: String = "root") -> 
 				return diff
 		return ""
 	if left_type == TYPE_ARRAY:
-		if left.size() != right.size():
-			return "%s array size %d != %d" % [path, left.size(), right.size()]
-		for i in range(left.size()):
+		var shared_size: int = mini(left.size(), right.size())
+		for i in range(shared_size):
 			var diff: String = _first_difference(left[i], right[i], "%s[%d]" % [path, i])
 			if diff != "":
 				return diff
+		if left.size() != right.size():
+			return "%s array size %d != %d after %d equal items" % [path, left.size(), right.size(), shared_size]
 		return ""
 	if left != right:
 		return "%s value %s != %s" % [path, str(left), str(right)]
