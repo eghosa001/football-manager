@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, phase-8-9-spatial-ui]
+    branches: [main, phase-10-11-living-world-release]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -27,7 +27,7 @@ jobs:
         with:
           version: 4.7.2
           use-dotnet: false
-          include-templates: false
+          include-templates: true
 
       - name: Verify engine
         run: godot --version
@@ -50,6 +50,23 @@ jobs:
       - name: Run Phase 8/9 tests
         run: godot --headless --path . --script res://tests/phase89_test_runner.gd
 
+      - name: Run Phase 10/11 tests
+        run: godot --headless --path . --script res://tests/phase1011_test_runner.gd
+
+      - name: Build Linux release candidate
+        run: |
+          mkdir -p build/linux
+          godot --headless --path . --export-release "Linux/X11" build/linux/FootballDynasty.x86_64
+          test -s build/linux/FootballDynasty.x86_64
+          chmod +x build/linux/FootballDynasty.x86_64
+          timeout 30s build/linux/FootballDynasty.x86_64 --headless --quit-after 1
+
+      - name: Build Windows release candidate
+        run: |
+          mkdir -p build/windows
+          godot --headless --path . --export-release "Windows Desktop" build/windows/FootballDynasty.exe
+          test -s build/windows/FootballDynasty.exe
+
       - name: Install Godot-SQLite v4.9
         run: |
           curl -L --fail --retry 3 https://github.com/2shady4u/godot-sqlite/releases/download/v4.9/addons.zip -o /tmp/godot-sqlite-addons.zip
@@ -60,5 +77,5 @@ jobs:
         run: godot --headless --path . --script res://tests/sqlite_integration_test.gd
 
       - name: Run 100k match validation
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_match_validation }}
+        if: ${{ github.ref == 'refs/heads/phase-10-11-living-world-release' || (github.event_name == 'workflow_dispatch' && inputs.full_match_validation) }}
         run: godot --headless --path . --script res://tests/test_runner.gd -- --full-match-validation
