@@ -34,16 +34,17 @@ func _expect(condition: bool, message: String) -> void:
 		push_error("[TEST] %s" % message)
 
 func _deep_equal(left: Variant, right: Variant) -> bool:
-	if typeof(left) != typeof(right):
+	var left_type: int = typeof(left)
+	if left_type != typeof(right):
 		return false
-	if left is Dictionary:
+	if left_type == TYPE_DICTIONARY:
 		if left.size() != right.size():
 			return false
 		for key in left.keys():
 			if not right.has(key) or not _deep_equal(left[key], right[key]):
 				return false
 		return true
-	if left is Array:
+	if left_type == TYPE_ARRAY:
 		if left.size() != right.size():
 			return false
 		for i in range(left.size()):
