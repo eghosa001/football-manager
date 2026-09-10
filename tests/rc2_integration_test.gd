@@ -34,13 +34,36 @@ func _init() -> void:
 	assert(session.world.has("scout_assignments"))
 	assert(InboxClass.new().unread(session.world).size() > 0)
 
+	# Force the next advance onto the first scheduled matchday and verify the
+	# human club is routed through the detailed causal engine while background
+	# fixtures remain lightweight.
+	session.world.date = "2026-07-31"
+	var matchday: Dictionary = DayRunnerClass.new().advance_day(session.world, session.history, 123456)
+	assert(not matchday.has("error"))
+	assert(int(matchday.fixtures_played) > 0)
+	var detailed_count := 0
+	var background_count := 0
+	for row in matchday.results:
+		if bool(row.get("detailed", false)):
+			detailed_count += 1
+			assert(row.result.has("spatial"))
+			assert(String(row.result.spatial.model) == "causal_2d_v2")
+			assert(row.result.spatial.frames.size() > 0)
+		else:
+			background_count += 1
+	assert(detailed_count == 1)
+	assert(background_count > 0)
+	assert(session.world.has("last_managed_match"))
+	assert(String(session.world.last_managed_match.result.spatial.model) == "causal_2d_v2")
+
 	var path := "user://rc2_integration.fdn"
 	assert(session.save_career(path) == OK)
 	var loaded = CareerSessionClass.new()
 	assert(loaded.load_career(path) == OK)
 	assert(String(loaded.manager.name) == "RC2 Manager")
 	assert(String(loaded.managed_club_id) == club_id)
-	assert(int(loaded.world.get("day_index", 0)) == 8)
+	assert(int(loaded.world.get("day_index", 0)) == 9)
+	assert(loaded.world.has("last_managed_match"))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path + ".bak"))
 	print("[TEST] RC2 INTEGRATION PASS")
