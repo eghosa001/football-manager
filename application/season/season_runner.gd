@@ -71,6 +71,7 @@ func complete_and_rollover(world: Dictionary, history: Array, season_seed: int, 
 	var movements: Array = _league_system.apply_promotion_relegation(world, records, promotion_places)
 	var current_year: int = int(world.get("season_year", _year_from_date(String(world.get("date", "2026-07-01")))))
 	_league_system.rollover(world, current_year + 1)
+	preload("res://application/season/continental_competitions.gd").new().prepare(world, records)
 	_knockout.initialize_all(world, current_year + 1)
 	return {"records":records,"movements":movements,"next_season_year":current_year+1}
 

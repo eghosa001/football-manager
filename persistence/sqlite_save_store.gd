@@ -1,7 +1,7 @@
 class_name SqliteSaveStore
-extends "res://persistence/save_repository.gd"
+extends "res://persistence/save_store.gd"
 
-const CURRENT_SCHEMA_VERSION := 1
+
 const EXTENSION_PATH := "res://addons/godot-sqlite/gdsqlite.gdextension"
 var _extension_resource: Resource
 
@@ -60,13 +60,3 @@ func load_save(path: String) -> Dictionary:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return {}
 	return _migrate(parsed)
-
-func _migrate(payload: Dictionary) -> Dictionary:
-	var version: int = int(payload.get("schema_version", 0))
-	if version == 0:
-		payload["history"] = payload.get("history", [])
-		payload["schema_version"] = 1
-		version = 1
-	if version != CURRENT_SCHEMA_VERSION:
-		return {}
-	return payload

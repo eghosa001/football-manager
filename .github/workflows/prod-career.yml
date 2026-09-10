@@ -26,5 +26,5 @@ jobs:
         with:
           version: 4.7.2
           use-dotnet: false
-      - run: godot --headless --editor --path . --quit
-      - run: godot --headless --path . --script res://tests/career_session_test.gd
+      - run: bash tools/test-headless.sh import
+      - run: bash tools/test-headless.sh tests/career_session_test.gd

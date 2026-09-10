@@ -18,8 +18,8 @@ func ensure_player_state(player: Dictionary, seed: int) -> void:
 		if String(player.position) == "GK":
 			attrs["goalkeeping"] = clampi(int(player.current_ability) + 8, 1, 100)
 		player["attributes"] = attrs
-	PlayerProfileClass.new().ensure(player)
 	_seed_hidden_attributes(player, seed)
+	PlayerProfileClass.new().ensure(player)
 	player["injured_days"] = int(player.get("injured_days", 0))
 	player["injury_history"] = player.get("injury_history", [])
 	player["training_focus"] = String(player.get("training_focus", "balanced"))
@@ -200,7 +200,7 @@ func _seed_hidden_attributes(player: Dictionary, seed: int) -> void:
 	var key := _stable_key(String(player.id))
 	for i in range(PlayerProfileClass.HIDDEN.size()):
 		var name: String = String(PlayerProfileClass.HIDDEN[i])
-		if not hidden.has(name) or int(hidden[name]) == 50:
+		if not hidden.has(name):
 			hidden[name] = _rand_int(seed, key + 500 + i * 19, 20, 90)
 	player.hidden_attributes = hidden
 

@@ -26,7 +26,8 @@ func load_slot(slot: int) -> Dictionary:
 func metadata(slot: int) -> Dictionary:
 	var payload: Dictionary = load_slot(slot)
 	if payload.is_empty():
-		return {"slot":slot,"exists":false}
+		var exists := FileAccess.file_exists(slot_path(slot)) or FileAccess.file_exists(slot_path(slot) + ".bak")
+		return {"slot":slot,"exists":exists,"corrupt":exists,"manager":"Unreadable save","club":"","date":""}
 	var world: Dictionary = payload.world
 	var manager: Dictionary = world.get("human_manager", {})
 	var club_name := ""
@@ -48,7 +49,9 @@ func delete_slot(slot: int) -> Error:
 	var absolute := ProjectSettings.globalize_path(path)
 	var backup := ProjectSettings.globalize_path(path + ".bak")
 	if FileAccess.file_exists(path):
-		DirAccess.remove_absolute(absolute)
+		var err := DirAccess.remove_absolute(absolute)
+		if err != OK: return err
 	if FileAccess.file_exists(path + ".bak"):
-		DirAccess.remove_absolute(backup)
+		var err := DirAccess.remove_absolute(backup)
+		if err != OK: return err
 	return OK

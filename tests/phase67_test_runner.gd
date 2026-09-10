@@ -87,7 +87,7 @@ func _test_manager_identity_and_lineup_policy() -> void:
 		if String(staff_member.role) == "manager":
 			manager_count += 1
 			_expect(staff_member.has("manager_profile"), "Managers need tactical identities")
-			_expect(String(staff_member.manager_profile.preferred_formation) in ["4-3-3", "4-2-3-1", "4-4-2"], "Manager formation must be supported")
+			_expect(TacticsClass.FORMATIONS.has(String(staff_member.manager_profile.preferred_formation)), "Manager formation must be supported")
 	_expect(manager_count == world.clubs.size(), "Every generated club must have one manager identity")
 	for club in world.clubs:
 		_expect(club.has("tactic"), "Every club needs an active tactic")

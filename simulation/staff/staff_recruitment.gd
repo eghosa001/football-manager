@@ -21,9 +21,16 @@ func candidates(world: Dictionary, hiring_club_id: String, role: String, limit: 
 func hire(world: Dictionary, hiring_club_id: String, staff_id: String, weekly_wage: int, years: int) -> Error:
 	var member := _staff(world,staff_id); var buyer := _club(world,hiring_club_id)
 	if member.is_empty() or buyer.is_empty() or years<1 or years>5: return ERR_INVALID_PARAMETER
+	if String(member.get("club_id", "")) == hiring_club_id: return ERR_ALREADY_EXISTS
 	var contracts = StaffContractsClass.new(); contracts.ensure_world(world)
 	var minimum := int(contracts.recommended_wage(member)*0.8)
 	if weekly_wage < minimum: return ERR_UNAUTHORIZED
+	var payroll := 0
+	for existing in world.get("contracts", []):
+		if String(existing.get("club_id", "")) == hiring_club_id: payroll += int(existing.get("weekly_wage", 0))
+	for existing in world.get("staff_contracts", []):
+		if String(existing.get("club_id", "")) == hiring_club_id: payroll += int(existing.get("weekly_wage", 0))
+	if payroll + weekly_wage > int(buyer.get("wage_budget", 0)): return ERR_UNAVAILABLE
 	var previous := String(member.get("club_id", "")); var compensation := 0 if previous=="" else _remaining_compensation(world,staff_id)
 	if int(buyer.get("cash",0)) < compensation: return ERR_UNAVAILABLE
 	if compensation>0:

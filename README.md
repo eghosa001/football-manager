@@ -4,7 +4,7 @@ A deterministic, simulation-first football-management game built with Godot 4.7.
 
 ## Current implementation
 
-Phases 1–11 are implemented. The project now spans deterministic world generation, abstract and spatial match simulation, seasons/persistence, player lifecycle, transfers/contracts, economy, tactics/manager AI, career UI/analysis, living-world history, safe modding, localization/accessibility, and release-candidate delivery.
+The project is a playable release-candidate prototype, not a completed implementation of the original phases 0–14. Core career and simulation services exist, with remaining work in continuous match simulation, content scale, graphical mod authoring, full localization and presentation. See docs/PRODUCTION_PROGRESS.md for verified changes and remaining gates.
 
 The current build can:
 
@@ -30,7 +30,7 @@ The current build can:
 
 ## Release candidate
 
-The project version is `1.0.0-rc1`. `export_presets.cfg` defines Windows Desktop and Linux/X11 x86_64 release exports. `.github/workflows/release-candidate.yml` provides a manual packaging workflow that builds both platforms, smoke-tests Linux offline, generates SHA-256 integrity files and uploads build artifacts.
+The project version is `1.0.0-rc2-dev`. `export_presets.cfg` defines Windows Desktop and Linux/X11 x86_64 release exports. `.github/workflows/release-candidate.yml` provides a manual packaging workflow that builds both platforms, smoke-tests Linux offline, generates SHA-256 integrity files and uploads build artifacts.
 
 The normal Phase 10/11 branch validation also builds both release targets so export configuration regressions are caught before merge.
 
@@ -42,7 +42,7 @@ Install Godot 4.7.2 and open `project.godot`, or run:
 godot --path .
 ```
 
-The main scene opens the career shell and creates a deterministic sample world plus a detailed spatial match for the analysis viewer. The application does not require a network service to boot or use local saves.
+The main scene opens the career menu. Create a career to choose a club from the launch database; Continue advances the calendar and simulates scheduled matches. Completed seasons roll over automatically at July 1. The application does not require a network service to boot or use local saves.
 
 ## Persistence
 

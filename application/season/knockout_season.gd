@@ -14,7 +14,7 @@ func initialize_competition(world: Dictionary, competition: Dictionary, season_y
 	competition["knockout_bracket"] = bracket
 	competition["season_year"] = season_year
 	competition["champion_club_id"] = ""
-	_append_round_fixtures(world, competition, bracket, season_year, "%04d-09-10" % season_year)
+	_append_round_fixtures(world, competition, bracket, season_year, "%04d-09-%02d" % [season_year, 14 if bool(competition.get("continental", false)) else 10])
 	_advance_bye_only_rounds(world, competition, season_year)
 
 func advance_ready(world: Dictionary, competition_id: String, current_date: String) -> Dictionary:
@@ -76,11 +76,24 @@ func _advance_bye_only_rounds(world: Dictionary, competition: Dictionary, season
 		_append_round_fixtures(world, competition, next, season_year, "%04d-09-10" % season_year)
 
 func _append_round_fixtures(world: Dictionary, competition: Dictionary, bracket: Dictionary, season_year: int, date_string: String) -> void:
+	# League dates may not have been materialized yet during initialization.
+	for fixture in world.fixtures:
+		if String(fixture.get("date", "")) == "":
+			fixture["date"] = _add_days("%04d-08-01" % season_year, (int(fixture.get("round", 1)) - 1) * 7)
 	for i in range(bracket.get("matches", []).size()):
 		var pairing: Dictionary = bracket.matches[i]
 		var home := String(pairing.get("home", "")); var away := String(pairing.get("away", ""))
 		if home == "" or away == "": continue
+		var candidate := date_string
+		while _has_conflict(world, home, away, candidate): candidate = _add_days(candidate, 1)
+		date_string = candidate
 		world.fixtures.append({"id":"cup-%s-%d-r%d-m%d" % [String(competition.get("id", "cup")),season_year,int(bracket.get("round",1)),i],"competition_id":String(competition.get("id","")),"round":int(bracket.get("round",1)),"bracket_index":i,"home_club_id":home,"away_club_id":away,"played":false,"home_goals":0,"away_goals":0,"date":date_string,"season_year":season_year,"knockout":true})
+
+func _has_conflict(world: Dictionary, home: String, away: String, date_string: String) -> bool:
+	for fixture in world.fixtures:
+		if String(fixture.get("date", "")) != date_string: continue
+		if String(fixture.get("home_club_id", "")) in [home, away] or String(fixture.get("away_club_id", "")) in [home, away]: return true
+	return false
 
 func _round_fixtures(world: Dictionary, competition_id: String, round_number: int) -> Array:
 	var rows: Array = []

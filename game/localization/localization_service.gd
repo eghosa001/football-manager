@@ -1,6 +1,22 @@
 class_name LocalizationService
 extends RefCounted
 
+static var _career_translations: Array[Translation] = []
+
+func install(locale: String) -> void:
+	if _career_translations.is_empty():
+		var file := FileAccess.open("res://game/localization/career_strings.json", FileAccess.READ)
+		if file != null:
+			var catalog: Dictionary = JSON.parse_string(file.get_as_text())
+			for index in range(2):
+				var translation := Translation.new()
+				translation.locale = "fr" if index == 0 else "pt"
+				for source in catalog:
+					translation.add_message(String(source), String(catalog[source][index]))
+				TranslationServer.add_translation(translation)
+				_career_translations.append(translation)
+	TranslationServer.set_locale(language(locale))
+
 const SUPPORTED := ["en", "fr", "pt"]
 const STRINGS := {
 	"en": {"dashboard": "Dashboard", "squad": "Squad", "tactics": "Tactics", "medical": "Medical", "schedule": "Schedule", "competitions": "Competitions", "transfers": "Transfers", "staff": "Staff", "finances": "Finances", "world_search": "World Search", "match_analysis": "Match Analysis"},

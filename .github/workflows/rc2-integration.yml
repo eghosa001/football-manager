@@ -4,9 +4,20 @@ on:
   pull_request:
     paths:
       - 'application/career/**'
+      - 'application/season/**'
+      - 'application/settings/**'
+      - 'application/release/**'
+      - 'tests/staff_recruitment_safety_test.gd'
+      - 'tests/release_smoke_test.gd'
+      - 'game/localization/**'
+      - 'tools/test-headless.sh'
+      - 'tests/continental_competitions_test.gd'
+      - 'tests/career_rollover_test.gd'
+      - 'tests/match_participation_test.gd'
       - 'game/career/**'
       - 'data/**'
       - 'simulation/players/**'
+      - 'simulation/staff/**'
       - 'simulation/scouting/**'
       - 'simulation/transfers/**'
       - 'simulation/match/**'
@@ -20,7 +31,7 @@ on:
       - 'tests/rc2_integration_test.gd'
       - '.github/workflows/rc2-integration.yml'
   push:
-    branches: ['prod/rc2-integration']
+    branches: ['main', 'prod/rc2-integration', 'production/**']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -39,9 +50,14 @@ jobs:
         with:
           version: 4.7.2
           use-dotnet: false
-      - run: godot --headless --editor --path . --quit
-      - run: timeout 120s godot --headless --path . --script res://tests/player_stats_test.gd
-      - run: timeout 120s godot --headless --path . --script res://tests/save_safety_test.gd
-      - run: timeout 120s godot --headless --path . --script res://tests/registration_safety_test.gd
-      - run: timeout 300s godot --headless --path . --script res://tests/career_ui_test.gd
-      - run: godot --headless --path . --script res://tests/rc2_integration_test.gd
+      - run: bash tools/test-headless.sh import
+      - run: bash tools/test-headless.sh tests/career_rollover_test.gd
+      - run: bash tools/test-headless.sh tests/continental_competitions_test.gd
+      - run: bash tools/test-headless.sh tests/staff_recruitment_safety_test.gd
+      - run: bash tools/test-headless.sh tests/release_smoke_test.gd
+      - run: bash tools/test-headless.sh tests/match_participation_test.gd
+      - run: bash tools/test-headless.sh tests/player_stats_test.gd 120
+      - run: bash tools/test-headless.sh tests/save_safety_test.gd 120
+      - run: bash tools/test-headless.sh tests/registration_safety_test.gd 120
+      - run: bash tools/test-headless.sh tests/career_ui_test.gd 300
+      - run: bash tools/test-headless.sh tests/rc2_integration_test.gd

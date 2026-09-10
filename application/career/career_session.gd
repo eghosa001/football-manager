@@ -37,6 +37,16 @@ func new_career(manager_name: String, club_id: String = "", world_seed: int = 12
 func load_career(path: String) -> Error:
 	var payload: Dictionary = SaveStoreClass.new().load_save(path)
 	if payload.is_empty(): return ERR_FILE_CORRUPT
+	var candidate: Dictionary = payload.world
+	for field in ["clubs", "players", "staff", "competitions", "contracts", "fixtures"]:
+		if not candidate.get(field) is Array: return ERR_FILE_CORRUPT
+		for item in candidate[field]:
+			if not item is Dictionary: return ERR_FILE_CORRUPT
+	if not candidate.get("human_manager") is Dictionary: return ERR_FILE_CORRUPT
+	var club_found := false
+	for club in candidate.clubs:
+		if String(club.get("id", "")) == String(candidate.human_manager.get("club_id", "")): club_found = true
+	if not club_found: return ERR_FILE_CORRUPT
 	world = payload.world; history = payload.get("history", []); manager = world.get("human_manager", {})
 	managed_club_id = String(manager.get("club_id", "")); seed = int(world.get("seed", seed)); save_path = path
 	_initialize_world(false)
@@ -74,6 +84,7 @@ func _initialize_world(is_new: bool) -> void:
 	InternationalFootballClass.new().ensure_world(world)
 	var season_year := int(world.get("season_year",2026))
 	if is_new:
+		preload("res://application/season/continental_competitions.gd").new().prepare(world)
 		KnockoutSeasonClass.new().initialize_all(world, season_year)
 	else:
 		for competition in world.get("competitions", []):

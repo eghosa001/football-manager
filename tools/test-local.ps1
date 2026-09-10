@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$Godot,
-    [string[]]$Suites = @('player_stats_test', 'registration_safety_test', 'save_safety_test', 'career_ui_test', 'rc2_integration_test', 'test_runner', 'phase3_test_runner', 'phase45_test_runner', 'phase67_test_runner', 'phase89_test_runner', 'phase1011_test_runner', 'career_session_test', 'player_scouting_test', 'match_engine_v2_test', 'world_inspector_test'),
-    [int]$TimeoutSeconds = 600
+    [string[]]$Suites = @('release_smoke_test', 'continental_competitions_test', 'staff_recruitment_safety_test', 'career_rollover_test', 'match_participation_test', 'player_stats_test', 'registration_safety_test', 'save_safety_test', 'career_ui_test', 'rc2_integration_test', 'test_runner', 'phase3_test_runner', 'phase45_test_runner', 'phase67_test_runner', 'phase89_test_runner', 'phase1011_test_runner', 'career_session_test', 'player_scouting_test', 'match_engine_v2_test', 'world_inspector_test'),
+    [int]$TimeoutSeconds = 600,
+    [switch]$FullMatchValidation
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
@@ -39,5 +40,9 @@ function Invoke-Check([string]$Name, [string]$Arguments) {
     Write-Output "PASS $Name"
 }
 Invoke-Check 'import' '--editor --import --quit'
-foreach ($suite in $Suites) { Invoke-Check $suite ('--script res://tests/' + $suite + '.gd') }
+foreach ($suite in $Suites) {
+    $arguments = '--script res://tests/' + $suite + '.gd'
+    if ($FullMatchValidation -and $suite -eq 'test_runner') { $arguments += ' -- --full-match-validation' }
+    Invoke-Check $suite $arguments
+}
 Write-Output "Logs: $runRoot"

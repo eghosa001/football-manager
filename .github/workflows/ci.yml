@@ -37,25 +37,25 @@ jobs:
         run: godot --version
 
       - name: Import project
-        run: godot --headless --editor --path . --quit
+        run: bash tools/test-headless.sh import
 
       - name: Run Phase 1/2 tests
-        run: godot --headless --path . --script res://tests/test_runner.gd
+        run: bash tools/test-headless.sh tests/test_runner.gd
 
       - name: Run Phase 3 tests
-        run: godot --headless --path . --script res://tests/phase3_test_runner.gd
+        run: bash tools/test-headless.sh tests/phase3_test_runner.gd
 
       - name: Run Phase 4/5 tests
-        run: godot --headless --path . --script res://tests/phase45_test_runner.gd
+        run: bash tools/test-headless.sh tests/phase45_test_runner.gd
 
       - name: Run Phase 6/7 tests
-        run: godot --headless --path . --script res://tests/phase67_test_runner.gd
+        run: bash tools/test-headless.sh tests/phase67_test_runner.gd
 
       - name: Run Phase 8/9 tests
-        run: godot --headless --path . --script res://tests/phase89_test_runner.gd
+        run: bash tools/test-headless.sh tests/phase89_test_runner.gd
 
       - name: Run Phase 10/11 tests
-        run: godot --headless --path . --script res://tests/phase1011_test_runner.gd
+        run: bash tools/test-headless.sh tests/phase1011_test_runner.gd
 
       - name: Build Linux release candidate
         run: |
@@ -63,7 +63,9 @@ jobs:
           godot --headless --path . --export-release "Linux/X11" build/linux/FootballDynasty.x86_64
           test -s build/linux/FootballDynasty.x86_64
           chmod +x build/linux/FootballDynasty.x86_64
-          timeout 30s build/linux/FootballDynasty.x86_64 --headless --quit-after 1
+          timeout 180s build/linux/FootballDynasty.x86_64 --headless -- --release-smoke 2>&1 | tee build/linux/runtime.log
+          ! grep -Eq 'SCRIPT ERROR:|ERROR:' build/linux/runtime.log
+          grep -q 'RELEASE SMOKE PASS' build/linux/runtime.log
 
       - name: Build Windows release candidate
         run: |
@@ -78,8 +80,8 @@ jobs:
           unzip -q /tmp/godot-sqlite-addons.zip -d .
 
       - name: Run SQLite integration
-        run: godot --headless --path . --script res://tests/sqlite_integration_test.gd
+        run: bash tools/test-headless.sh tests/sqlite_integration_test.gd
 
       - name: Run 100k match validation
         if: ${{ github.ref == 'refs/heads/phase-10-11-living-world-release' || (github.event_name == 'workflow_dispatch' && inputs.full_match_validation) }}
-        run: godot --headless --path . --script res://tests/test_runner.gd -- --full-match-validation
+        run: bash tools/test-headless.sh tests/test_runner.gd 3600 -- --full-match-validation

@@ -22,8 +22,14 @@ jobs:
 
       - name: Import and run release tests
         run: |
-          godot --headless --editor --path . --quit
-          godot --headless --path . --script res://tests/phase1011_test_runner.gd
+          bash tools/test-headless.sh import
+          bash tools/test-headless.sh tests/phase1011_test_runner.gd
+          bash tools/test-headless.sh tests/career_rollover_test.gd
+          bash tools/test-headless.sh tests/continental_competitions_test.gd
+          bash tools/test-headless.sh tests/match_participation_test.gd
+          bash tools/test-headless.sh tests/rc2_integration_test.gd
+          bash tools/test-headless.sh tests/career_ui_test.gd
+          bash tools/test-headless.sh tests/save_safety_test.gd
 
       - name: Build Linux release
         run: |
@@ -33,7 +39,10 @@ jobs:
           chmod +x build/linux/FootballDynasty.x86_64
 
       - name: Smoke-test Linux release offline
-        run: timeout 30s build/linux/FootballDynasty.x86_64 --headless --quit-after 1
+        run: |
+          timeout 180s build/linux/FootballDynasty.x86_64 --headless -- --release-smoke 2>&1 | tee build/linux/runtime.log
+          ! grep -Eq 'SCRIPT ERROR:|ERROR:' build/linux/runtime.log
+          grep -q 'RELEASE SMOKE PASS' build/linux/runtime.log
 
       - name: Build Windows release
         run: |

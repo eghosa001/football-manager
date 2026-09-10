@@ -6,7 +6,7 @@ func record_match(world: Dictionary, fixture: Dictionary, result: Dictionary) ->
 		return
 	world["player_match_stats"] = world.get("player_match_stats", [])
 	world["player_history"] = world.get("player_history", [])
-	var lineups: Dictionary = result.get("lineups", {})
+	var lineups: Dictionary = result.get("participants", result.get("lineups", {}))
 	var player_index: Dictionary = {}
 	for player in world.get("players", []): player_index[String(player.get("id", ""))] = player
 	var match_rows: Dictionary = {}
@@ -52,7 +52,7 @@ func _update_season_history(world: Dictionary, fixture: Dictionary, result: Dict
 	var year := int(world.get("season_year", 2026))
 	for side in ["home", "away"]:
 		var club_id := String(fixture.get("home_club_id", "")) if side == "home" else String(fixture.get("away_club_id", ""))
-		for player_id in result.get("lineups", {}).get(side, []):
+		for player_id in result.get("participants", result.get("lineups", {})).get(side, []):
 			var row := _history_row(world.player_history, String(player_id), year, club_id, String(fixture.get("competition_id", "")))
 			if row.is_empty():
 				row = {"player_id":String(player_id),"season_year":year,"club_id":club_id,"competition_id":String(fixture.get("competition_id", "")),"appearances":0,"goals":0,"xg":0.0}

@@ -24,14 +24,24 @@ var status: Label
 var _manager_name_input: LineEdit
 var _club_selector: OptionButton
 var _wizard_clubs: Array = []
+var _worker: Thread
+var _busy := false
 
 func _ready() -> void:
+	if "--release-smoke" in OS.get_cmdline_user_args():
+		get_tree().quit(preload("res://application/release/package_validator.gd").new().run())
+		return
 	settings = settings_store.load(SETTINGS_PATH)
 	_apply_runtime_settings()
 	_show_main_menu()
 
 func _clear() -> VBoxContainer:
 	for child in get_children(): child.queue_free()
+	var background := ColorRect.new()
+	background.color = Color.BLACK if bool(settings.get("high_contrast", false)) else Color(0.035, 0.055, 0.09)
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(background)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", int(28 * float(settings.get("ui_scale", 1.0))))
@@ -41,35 +51,58 @@ func _clear() -> VBoxContainer:
 	add_child(margin)
 	content = VBoxContainer.new()
 	content.add_theme_constant_override("separation", int(10 * float(settings.get("ui_scale", 1.0))))
-	margin.add_child(content)
+	var scroll := ScrollContainer.new()
+	scroll.follow_focus = true
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	margin.add_child(scroll)
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(content)
 	return content
 
 func _show_main_menu() -> void:
 	var root := _clear()
-	_add_heading(root, "FOOTBALL DYNASTY", 36)
-	var subtitle := Label.new(); subtitle.text = "Build a dynasty. Shape a football world."; root.add_child(subtitle)
-	if not session.world.is_empty(): _add_button(root, "Resume Career", _show_career)
-	_add_button(root, "New Career", _show_new_career)
-	_add_button(root, "Load Career", _show_load_menu)
-	_add_button(root, "Settings", _show_settings)
-	_add_button(root, "Quit", func(): get_tree().quit())
+	_add_heading(root, tr("FOOTBALL DYNASTY"), 36)
+	var subtitle := Label.new(); subtitle.text = tr("Build a dynasty. Shape a football world."); root.add_child(subtitle)
+	if not session.world.is_empty(): _add_button(root, tr("Resume Career"), _show_career)
+	_add_button(root, tr("New Career"), _show_new_career)
+	_add_button(root, tr("Load Career"), _show_load_menu)
+	_add_button(root, tr("Settings"), _show_settings)
+	_add_button(root, tr("How to play"), _show_help)
+	_add_button(root, tr("Quit"), func(): get_tree().quit())
+
+func _show_help() -> void:
+	var box := _clear()
+	_add_heading(box, tr("Your first season"), 28)
+	for tip in [
+		"1. Create a career, enter your manager name and choose a club.",
+		"2. Review Squad, Medical and Tactics before the first fixture. Set your training intensity.",
+		"3. Use Scouting and player profiles to find recruits. Check your transfer and wage budgets before making an offer.",
+		"4. Register your squad under Competitions. Continue advances one day; matches are simulated when their date arrives.",
+		"5. Read your Inbox and use Match Analysis to review your most recent match. League tables appear under Competitions.",
+		"6. Save regularly. At the July boundary, a completed season rolls forward with new fixtures, finances and player development."]:
+		var label := Label.new()
+		label.text = tr(tip)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(label)
+	_add_button(box, tr("Back"), _show_main_menu)
 
 func _show_settings() -> void:
 	var root := _clear()
-	_add_heading(root, "Settings", 28)
+	_add_heading(root, tr("Settings"), 28)
 	var language := OptionButton.new()
 	for code in LocalizationServiceClass.SUPPORTED: language.add_item(String(code).to_upper())
 	language.select(maxi(0, LocalizationServiceClass.SUPPORTED.find(String(settings.get("language", "en")))))
 	root.add_child(_labeled("Language", language))
 	var ui_scale := HSlider.new(); ui_scale.min_value = 0.75; ui_scale.max_value = 2.0; ui_scale.step = 0.05; ui_scale.value = float(settings.get("ui_scale",1.0)); root.add_child(_labeled("UI scale", ui_scale))
 	var font_scale := HSlider.new(); font_scale.min_value = 0.8; font_scale.max_value = 2.0; font_scale.step = 0.05; font_scale.value = float(settings.get("font_scale",1.0)); root.add_child(_labeled("Font scale", font_scale))
-	var contrast := CheckBox.new(); contrast.text = "High contrast"; contrast.button_pressed = bool(settings.get("high_contrast",false)); root.add_child(contrast)
-	var motion := CheckBox.new(); motion.text = "Reduce motion"; motion.button_pressed = bool(settings.get("reduce_motion",false)); root.add_child(motion)
-	var reader := CheckBox.new(); reader.text = "Screen-reader labels"; reader.button_pressed = bool(settings.get("screen_reader_labels",true)); root.add_child(reader)
-	var autosave := CheckBox.new(); autosave.text = "Autosave"; autosave.button_pressed = bool(settings.get("autosave",true)); root.add_child(autosave)
+	var contrast := CheckBox.new(); contrast.text = tr("High contrast"); contrast.button_pressed = bool(settings.get("high_contrast",false)); root.add_child(contrast)
+	var motion := CheckBox.new(); motion.text = tr("Reduce motion"); motion.button_pressed = bool(settings.get("reduce_motion",false)); root.add_child(motion)
+	var reader := CheckBox.new(); reader.text = tr("Screen-reader labels"); reader.button_pressed = bool(settings.get("screen_reader_labels",true)); root.add_child(reader)
+	var autosave := CheckBox.new(); autosave.text = tr("Autosave"); autosave.button_pressed = bool(settings.get("autosave",true)); root.add_child(autosave)
 	var interval := SpinBox.new(); interval.min_value = 1; interval.max_value = 30; interval.value = int(settings.get("autosave_interval_days",7)); root.add_child(_labeled("Autosave interval (days)", interval))
 	var row := HBoxContainer.new(); root.add_child(row)
-	_add_button(row, "Apply", func():
+	_add_button(row, tr("Apply"), func():
 		settings.language = LocalizationServiceClass.SUPPORTED[language.selected]
 		settings.ui_scale = ui_scale.value
 		settings.font_scale = font_scale.value
@@ -83,15 +116,15 @@ func _show_settings() -> void:
 		_apply_runtime_settings()
 		_show_main_menu()
 	)
-	_add_button(row, "Reset", func(): settings = settings_store.defaults(); settings_store.save(SETTINGS_PATH, settings); _apply_runtime_settings(); _show_settings())
-	_add_button(row, "Back", _show_main_menu)
+	_add_button(row, tr("Reset"), func(): settings = settings_store.defaults(); settings_store.save(SETTINGS_PATH, settings); _apply_runtime_settings(); _show_settings())
+	_add_button(row, tr("Back"), _show_main_menu)
 
 func _show_new_career() -> void:
 	var root := _clear()
-	_add_heading(root, "New Career", 28)
-	var name_label := Label.new(); name_label.text = "Manager name"; root.add_child(name_label)
-	_manager_name_input = LineEdit.new(); _manager_name_input.text = "Manager"; _manager_name_input.placeholder_text = "Enter manager name"; root.add_child(_manager_name_input)
-	var club_label := Label.new(); club_label.text = "Choose club — launch database"; root.add_child(club_label)
+	_add_heading(root, tr("New Career"), 28)
+	var name_label := Label.new(); name_label.text = tr("Manager name"); root.add_child(name_label)
+	_manager_name_input = LineEdit.new(); _manager_name_input.text = tr("Manager"); _manager_name_input.placeholder_text = "Enter manager name"; root.add_child(_manager_name_input)
+	var club_label := Label.new(); club_label.text = tr("Choose club — launch database"); root.add_child(club_label)
 	_club_selector = OptionButton.new()
 	var preview: Dictionary = LaunchCatalogClass.new().build(0)
 	_wizard_clubs = preview.get("clubs", [])
@@ -100,10 +133,10 @@ func _show_new_career() -> void:
 		var tier := int(club.get("tier", 1))
 		_club_selector.add_item("%s — %s T%d" % [String(club.get("name", "Club")), country_name, tier])
 	root.add_child(_club_selector)
-	var database_info := Label.new(); database_info.text = "%d countries • %d clubs • multi-tier leagues and domestic cups" % [preview.get("countries", []).size(), _wizard_clubs.size()]; root.add_child(database_info)
+	var database_info := Label.new(); database_info.text = tr("%d countries • %d clubs • multi-tier leagues and domestic cups") % [preview.get("countries", []).size(), _wizard_clubs.size()]; root.add_child(database_info)
 	var buttons := HBoxContainer.new(); root.add_child(buttons)
-	_add_button(buttons, "Create Career", _create_career_from_wizard)
-	_add_button(buttons, "Back", _show_main_menu)
+	_add_button(buttons, tr("Create Career"), _create_career_from_wizard)
+	_add_button(buttons, tr("Back"), _show_main_menu)
 
 func _create_career_from_wizard() -> void:
 	active_slot = slots.first_available_slot()
@@ -111,15 +144,17 @@ func _create_career_from_wizard() -> void:
 	if manager_name == "": manager_name = "Manager"
 	var selected := clampi(_club_selector.selected, 0, maxi(0, _wizard_clubs.size()-1))
 	var club_id := String(_wizard_clubs[selected].id) if not _wizard_clubs.is_empty() else ""
-	var snap: Dictionary = session.new_career(manager_name, club_id, 12345, 0)
-	if snap.is_empty():
-		_show_main_menu(); return
+	var snap: Dictionary = await _run_job(session.new_career.bind(manager_name, club_id, 12345, 0), "Creating your football world")
+	if snap.is_empty() or snap.has("error"):
+		_show_main_menu()
+		_show_error("The career could not be created. Please try again.")
+		return
 	InboxServiceClass.new().add_message(session.world, "board", "Welcome to the club", "Your first season is ready. Review the squad, tactics, training and recruitment before the opening fixture.")
 	_show_career()
 
 func _show_load_menu() -> void:
 	var root := _clear()
-	_add_heading(root, "Load Career", 28)
+	_add_heading(root, tr("Load Career"), 28)
 	var any := false
 	for meta in slots.list_slots(10):
 		if not bool(meta.get("exists", false)): continue
@@ -127,19 +162,23 @@ func _show_load_menu() -> void:
 		var line := HBoxContainer.new(); root.add_child(line)
 		var label := "Slot %d — %s / %s / %s" % [int(meta.slot), String(meta.manager), String(meta.club), String(meta.date)]
 		_add_button(line, label, _load_slot.bind(int(meta.slot)))
-		_add_button(line, "Delete", _delete_slot.bind(int(meta.slot)))
+		_add_button(line, tr("Delete"), _delete_slot.bind(int(meta.slot)))
 	if not any:
-		var empty := Label.new(); empty.text = "No saved careers yet."; root.add_child(empty)
-	_add_button(root, "Back", _show_main_menu)
+		var empty := Label.new(); empty.text = tr("No saved careers yet."); root.add_child(empty)
+	_add_button(root, tr("Back"), _show_main_menu)
 
 func _delete_slot(slot: int) -> void:
-	slots.delete_slot(slot)
-	_show_load_menu()
+	_confirm("Delete career in slot %d and its backup? This cannot be undone." % slot, func():
+		var err: Error = slots.delete_slot(slot)
+		if err == OK and active_slot == slot: active_slot = 0
+		_show_load_menu()
+		if err != OK: _show_error("Could not delete the career (%d)." % err)
+	)
 
 func _load_slot(slot: int) -> void:
 	var path := slots.slot_path(slot)
 	if session.load_career(path) != OK:
-		_show_main_menu(); return
+		_show_error("This career could not be loaded. Its save and backup may be damaged. Your current career has not been replaced."); return
 	active_slot = slot
 	_show_career()
 
@@ -148,14 +187,14 @@ func _show_career() -> void:
 	var snap: Dictionary = session.snapshot()
 	var dashboard: Dictionary = query.dashboard(session.world, session.managed_club_id)
 	var club: Dictionary = dashboard.get("club", {})
-	_add_heading(root, "%s — %s" % [String(club.get("name", "Club")), String(snap.date)], 26)
+	_add_heading(root, tr("%s — %s") % [String(club.get("name", "Club")), String(snap.date)], 26)
 	var buttons := HBoxContainer.new(); root.add_child(buttons)
-	_add_button(buttons, "Continue", _advance_day)
-	_add_button(buttons, "Save Slot %d" % active_slot if active_slot > 0 else "Save Career", _save)
-	_add_button(buttons, "Save As", _show_save_as)
-	_add_button(buttons, "Settings", _show_settings)
-	_add_button(buttons, "Main Menu", _show_main_menu)
-	status = Label.new(); status.text = "Manager: %s  •  Season %d  •  Inbox %d" % [String(session.manager.get("name", "Manager")), int(snap.season_year), int(dashboard.get("unread_messages",0))]; root.add_child(status)
+	_add_button(buttons, tr("Continue"), _advance_day)
+	_add_button(buttons, tr("Save Slot %d") % active_slot if active_slot > 0 else "Save Career", _save)
+	_add_button(buttons, tr("Save As"), _show_save_as)
+	_add_button(buttons, tr("Settings"), _show_settings)
+	_add_button(buttons, tr("Main Menu"), _show_main_menu)
+	status = Label.new(); status.text = tr("Manager: %s  •  Season %d  •  Inbox %d") % [String(session.manager.get("name", "Manager")), int(snap.season_year), int(dashboard.get("unread_messages",0))]; root.add_child(status)
 	var tabs := TabContainer.new(); tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL; root.add_child(tabs)
 	var views = CareerViewsClass.new(self, session)
 	views.add_dashboard(tabs)
@@ -166,6 +205,7 @@ func _show_career() -> void:
 	views.add_scouting(tabs)
 	views.add_transfers(tabs)
 	views.add_schedule(tabs)
+	views.add_competitions(tabs)
 	_add_inbox_tab(tabs)
 	views.add_staff(tabs)
 	views.add_finances(tabs)
@@ -174,31 +214,79 @@ func _show_career() -> void:
 
 func _show_save_as() -> void:
 	var root := _clear()
-	_add_heading(root, "Save Career As", 28)
+	_add_heading(root, tr("Save Career As"), 28)
 	for slot in range(1, 11):
 		var meta: Dictionary = slots.metadata(slot)
 		var label := "Slot %d" % slot
 		if bool(meta.get("exists",false)): label += " — overwrite %s / %s" % [String(meta.get("manager","")),String(meta.get("date",""))]
-		_add_button(root, label, _save_to_slot.bind(slot))
-	_add_button(root, "Back", _show_career)
+		_add_button(root, label, _request_save_to_slot.bind(slot))
+	_add_button(root, tr("Back"), _show_career)
 
 func _save_to_slot(slot: int) -> void:
 	var err := slots.save_slot(slot, session.world, session.history, session.manager)
 	if err == OK: active_slot = slot
 	_show_career()
-	if status != null: status.text = "Saved to slot %d" % slot if err == OK else "Save failed (%d)" % err
+	if status != null: status.text = tr("Saved to slot %d") % slot if err == OK else "Save failed (%d)" % err
+
+func _request_save_to_slot(slot: int) -> void:
+	if FileAccess.file_exists(slots.slot_path(slot)) or FileAccess.file_exists(slots.slot_path(slot) + ".bak"):
+		_confirm("Overwrite the career in slot %d?" % slot, _save_to_slot.bind(slot))
+	else:
+		_save_to_slot(slot)
+
+func _confirm(message: String, action: Callable) -> void:
+	var dialog := ConfirmationDialog.new()
+	dialog.dialog_text = message
+	add_child(dialog)
+	dialog.confirmed.connect(func(): action.call(); dialog.queue_free())
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(480, 180))
+
+func _show_error(message: String) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = "Career notice"
+	dialog.dialog_text = message
+	add_child(dialog)
+	dialog.confirmed.connect(dialog.queue_free)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(520, 180))
+
+func _run_job(job: Callable, message: String) -> Dictionary:
+	if _busy: return {"error":ERR_BUSY}
+	_busy = true
+	var box := _clear()
+	_add_heading(box, message, 28)
+	var progress := Label.new()
+	progress.text = tr("Please wait. Your career is being processed.")
+	box.add_child(progress)
+	_worker = Thread.new()
+	var err := _worker.start(job)
+	if err != OK:
+		_busy = false
+		_worker = null
+		return {"error":err,"message":"Unable to start the simulation worker."}
+	while _worker.is_alive():
+		await get_tree().process_frame
+		progress.text = tr("Processing") + ".".repeat(1 + int(Time.get_ticks_msec() / 500) % 3)
+	var result: Dictionary = _worker.wait_to_finish()
+	_worker = null
+	_busy = false
+	return result
+
+func _exit_tree() -> void:
+	if _worker != null and _worker.is_started(): _worker.wait_to_finish()
 
 func _add_inbox_tab(tabs: TabContainer) -> void:
 	var scroll := ScrollContainer.new(); scroll.name = "Inbox"
 	var box := VBoxContainer.new(); box.custom_minimum_size = Vector2(920, 480); scroll.add_child(box)
 	var messages: Array = InboxServiceClass.new().unread(session.world)
 	if messages.is_empty():
-		var empty := Label.new(); empty.text = "Inbox clear."; box.add_child(empty)
+		var empty := Label.new(); empty.text = tr("Inbox clear."); box.add_child(empty)
 	for message in messages:
-		var title := Label.new(); title.text = "%s — %s" % [String(message.get("category", "info")).to_upper(), String(message.get("title", "Message"))]; box.add_child(title)
+		var title := Label.new(); title.text = tr("%s — %s") % [String(message.get("category", "info")).to_upper(), String(message.get("title", "Message"))]; box.add_child(title)
 		var body := Label.new(); body.text = String(message.get("body", "")); body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; box.add_child(body)
 		var row := HBoxContainer.new(); box.add_child(row)
-		if not bool(message.get("read",false)): _add_button(row, "Mark read", _mark_message_read.bind(int(message.id)))
+		if not bool(message.get("read",false)): _add_button(row, tr("Mark read"), _mark_message_read.bind(int(message.id)))
 		if bool(message.get("requires_action", false)) and not bool(message.get("resolved", false)):
 			for action in message.get("actions", []):
 				var action_id := String(action.get("id", "action"))
@@ -214,28 +302,43 @@ func _resolve_message(message_id: int, action_id: String) -> void:
 	_show_career()
 
 func _advance_day() -> void:
-	var result: Dictionary = DayRunnerClass.new().advance_day(session.world, session.history, session.seed + int(session.world.get("day_index",0))*17 + int(session.world.get("season_year",2026))*101)
+	var result: Dictionary = await _run_job(DayRunnerClass.new().advance_day.bind(session.world, session.history, session.seed + int(session.world.get("day_index",0))*17 + int(session.world.get("season_year",2026))*101), "Advancing your career")
 	if result.has("error"):
-		status.text = "Unable to advance day"; return
+		_show_career()
+		_show_error(String(result.get("message", "Unable to advance day"))); return
 	var save_error: Error = OK
 	if active_slot > 0 and bool(settings.get("autosave", true)) and int(session.world.get("day_index", 0)) % maxi(1, int(settings.get("autosave_interval_days", 7))) == 0:
 		save_error = slots.save_slot(active_slot, session.world, session.history, session.manager)
 	_show_career()
-	if save_error != OK: status.text = "Autosave failed (%d). Please save your career manually." % save_error
-	elif active_slot == 0: status.text = "All save slots are occupied. Use Save As to choose a slot."
+	if save_error != OK: status.text = tr("Autosave failed (%d). Please save your career manually.") % save_error
+	elif active_slot == 0: status.text = tr("All save slots are occupied. Use Save As to choose a slot.")
 
 func _save() -> void:
 	if active_slot == 0:
 		_show_save_as()
 		return
 	var err := slots.save_slot(active_slot, session.world, session.history, session.manager)
-	status.text = "Saved to slot %d" % active_slot if err == OK else "Save failed (%d)" % err
+	status.text = tr("Saved to slot %d") % active_slot if err == OK else "Save failed (%d)" % err
 
 func _apply_runtime_settings() -> void:
-	var scale := float(settings.get("ui_scale", 1.0))
-	self.scale = Vector2.ONE * scale
-	if bool(settings.get("high_contrast", false)): modulate = Color(1.0, 1.0, 1.0, 1.0)
-	else: modulate = Color.WHITE
+	localization.install(String(settings.get("language", "en")))
+	self.scale = Vector2.ONE
+	var new_theme := Theme.new()
+	new_theme.default_font_size = int(16 * float(settings.get("font_scale", 1.0)) * float(settings.get("ui_scale", 1.0)))
+	if bool(settings.get("high_contrast", false)):
+		for control_type in ["Label", "Button", "CheckBox", "LineEdit", "OptionButton"]:
+			new_theme.set_color("font_color", control_type, Color.WHITE)
+		var normal := StyleBoxFlat.new()
+		normal.bg_color = Color.BLACK
+		normal.border_color = Color.WHITE
+		normal.set_border_width_all(2)
+		for state in ["normal", "hover", "pressed"]: new_theme.set_stylebox(state, "Button", normal)
+		var focus := StyleBoxFlat.new()
+		focus.bg_color = Color.TRANSPARENT
+		focus.border_color = Color.YELLOW
+		focus.set_border_width_all(3)
+		new_theme.set_stylebox("focus", "Button", focus)
+	theme = new_theme
 
 func _country_name(countries: Array, country_id: String) -> String:
 	for country in countries:
@@ -244,13 +347,13 @@ func _country_name(countries: Array, country_id: String) -> String:
 
 func _labeled(text: String, control: Control) -> Control:
 	var row := HBoxContainer.new()
-	var label := Label.new(); label.text = text; label.custom_minimum_size.x = 220; row.add_child(label)
+	var label := Label.new(); label.text = tr(text); label.custom_minimum_size.x = 220; row.add_child(label)
 	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(control)
 	return row
 
 func _add_heading(parent: Control, text: String, size: int) -> void:
-	var label := Label.new(); label.text = text; label.add_theme_font_size_override("font_size", int(size * float(settings.get("font_scale", 1.0)))); parent.add_child(label)
+	var label := Label.new(); label.text = tr(text); label.add_theme_font_size_override("font_size", int(size * float(settings.get("font_scale", 1.0)))); parent.add_child(label)
 
 func _add_button(parent: Control, text: String, callback: Callable) -> void:
-	var button := Button.new(); button.text = text; button.pressed.connect(callback); parent.add_child(button)
+	var button := Button.new(); button.text = tr(text); button.pressed.connect(callback); parent.add_child(button)

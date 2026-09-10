@@ -147,7 +147,14 @@ func execute_loan(world: Dictionary, club_id: String, player_id: String, fee: in
 func renew_contract(world: Dictionary, club_id: String, player_id: String, weekly_wage: int, signing_bonus: int, years: int, seed: int = 1) -> Dictionary:
 	var player := _player(world, player_id); var club := _club(world, club_id)
 	if player.is_empty() or club.is_empty() or String(player.get("club_id", "")) != club_id: return {"error":ERR_INVALID_PARAMETER}
+	if weekly_wage < 0 or signing_bonus < 0 or years < 1 or years > 5: return {"error":ERR_INVALID_PARAMETER}
 	_ensure_finance_defaults(club)
+	var payroll := 0
+	for existing in world.get("contracts", []):
+		if String(existing.get("club_id", "")) == club_id and String(existing.get("player_id", "")) != player_id:
+			payroll += int(existing.get("weekly_wage", 0))
+	if signing_bonus > int(club.cash) or payroll + weekly_wage > int(club.wage_budget):
+		return {"error":ERR_UNAVAILABLE,"reason":"insufficient_budget"}
 	var agent_result := AgentServiceClass.new().evaluate_offer(player, club, weekly_wage, signing_bonus, years, seed)
 	if not bool(agent_result.accepted): return {"error":ERR_UNAUTHORIZED,"agent":agent_result}
 	var contract := _contract(world, player_id)
