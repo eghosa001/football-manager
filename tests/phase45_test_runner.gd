@@ -34,7 +34,8 @@ func _test_attributes_training_and_lifecycle() -> void:
 	var world: Dictionary = generator.create_world(45001, 1, 4, 25)
 	var player: Dictionary = world.players[0]
 	lifecycle.ensure_player_state(player, 45001)
-	_expect(player.attributes.size() == 9, "Player must have nine core attributes")
+	_expect(player.attributes.size() >= 43, "Player must have the full technical/mental/physical/goalkeeping attribute taxonomy")
+	_expect(player.hidden_attributes.size() >= 12, "Player must have hidden personality/development attributes")
 	for value in player.attributes.values():
 		_expect(int(value) >= 1 and int(value) <= 100, "Attributes must remain in 1..100")
 	var before: int = int(player.current_ability)
@@ -47,7 +48,8 @@ func _test_attributes_training_and_lifecycle() -> void:
 	for youth_id in result.youth:
 		var youth: Dictionary = _find_player(world.players, String(youth_id))
 		_expect(int(youth.age) == 16, "Youth intake age must be 16")
-		_expect(youth.attributes.size() == 9, "Youth must receive core attributes")
+		_expect(youth.attributes.size() >= 43, "Youth must receive full player attributes")
+		_expect(youth.hidden_attributes.size() >= 12, "Youth must receive hidden attributes")
 	for active in world.players:
 		if bool(active.get("retired", false)):
 			continue
@@ -95,6 +97,7 @@ func _test_career_cycle_integration() -> void:
 	_expect(history.size() == 1, "Career cycle must archive completed competition")
 	_expect(result.lifecycle.youth.size() == 8, "Career cycle must run youth intake")
 	_expect(world.players.size() >= 108, "Career cycle must retain and extend player population")
+	_expect(result.has("manager_market"), "Career cycle must evaluate the AI manager labour market")
 	for club in world.clubs:
 		_expect(MarketClass.new().squad_is_viable(world, String(club.id), 18), "Career cycle must leave viable squads")
 
