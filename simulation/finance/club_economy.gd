@@ -33,8 +33,6 @@ func run_season_finances(world: Dictionary, season_year: int, competition_record
 		var opening_cash: int = int(club.cash)
 		var entry_start: int = world.ledger.size()
 		var reputation: int = int(club.reputation)
-		# Commercial distributions scale with club reputation so elite clubs can
-		# support elite wage bills while smaller clubs still face real constraints.
 		var sponsor: int = 4_000_000 + reputation * 100_000
 		var commercial: int = int(club.commercial_revenue)
 		var gate: int = _annual_gate_revenue(club)
@@ -91,12 +89,19 @@ func _annual_gate_revenue(club: Dictionary) -> int:
 
 func _annual_wages(world: Dictionary, club_id: String) -> int:
 	var weekly := 0
-	for contract in world.contracts:
-		if String(contract.club_id) == club_id:
-			weekly += int(contract.weekly_wage)
-	for staff_member in world.staff:
-		if String(staff_member.club_id) == club_id:
-			weekly += 200 + int(staff_member.ability) * 12
+	for contract in world.get("contracts", []):
+		if String(contract.get("club_id", "")) == club_id:
+			weekly += int(contract.get("weekly_wage", 0))
+	var contracted_staff := {}
+	for contract in world.get("staff_contracts", []):
+		if String(contract.get("club_id", "")) != club_id:
+			continue
+		weekly += int(contract.get("weekly_wage", 0))
+		contracted_staff[String(contract.get("staff_id", ""))] = true
+	# Backward-compatible fallback for old saves without staff contracts.
+	for staff_member in world.get("staff", []):
+		if String(staff_member.get("club_id", "")) == club_id and not contracted_staff.has(String(staff_member.get("id", ""))):
+			weekly += 200 + int(staff_member.get("ability", 50)) * 12
 	return weekly * 52
 
 func _operations_cost(club: Dictionary) -> int:
