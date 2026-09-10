@@ -2,6 +2,8 @@ class_name SaveStore
 extends "res://persistence/save_repository.gd"
 
 const CURRENT_SCHEMA_VERSION := 1
+const MAGIC := 1_179_016_753 # "FDN1"
+const HEADER_BYTES := 8
 
 func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 	var payload := {
@@ -9,6 +11,7 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 		"world": world,
 		"history": history,
 	}
+	var raw: PackedByteArray = var_to_bytes(payload)
 	var temp_path := path + ".tmp"
 	var backup_path := path + ".bak"
 	var temp_global := ProjectSettings.globalize_path(temp_path)
@@ -17,7 +20,9 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 	var file := FileAccess.open(temp_path, FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
-	file.store_var(payload, false)
+	file.store_32(MAGIC)
+	file.store_32(raw.size())
+	file.store_buffer(raw)
 	file.flush()
 	file.close()
 	if _load_path(temp_path).is_empty():
@@ -47,10 +52,22 @@ func _load_path(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}
 	var file := FileAccess.open(path, FileAccess.READ)
-	if file == null:
+	if file == null or file.get_length() < HEADER_BYTES:
+		if file != null:
+			file.close()
 		return {}
-	var parsed = file.get_var(false)
+	if file.get_32() != MAGIC:
+		file.close()
+		return {}
+	var payload_length: int = file.get_32()
+	if payload_length <= 0 or payload_length > file.get_length() - HEADER_BYTES:
+		file.close()
+		return {}
+	var raw: PackedByteArray = file.get_buffer(payload_length)
 	file.close()
+	if raw.size() != payload_length:
+		return {}
+	var parsed = bytes_to_var(raw)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return {}
 	return _migrate(parsed)
