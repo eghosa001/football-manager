@@ -1,5 +1,5 @@
 class_name SaveStore
-extends RefCounted
+extends "res://persistence/save_repository.gd"
 
 const CURRENT_SCHEMA_VERSION := 1
 
@@ -20,12 +20,9 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 	file.store_string(JSON.stringify(payload))
 	file.flush()
 	file.close()
-
-	# Validate the fully written temporary file before replacing the live save.
 	if _load_path(temp_path).is_empty():
 		DirAccess.remove_absolute(temp_global)
 		return ERR_FILE_CORRUPT
-
 	if FileAccess.file_exists(backup_path):
 		DirAccess.remove_absolute(backup_global)
 	if FileAccess.file_exists(path):
@@ -33,7 +30,6 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 		if backup_error != OK:
 			DirAccess.remove_absolute(temp_global)
 			return backup_error
-
 	var promote_error := DirAccess.rename_absolute(temp_global, save_global)
 	if promote_error != OK:
 		if FileAccess.file_exists(backup_path) and not FileAccess.file_exists(path):
@@ -45,10 +41,7 @@ func load_save(path: String) -> Dictionary:
 	var primary := _load_path(path)
 	if not primary.is_empty():
 		return primary
-	var backup_path := path + ".bak"
-	var backup := _load_path(backup_path)
-	if backup.is_empty():
-		return {}
+	var backup := _load_path(path + ".bak")
 	return backup
 
 func _load_path(path: String) -> Dictionary:
