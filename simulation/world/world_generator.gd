@@ -30,15 +30,15 @@ func create_world(seed: int, country_count: int = 4, clubs_per_country: int = 20
 
 	for country_index in range(country_count):
 		var country_id: String = rng.stable_id("country")
-		var country = Models.country(country_id, COUNTRY_NAMES[country_index], COUNTRY_CODES[country_index], rng.randi_range(45, 82))
+		var country: Dictionary = Models.country(country_id, COUNTRY_NAMES[country_index], COUNTRY_CODES[country_index], rng.randi_range(45, 82))
 		world.countries.append(country)
 		var club_ids: Array = []
 		for club_index in range(clubs_per_country):
 			var club_id: String = rng.stable_id("club")
-			var club_name := "%s %s" % [COUNTRY_NAMES[country_index].split(" ")[0], CITY_WORDS[club_index % CITY_WORDS.size()]]
+			var club_name: String = "%s %s" % [COUNTRY_NAMES[country_index].split(" ")[0], CITY_WORDS[club_index % CITY_WORDS.size()]]
 			if club_index >= CITY_WORDS.size():
 				club_name += " %d" % (club_index + 1)
-			var club = Models.club(club_id, country_id, club_name, rng.randi_range(35, 75))
+			var club: Dictionary = Models.club(club_id, country_id, club_name, rng.randi_range(35, 75))
 			world.clubs.append(club)
 			club_ids.append(club_id)
 			_generate_staff(world, rng, club_id)
@@ -53,16 +53,16 @@ func create_world(seed: int, country_count: int = 4, clubs_per_country: int = 20
 
 func _generate_staff(world: Dictionary, rng, club_id: String) -> void:
 	for role in ["manager", "assistant", "coach", "scout", "physio"]:
-		var name := "%s %s" % [rng.pick(FIRST_NAMES), rng.pick(LAST_NAMES)]
+		var name: String = "%s %s" % [rng.pick(FIRST_NAMES), rng.pick(LAST_NAMES)]
 		world.staff.append(Models.staff(rng.stable_id("staff"), club_id, name, role, rng.randi_range(35, 80)))
 
 func _generate_players(world: Dictionary, rng, club_id: String, count: int) -> void:
 	for player_index in range(count):
-		var age := rng.randi_range(17, 33)
-		var ca := rng.randi_range(35, 78)
-		var potential := mini(100, ca + rng.randi_range(0, 25))
+		var age: int = rng.randi_range(17, 33)
+		var ca: int = rng.randi_range(35, 78)
+		var potential: int = mini(100, ca + rng.randi_range(0, 25))
 		var position: String = POSITIONS[player_index % POSITIONS.size()]
-		var player = Models.player(
+		var player: Dictionary = Models.player(
 			rng.stable_id("player"), club_id,
 			rng.pick(FIRST_NAMES), rng.pick(LAST_NAMES), age, position, ca, potential
 		)
@@ -70,19 +70,19 @@ func _generate_players(world: Dictionary, rng, club_id: String, count: int) -> v
 		world.contracts.append(Models.contract(rng.stable_id("contract"), player.id, club_id, 2026, rng.randi_range(2027, 2031), rng.randi_range(500, 25_000)))
 
 func _round_robin_fixtures(rng, competition_id: String, input_club_ids: Array) -> Array:
-	var teams := input_club_ids.duplicate()
+	var teams: Array = input_club_ids.duplicate()
 	var fixtures: Array = []
-	var team_count := teams.size()
+	var team_count: int = teams.size()
 	for leg in range(2):
 		for round_index in range(team_count - 1):
 			for pair_index in range(int(team_count / 2)):
 				var a: String = teams[pair_index]
 				var b: String = teams[team_count - 1 - pair_index]
-				var home := a if (round_index + pair_index + leg) % 2 == 0 else b
-				var away := b if home == a else a
+				var home: String = a if (round_index + pair_index + leg) % 2 == 0 else b
+				var away: String = b if home == a else a
 				fixtures.append(Models.fixture(rng.stable_id("fixture"), competition_id, leg * (team_count - 1) + round_index + 1, home, away))
-			var fixed = teams[0]
-			var rotating := teams.slice(1)
+			var fixed: String = teams[0]
+			var rotating: Array = teams.slice(1)
 			rotating.push_front(rotating.pop_back())
 			teams = [fixed]
 			teams.append_array(rotating)
