@@ -5,7 +5,6 @@ extends RefCounted
 # replay behaviour explicit and independent of engine RNG implementation changes.
 const MODULUS := 2_147_483_647
 const MULTIPLIER := 48_271
-const HEX := "0123456789abcdef"
 
 var seed_value: int
 var _state: int
@@ -49,34 +48,8 @@ func shuffled_copy(values: Array) -> Array:
 	return result
 
 func stable_id(namespace: String = "entity") -> String:
-	# UUID-shaped deterministic identifier derived without consuming the random stream.
+	# Stable, opaque identifier. Formatting is deliberately simple: identity
+	# semantics matter more than presentation, and IDs are never user-facing.
+	# This counter does not consume the simulation random stream.
 	_id_counter += 1
-	var namespace_hash := _stable_string_hash(namespace)
-	var a := _mix(seed_value, namespace_hash, _id_counter, 17)
-	var b := _mix(seed_value, namespace_hash, _id_counter, 31)
-	var c := _mix(seed_value, namespace_hash, _id_counter, 47)
-	var d := _mix(seed_value, namespace_hash, _id_counter, 73)
-	var hex := _hex_fixed(a, 8) + _hex_fixed(b, 8) + _hex_fixed(c, 8) + _hex_fixed(d, 8)
-	return hex.substr(0, 8) + "-" + hex.substr(8, 4) + "-4" + hex.substr(13, 3) + "-8" + hex.substr(17, 3) + "-" + hex.substr(20, 12)
-
-func _stable_string_hash(value: String) -> int:
-	var hash_value: int = 5381
-	for i in range(value.length()):
-		hash_value = ((hash_value * 33) + value.unicode_at(i)) % MODULUS
-	return hash_value
-
-func _mix(seed: int, namespace_hash: int, counter: int, salt: int) -> int:
-	var value: int = (abs(seed) + namespace_hash * salt + counter * 104729 + salt * 8191) % MODULUS
-	if value == 0:
-		value = salt
-	value = (value * MULTIPLIER) % MODULUS
-	value = (value * MULTIPLIER + counter * salt) % MODULUS
-	return value
-
-func _hex_fixed(value: int, width: int) -> String:
-	var text := ""
-	var current := abs(value)
-	for _i in range(width):
-		text = HEX[current & 0x0f] + text
-		current = current >> 4
-	return text
+	return namespace + "-" + str(seed_value) + "-" + str(_id_counter)
