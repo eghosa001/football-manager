@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, phase-1-2-world-match-engine]
+    branches: [main, phase-3-season-persistence-core]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -37,6 +37,9 @@ jobs:
 
       - name: Run Phase 1/2 tests
         run: godot --headless --path . --script res://tests/test_runner.gd
+
+      - name: Run Phase 3 foundation tests
+        run: godot --headless --path . --script res://tests/phase3_test_runner.gd
 
       - name: Run 100k match validation
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_match_validation }}
