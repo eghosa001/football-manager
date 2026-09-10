@@ -35,9 +35,6 @@ jobs:
       - name: Import project
         run: godot --headless --editor --path . --quit
 
-      - name: Diagnose determinism
-        run: godot --headless --path . --script res://tests/determinism_debug.gd
-
       - name: Run Phase 1/2 tests
         run: godot --headless --path . --script res://tests/test_runner.gd
 
