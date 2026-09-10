@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - 'tools/**'
-      - 'tests/tooling_test.gd'
+      - 'tests/world_inspector_test.gd'
       - '.github/workflows/prod-tooling.yml'
   push:
     branches: ['prod/dev-release-tooling']
@@ -22,4 +22,4 @@ jobs:
           version: 4.7.2
           use-dotnet: false
       - run: godot --headless --editor --path . --quit
-      - run: godot --headless --path . --script res://tests/tooling_test.gd
+      - run: godot --headless --path . --script res://tests/world_inspector_test.gd
