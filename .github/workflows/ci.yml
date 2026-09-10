@@ -77,5 +77,5 @@ jobs:
         run: godot --headless --path . --script res://tests/sqlite_integration_test.gd
 
       - name: Run 100k match validation
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_match_validation }}
+        if: ${{ github.ref == 'refs/heads/phase-10-11-living-world-release' || (github.event_name == 'workflow_dispatch' && inputs.full_match_validation) }}
         run: godot --headless --path . --script res://tests/test_runner.gd -- --full-match-validation
