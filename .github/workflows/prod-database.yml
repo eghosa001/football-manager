@@ -16,6 +16,7 @@ permissions:
 jobs:
   database:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: chickensoft-games/setup-godot@v2
@@ -23,4 +24,5 @@ jobs:
           version: 4.7.2
           use-dotnet: false
       - run: godot --headless --editor --path . --quit
-      - run: godot --headless --path . --script res://tests/database_competitions_test.gd
+      - name: Run database and competition acceptance
+        run: timeout 90s godot --headless --path . --script res://tests/database_competitions_test.gd
