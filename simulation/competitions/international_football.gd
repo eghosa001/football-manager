@@ -10,6 +10,9 @@ func ensure_world(world: Dictionary) -> void:
 
 func select_squad(world: Dictionary, country_id: String, size: int = 23) -> Array:
 	ensure_world(world)
+	var squad_limit := maxi(0, size)
+	if squad_limit == 0:
+		return []
 	var eligible: Array = []
 	for player in world.get("players", []):
 		if bool(player.get("retired", false)): continue
@@ -27,10 +30,12 @@ func select_squad(world: Dictionary, country_id: String, size: int = 23) -> Arra
 	var selected: Array = []
 	var goalkeeper_count := 0
 	for player in eligible:
+		if selected.size() >= squad_limit:
+			break
 		if String(player.get("position", "")) == "GK" and goalkeeper_count < 3:
 			selected.append(String(player.id)); goalkeeper_count += 1
 	for player in eligible:
-		if selected.size() >= size: break
+		if selected.size() >= squad_limit: break
 		if String(player.id) not in selected: selected.append(String(player.id))
 	return selected
 
