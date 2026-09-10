@@ -15,7 +15,8 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 	database.set("path", path)
 	if not bool(database.call("open_db")):
 		return ERR_CANT_OPEN
-	var payload := JSON.stringify({"schema_version": CURRENT_SCHEMA_VERSION, "world": world, "history": history})
+	var payload_dict := {"schema_version": CURRENT_SCHEMA_VERSION, "world": world, "history": history}
+	var payload: String = Marshalls.raw_to_base64(var_to_bytes(payload_dict))
 	var ok := bool(database.call("query", "BEGIN IMMEDIATE;"))
 	ok = ok and bool(database.call("query", "CREATE TABLE IF NOT EXISTS save_state (slot INTEGER PRIMARY KEY CHECK(slot = 1), schema_version INTEGER NOT NULL, payload TEXT NOT NULL);"))
 	ok = ok and bool(database.call("query_with_bindings", "INSERT INTO save_state(slot, schema_version, payload) VALUES(1, ?, ?) ON CONFLICT(slot) DO UPDATE SET schema_version=excluded.schema_version, payload=excluded.payload;", [CURRENT_SCHEMA_VERSION, payload]))
@@ -45,7 +46,10 @@ func load_save(path: String) -> Dictionary:
 	database.call("close_db")
 	if typeof(rows) != TYPE_ARRAY or rows.is_empty():
 		return {}
-	var parsed = JSON.parse_string(String(rows[0].payload))
+	var raw: PackedByteArray = Marshalls.base64_to_raw(String(rows[0].payload))
+	if raw.is_empty():
+		return {}
+	var parsed = bytes_to_var(raw)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return {}
 	return _migrate(parsed)
