@@ -19,6 +19,7 @@ func create_world(seed: int, country_count: int = 4, clubs_per_country: int = 20
 	var world := {
 		"seed": seed,
 		"date": "2026-07-01",
+		"season_year": 2026,
 		"countries": [],
 		"clubs": [],
 		"players": [],
@@ -48,7 +49,9 @@ func create_world(seed: int, country_count: int = 4, clubs_per_country: int = 20
 
 		var competition_id := _id("competition", seed, [country_index])
 		var competition_name := "%s Premier Division" % COUNTRY_NAMES[country_index]
-		world.competitions.append(Models.competition(competition_id, country_id, competition_name, club_ids))
+		var competition: Dictionary = Models.competition(competition_id, country_id, competition_name, club_ids)
+		competition["tier"] = 1
+		world.competitions.append(competition)
 		world.fixtures.append_array(_round_robin_fixtures(seed, country_index, competition_id, club_ids))
 
 	_validate_references(world)
@@ -94,7 +97,9 @@ func _round_robin_fixtures(seed: int, country_index: int, competition_id: String
 				var home: String = a if (round_index + pair_index + leg) % 2 == 0 else b
 				var away: String = b if home == a else a
 				var fixture_id := _id("fixture", seed, [country_index, leg, round_index, pair_index])
-				fixtures.append(Models.fixture(fixture_id, competition_id, leg * (team_count - 1) + round_index + 1, home, away))
+				var fixture: Dictionary = Models.fixture(fixture_id, competition_id, leg * (team_count - 1) + round_index + 1, home, away)
+				fixture["season_year"] = 2026
+				fixtures.append(fixture)
 			var fixed: String = teams[0]
 			var rotating: Array = teams.slice(1)
 			rotating.push_front(rotating.pop_back())
