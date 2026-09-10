@@ -6,6 +6,7 @@ on:
       - 'simulation/players/**'
       - 'simulation/scouting/**'
       - 'simulation/transfers/**'
+      - 'simulation/staff/**'
       - 'tests/player_scouting_test.gd'
       - '.github/workflows/prod-player-scouting.yml'
   push:
