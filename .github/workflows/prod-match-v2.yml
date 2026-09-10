@@ -5,6 +5,7 @@ on:
     paths:
       - 'simulation/match/spatial_match_engine_v2.gd'
       - 'simulation/match/spatial_state.gd'
+      - 'simulation/match/full_match_engine_v2.gd'
       - 'tests/match_engine_v2_test.gd'
       - '.github/workflows/prod-match-v2.yml'
   push:
