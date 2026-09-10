@@ -4,7 +4,7 @@ A deterministic, simulation-first football-management game built with Godot 4.7.
 
 ## Current implementation
 
-Phases 1–3 are implemented: Deterministic World Model, Abstract Match Engine, and Season & Persistence Core.
+Phases 1–5 are implemented: Deterministic World Model, Abstract Match Engine, Season & Persistence Core, Player Lifecycle, and Squad Building/Contracts/Transfer Market.
 
 The current vertical slice can:
 
@@ -21,7 +21,15 @@ The current vertical slice can:
 - perform atomic file saves with validated temporary files and last-known-good backup recovery;
 - persist the same typed payload through the Godot-SQLite adapter;
 - retain multi-season historical records;
-- pass a 10-season unattended save/reload/rollover soak test;
+- model nine player attributes, training focus, development, aging, decline, injuries, youth intake and retirement;
+- convert experienced retired players into staff;
+- value players and negotiate contracts deterministically;
+- process contract renewals, releases and free agents;
+- execute transfers and loans through balanced financial ledger entries;
+- return expired loans to parent clubs;
+- rebalance AI squads for depth and GK/DC/ST positional viability;
+- run an integrated career-year cycle from season completion through lifecycle and squad planning;
+- pass 10-season persistence, 20-season squad/budget and 50-year population-health soak tests;
 - run headless tests and a broad statistical match-validation harness;
 - optionally run the full 100,000-match validation through GitHub Actions.
 
@@ -53,6 +61,12 @@ Phase 3 season/persistence acceptance tests:
 godot --headless --path . --script res://tests/phase3_test_runner.gd
 ```
 
+Phase 4/5 lifecycle, transfer and long-save acceptance tests:
+
+```bash
+godot --headless --path . --script res://tests/phase45_test_runner.gd
+```
+
 SQLite integration, with the Godot-SQLite addon installed:
 
 ```bash
@@ -69,6 +83,6 @@ The normal test suite samples 2,000 matches to keep pull-request CI practical. T
 
 ## Architecture
 
-Simulation code has no dependency on scenes, rendering or persistence adapters. Application services coordinate season progression; persistence implementations conform to a repository boundary. All simulation randomness flows through `SeededRng`, making generated worlds, match outcomes and save/reload continuation reproducible from seeds.
+Simulation code has no dependency on scenes, rendering or persistence adapters. Application services coordinate season and career progression; persistence implementations conform to a repository boundary. All simulation randomness flows through `SeededRng`, making generated worlds, match outcomes, player lifecycle decisions and save/reload continuation reproducible from seeds.
 
 See `docs/AUDIT_AND_ROADMAP.md` for the design audit, corrected sequencing and development roadmap.
