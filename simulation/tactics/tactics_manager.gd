@@ -143,40 +143,40 @@ func style_modifiers(tactic: Dictionary) -> Dictionary:
 	var tempo: String = String(tactic.get("tempo", "standard"))
 	var pressing: String = String(tactic.get("pressing", "standard"))
 	var familiarity: float = float(tactic.get("familiarity", 50.0))
-	var possession := 0.0
-	var shot := 0.0
-	var pass := 0.0
-	var card := 0.0
+	var possession_modifier := 0.0
+	var shot_modifier := 0.0
+	var pass_modifier := 0.0
+	var card_modifier := 0.0
 	var sequence_multiplier := 1.0
 	if mentality == "positive":
-		shot += 0.055
-		possession += 0.015
-		card += 0.001
+		shot_modifier += 0.055
+		possession_modifier += 0.015
+		card_modifier += 0.001
 	elif mentality == "cautious":
-		shot -= 0.045
-		pass += 0.025
-		possession -= 0.01
+		shot_modifier -= 0.045
+		pass_modifier += 0.025
+		possession_modifier -= 0.01
 	if tempo == "high":
 		sequence_multiplier += 0.10
-		pass -= 0.025
-		shot += 0.018
+		pass_modifier -= 0.025
+		shot_modifier += 0.018
 	elif tempo == "low":
 		sequence_multiplier -= 0.10
-		pass += 0.035
-		shot -= 0.012
+		pass_modifier += 0.035
+		shot_modifier -= 0.012
 	if pressing == "high":
-		possession += 0.018
-		card += 0.006
+		possession_modifier += 0.018
+		card_modifier += 0.006
 	elif pressing == "low":
-		possession -= 0.012
-		card -= 0.003
+		possession_modifier -= 0.012
+		card_modifier -= 0.003
 	var familiarity_bonus: float = (familiarity - 50.0) / 1000.0
-	pass += familiarity_bonus
+	pass_modifier += familiarity_bonus
 	return {
-		"possession": possession,
-		"shot": shot,
-		"pass": pass,
-		"card": card,
+		"possession": possession_modifier,
+		"shot": shot_modifier,
+		"pass": pass_modifier,
+		"card": card_modifier,
 		"sequence_multiplier": clampf(sequence_multiplier, 0.82, 1.18),
 	}
 
