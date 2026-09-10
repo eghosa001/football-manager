@@ -10,6 +10,7 @@ const LedgerClass = preload("res://simulation/finance/ledger.gd")
 const TacticsManagerClass = preload("res://simulation/tactics/tactics_manager.gd")
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const PlayerPromisesClass = preload("res://simulation/players/player_promises.gd")
+const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
 
 func set_training(world: Dictionary, club_id: String, sessions: Array, intensity: float) -> Error:
 	var club := _club(world, club_id)
@@ -33,8 +34,7 @@ func set_tactical_instruction(world: Dictionary, club_id: String, phase: String,
 
 func make_player_promise(world: Dictionary, club_id: String, player_id: String, promise_type: String, target_value: int, days: int) -> Dictionary:
 	var player := _player(world, player_id)
-	if player.is_empty() or String(player.get("club_id", "")) != club_id:
-		return {"error":ERR_INVALID_PARAMETER}
+	if player.is_empty() or String(player.get("club_id", "")) != club_id: return {"error":ERR_INVALID_PARAMETER}
 	var promise := PlayerPromisesClass.new().make_promise(world, player_id, promise_type, target_value, int(world.get("day_index", 0)) + maxi(1, days))
 	InboxServiceClass.new().add_message(world, "dressing_room", "Promise made to %s" % _player_name(player), "You promised %s a %s target." % [_player_name(player), promise_type])
 	return promise
@@ -54,6 +54,42 @@ func assign_scout(world: Dictionary, club_id: String, player_id: String) -> Dict
 	var assignment := ScoutingServiceClass.new().assign_scout(world, String(scout.id), "player", player_id, int(world.get("day_index", 0)))
 	InboxServiceClass.new().add_message(world, "scouting", "Scouting assignment started", "%s has been assigned to scout %s." % [String(scout.get("name", "Scout")), _player_name(player)])
 	return assignment
+
+func start_recruitment_focus(world: Dictionary, club_id: String, country_id: String, position: String = "", max_age: int = 30, min_potential: int = 0) -> Dictionary:
+	var scout := _best_staff(world, club_id, "scout")
+	if scout.is_empty(): return {"error":ERR_DOES_NOT_EXIST,"reason":"no_scout"}
+	if not _country_exists(world, country_id): return {"error":ERR_DOES_NOT_EXIST,"reason":"country_missing"}
+	var focus := ScoutingServiceClass.new().create_recruitment_focus(world, club_id, String(scout.id), country_id, position, clampi(max_age, 15, 45), clampi(min_potential, 0, 100))
+	InboxServiceClass.new().add_message(world, "scouting", "Recruitment focus started", "%s is scouting %s%s." % [String(scout.get("name", "Scout")), _country_name(world, country_id), " for %s" % position if position != "" else ""])
+	return focus
+
+func register_competition_squad(world: Dictionary, club_id: String, competition_id: String, player_ids: Array) -> Dictionary:
+	var competition := _competition(world, competition_id)
+	if competition.is_empty() or club_id not in competition.get("club_ids", []): return {"error":ERR_INVALID_PARAMETER,"reason":"competition_missing"}
+	var result: Dictionary = RegistrationServiceClass.new().register_squad(world, club_id, competition, player_ids, int(world.get("season_year", 2026)))
+	if bool(result.get("valid", false)):
+		InboxServiceClass.new().add_message(world, "registration", "Squad registered", "%d players were registered for %s." % [result.registered.size(), String(competition.get("name", "competition"))])
+	else:
+		InboxServiceClass.new().add_message(world, "registration", "Registration invalid", "The submitted squad does not satisfy the competition registration rules.")
+	return result
+
+func auto_register_competition_squad(world: Dictionary, club_id: String, competition_id: String) -> Dictionary:
+	var competition := _competition(world, competition_id)
+	if competition.is_empty() or club_id not in competition.get("club_ids", []): return {"error":ERR_INVALID_PARAMETER}
+	var players: Array = []
+	for player in world.get("players", []):
+		if String(player.get("club_id", "")) == club_id and not bool(player.get("retired", false)): players.append(player)
+	players.sort_custom(func(a: Dictionary, b: Dictionary):
+		var agk := 1 if String(a.get("position", "")) == "GK" else 0
+		var bgk := 1 if String(b.get("position", "")) == "GK" else 0
+		if agk != bgk: return agk > bgk
+		var aa := int(a.get("current_ability", 0)); var bb := int(b.get("current_ability", 0))
+		if aa == bb: return String(a.get("id", "")) < String(b.get("id", ""))
+		return aa > bb
+	)
+	var ids: Array = []
+	for player in players: ids.append(String(player.get("id", "")))
+	return register_competition_squad(world, club_id, competition_id, ids)
 
 func submit_transfer_offer(world: Dictionary, club_id: String, player_id: String, fee: int, clauses: Dictionary = {}, seed: int = 1) -> Dictionary:
 	var buyer := _club(world, club_id); var player := _player(world, player_id)
@@ -152,6 +188,21 @@ func _player(world: Dictionary, player_id: String) -> Dictionary:
 	for player in world.get("players", []):
 		if String(player.get("id", "")) == player_id: return player
 	return {}
+
+func _competition(world: Dictionary, competition_id: String) -> Dictionary:
+	for competition in world.get("competitions", []):
+		if String(competition.get("id", "")) == competition_id: return competition
+	return {}
+
+func _country_exists(world: Dictionary, country_id: String) -> bool:
+	for country in world.get("countries", []):
+		if String(country.get("id", "")) == country_id: return true
+	return false
+
+func _country_name(world: Dictionary, country_id: String) -> String:
+	for country in world.get("countries", []):
+		if String(country.get("id", "")) == country_id: return String(country.get("name", country_id))
+	return country_id
 
 func _offer(world: Dictionary, offer_id: String) -> Dictionary:
 	for offer in world.get("transfer_offers", []):
