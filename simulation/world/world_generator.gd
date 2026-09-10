@@ -60,8 +60,8 @@ func create_world(seed: int, country_count: int = 4, clubs_per_country: int = 20
 func _generate_staff(world: Dictionary, seed: int, country_index: int, club_index: int, club_id: String) -> void:
 	for role_index in range(STAFF_ROLES.size()):
 		var base_key := 1_000_000 + country_index * 100_000 + club_index * 1_000 + role_index * 10
-		var first_name := FIRST_NAMES[_rand_int(seed, base_key + 1, 0, FIRST_NAMES.size() - 1)]
-		var last_name := LAST_NAMES[_rand_int(seed, base_key + 2, 0, LAST_NAMES.size() - 1)]
+		var first_name: String = FIRST_NAMES[_rand_int(seed, base_key + 1, 0, FIRST_NAMES.size() - 1)]
+		var last_name: String = LAST_NAMES[_rand_int(seed, base_key + 2, 0, LAST_NAMES.size() - 1)]
 		var ability := _rand_int(seed, base_key + 3, 35, 80)
 		var staff_id := _id("staff", seed, [country_index, club_index, role_index])
 		world.staff.append(Models.staff(staff_id, club_id, first_name + " " + last_name, STAFF_ROLES[role_index], ability))
@@ -73,8 +73,8 @@ func _generate_players(world: Dictionary, seed: int, country_index: int, club_in
 		var ca := _rand_int(seed, base_key + 2, 35, 78)
 		var potential_gain := _rand_int(seed, base_key + 3, 0, 25)
 		var potential := mini(100, ca + potential_gain)
-		var first_name := FIRST_NAMES[_rand_int(seed, base_key + 4, 0, FIRST_NAMES.size() - 1)]
-		var last_name := LAST_NAMES[_rand_int(seed, base_key + 5, 0, LAST_NAMES.size() - 1)]
+		var first_name: String = FIRST_NAMES[_rand_int(seed, base_key + 4, 0, FIRST_NAMES.size() - 1)]
+		var last_name: String = LAST_NAMES[_rand_int(seed, base_key + 5, 0, LAST_NAMES.size() - 1)]
 		var position: String = POSITIONS[player_index % POSITIONS.size()]
 		var player_id := _id("player", seed, [country_index, club_index, player_index])
 		var player: Dictionary = Models.player(player_id, club_id, first_name, last_name, age, position, ca, potential)
