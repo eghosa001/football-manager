@@ -10,7 +10,7 @@ on:
       - 'tests/staff_recruitment_safety_test.gd'
       - 'tests/release_smoke_test.gd'
       - 'game/localization/**'
-      - 'tools/test-headless.sh'
+      - 'tools/test-headless.ps1'
       - 'tests/continental_competitions_test.gd'
       - 'tests/career_rollover_test.gd'
       - 'tests/match_participation_test.gd'
@@ -42,22 +42,32 @@ permissions:
 
 jobs:
   rc2-integration:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: chickensoft-games/setup-godot@v2
         with:
-          version: 4.7.2
-          use-dotnet: false
-      - run: bash tools/test-headless.sh import
-      - run: bash tools/test-headless.sh tests/career_rollover_test.gd
-      - run: bash tools/test-headless.sh tests/continental_competitions_test.gd
-      - run: bash tools/test-headless.sh tests/staff_recruitment_safety_test.gd
-      - run: bash tools/test-headless.sh tests/release_smoke_test.gd
-      - run: bash tools/test-headless.sh tests/match_participation_test.gd
-      - run: bash tools/test-headless.sh tests/player_stats_test.gd 120
-      - run: bash tools/test-headless.sh tests/save_safety_test.gd 120
-      - run: bash tools/test-headless.sh tests/registration_safety_test.gd 120
-      - run: bash tools/test-headless.sh tests/career_ui_test.gd 300
-      - run: bash tools/test-headless.sh tests/rc2_integration_test.gd
+          fetch-depth: 1
+          clean: false
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/career_rollover_test.gd
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/continental_competitions_test.gd
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/staff_recruitment_safety_test.gd
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/release_smoke_test.gd
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/match_participation_test.gd
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/player_stats_test.gd -TimeoutSeconds 120
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/save_safety_test.gd -TimeoutSeconds 120
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/registration_safety_test.gd -TimeoutSeconds 120
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/career_ui_test.gd -TimeoutSeconds 300
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/rc2_integration_test.gd
