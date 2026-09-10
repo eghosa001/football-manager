@@ -7,6 +7,10 @@ func create_bracket(club_ids: Array, seed: int) -> Dictionary:
 	var entrants: Array = club_ids.duplicate()
 	entrants.sort()
 	_shuffle(entrants, seed)
+	if entrants.is_empty():
+		return {"round": 0, "entrants": [], "matches": [], "complete": true, "winner": ""}
+	if entrants.size() == 1:
+		return {"round": 0, "entrants": entrants, "matches": [], "complete": true, "winner": String(entrants[0])}
 	var size := 1
 	while size < entrants.size():
 		size *= 2
@@ -15,6 +19,8 @@ func create_bracket(club_ids: Array, seed: int) -> Dictionary:
 	return {"round": 1, "entrants": entrants, "matches": _pair(entrants), "complete": false, "winner": ""}
 
 func advance_round(bracket: Dictionary, results: Array) -> Dictionary:
+	if bool(bracket.get("complete", false)):
+		return bracket
 	var winners: Array = []
 	for i in range(bracket.matches.size()):
 		var match: Dictionary = bracket.matches[i]
@@ -44,7 +50,7 @@ func advance_round(bracket: Dictionary, results: Array) -> Dictionary:
 
 func _pair(entrants: Array) -> Array:
 	var matches: Array = []
-	for i in range(0, entrants.size(), 2):
+	for i in range(0, entrants.size() - 1, 2):
 		matches.append({"home": String(entrants[i]), "away": String(entrants[i + 1])})
 	return matches
 
