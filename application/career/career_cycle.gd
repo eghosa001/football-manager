@@ -7,6 +7,7 @@ const MarketClass = preload("res://simulation/transfers/transfer_market.gd")
 const EconomyClass = preload("res://simulation/finance/club_economy.gd")
 const TacticsClass = preload("res://simulation/tactics/tactics_manager.gd")
 const LivingWorldClass = preload("res://simulation/world/living_world.gd")
+const StaffMarketClass = preload("res://simulation/staff/staff_market.gd")
 
 var _season_runner = SeasonRunnerClass.new()
 var _lifecycle = LifecycleClass.new()
@@ -14,14 +15,17 @@ var _market = MarketClass.new()
 var _economy = EconomyClass.new()
 var _tactics = TacticsClass.new()
 var _living_world = LivingWorldClass.new()
+var _staff_market = StaffMarketClass.new()
 
 func complete_year(world: Dictionary, history: Array, season_seed: int, promotion_places: int = 3) -> Dictionary:
 	_tactics.ensure_world(world, season_seed + 600_001)
 	_living_world.ensure_world(world)
+	_staff_market.ensure_world(world)
 	for club in world.clubs:
 		_tactics.train_tactic(club, 8)
 	var season_result: Dictionary = _season_runner.complete_and_rollover(world, history, season_seed, promotion_places)
 	var completed_year: int = int(season_result.next_season_year) - 1
+	var manager_market_result: Dictionary = _process_ai_manager_market(world, season_result.records, completed_year)
 	var economy_result: Dictionary = _economy.run_season_finances(world, completed_year, season_result.records)
 	var next_year: int = int(season_result.next_season_year)
 	var loans_returned: int = _market.return_expired_loans(world, next_year)
@@ -46,9 +50,42 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 		"contracts": contract_result,
 		"squads": squad_result,
 		"living_world": living_result,
+		"manager_market": manager_market_result,
 		"loans_returned": loans_returned,
 		"season_year": next_year,
 	}
+
+func _process_ai_manager_market(world: Dictionary, records: Array, year: int) -> Dictionary:
+	var human_club_id := String(world.get("human_manager", {}).get("club_id", ""))
+	var sacked: Array = []
+	var hired: Array = []
+	for club in world.get("clubs", []):
+		var club_id := String(club.get("id", ""))
+		if club_id == human_club_id:
+			continue
+		var ppg := _season_ppg(records, club_id)
+		var patience := int(club.get("board", {}).get("patience", 50))
+		var security: Dictionary = _staff_market.evaluate_manager_security(world, club_id, ppg, patience)
+		if String(security.get("status", "secure")) != "critical":
+			continue
+		if _staff_market.sack_manager(world, club_id, "poor_results", year) == OK:
+			sacked.append(club_id)
+	for club_id in sacked:
+		var options: Array = _staff_market.candidates(world, String(club_id), 8)
+		if options.is_empty():
+			continue
+		var candidate_id := String(options[0].staff_id)
+		if _staff_market.hire_manager(world, String(club_id), candidate_id, year) == OK:
+			hired.append({"club_id":String(club_id),"staff_id":candidate_id})
+	return {"sacked":sacked,"hired":hired}
+
+func _season_ppg(records: Array, club_id: String) -> float:
+	for record in records:
+		for row in record.get("table", []):
+			if String(row.get("club_id", "")) == club_id:
+				var played := maxi(1, int(row.get("played", 0)))
+				return float(row.get("points", 0)) / float(played)
+	return 1.2
 
 func _competition_for_club(competitions: Array, club_id: String) -> Dictionary:
 	for competition in competitions:
