@@ -2,6 +2,12 @@ name: test self-hosted
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Optional branch, tag, or commit SHA to test
+        required: false
+        default: main
+        type: string
   push:
     branches: [main]
 
@@ -9,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: self-hosted-tests-${{ github.ref }}
+  group: self-hosted-tests-${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -17,66 +23,26 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 120
     steps:
-      - name: Checkout
+      - name: Checkout selected ref
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
           fetch-depth: 1
           clean: false
 
-      - name: Use installed Godot
+      - name: Verify tested revision
         shell: powershell
         run: |
-          $ErrorActionPreference = 'Stop'
-
-          $candidates = @()
-          if ($env:GODOT_PATH) { $candidates += $env:GODOT_PATH }
-
-          $commands = @('godot', 'godot4')
-          foreach ($commandName in $commands) {
-            $cmd = Get-Command $commandName -ErrorAction SilentlyContinue
-            if ($cmd) { $candidates += $cmd.Source }
-          }
-
-          $candidates += @(
-            'C:\Program Files\Godot\Godot_v4.7.2-stable_win64.exe',
-            'C:\Program Files\Godot\Godot.exe',
-            "$env:LOCALAPPDATA\Programs\Godot\Godot_v4.7.2-stable_win64.exe",
-            "$env:LOCALAPPDATA\Programs\Godot\Godot.exe"
-          )
-
-          $godot = $null
-          foreach ($candidate in $candidates) {
-            if ($candidate -and (Test-Path $candidate)) {
-              $godot = (Resolve-Path $candidate).Path
-              break
-            }
-          }
-
-          if (-not $godot) {
-            throw 'Godot is not installed or not visible to the runner. Add Godot to PATH or set GODOT_PATH on the runner. This workflow intentionally does not download Godot.'
-          }
-
-          "GODOT_EXE=$godot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Using installed Godot: $godot"
-          & $godot --version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "Testing revision: $(git rev-parse HEAD)"
+          git log -1 --oneline
 
       - name: Import project
         shell: powershell
-        run: |
-          $log = Join-Path $env:RUNNER_TEMP 'godot-import.log'
-          & $env:GODOT_EXE --headless --editor --path . --import --quit 2>&1 | Tee-Object -FilePath $log
-          $status = $LASTEXITCODE
-          if ($status -ne 0) { exit $status }
-          if (Select-String -Path $log -Pattern 'SCRIPT ERROR:|ERROR:|Assertion failed' -Quiet) {
-            Get-Content $log
-            throw 'Godot reported errors during import.'
-          }
+        run: .\tools\test-headless.ps1 -Script import
 
       - name: Run full phase test suite
         shell: powershell
         run: |
-          $ErrorActionPreference = 'Continue'
           $suites = @(
             'tests/test_runner.gd',
             'tests/phase3_test_runner.gd',
@@ -88,16 +54,16 @@ jobs:
           New-Item -ItemType Directory -Force -Path test_artifacts | Out-Null
           $failed = @()
           foreach ($suite in $suites) {
-            Write-Host "===== $suite ====="
-            $logName = ($suite.Replace('/', '_') -replace '\.gd$', '.log')
-            $log = Join-Path 'test_artifacts' $logName
-            & $env:GODOT_EXE --headless --path . --script "res://$suite" 2>&1 | Tee-Object -FilePath $log
-            $status = $LASTEXITCODE
-            $hasErrors = Select-String -Path $log -Pattern 'SCRIPT ERROR:|ERROR:|Assertion failed' -Quiet
-            $hasPass = Select-String -Path $log -Pattern 'PASS' -Quiet
-            if ($status -ne 0 -or $hasErrors -or -not $hasPass) {
+            if (-not (Test-Path $suite)) {
+              Write-Host "SKIP: $suite does not exist in this revision"
+              continue
+            }
+            try {
+              .\tools\test-headless.ps1 -Script $suite
+            } catch {
               $failed += $suite
-              Write-Host "FAILED: $suite (exit $status, errors=$hasErrors, pass=$hasPass)"
+              Write-Host "FAILED: $suite"
+              Write-Host $_
             }
           }
           if ($failed.Count -gt 0) {
@@ -107,14 +73,9 @@ jobs:
           }
 
       - name: Run career performance test
+        if: ${{ hashFiles('tests/career_performance_test.gd') != '' }}
         shell: powershell
-        run: |
-          $log = 'test_artifacts/career_performance_test.log'
-          & $env:GODOT_EXE --headless --path . --script res://tests/career_performance_test.gd 2>&1 | Tee-Object -FilePath $log
-          $status = $LASTEXITCODE
-          if ($status -ne 0 -or (Select-String -Path $log -Pattern 'SCRIPT ERROR:|ERROR:|Assertion failed' -Quiet) -or -not (Select-String -Path $log -Pattern 'PASS' -Quiet)) {
-            exit 1
-          }
+        run: .\tools\test-headless.ps1 -Script tests/career_performance_test.gd
 
       - name: Verify tests did not modify tracked source
         shell: powershell
@@ -129,7 +90,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: self-hosted-test-logs
+          name: self-hosted-test-logs-${{ github.run_id }}
           path: test_artifacts/**
           if-no-files-found: ignore
           retention-days: 7
