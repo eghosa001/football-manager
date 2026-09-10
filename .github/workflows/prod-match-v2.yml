@@ -3,8 +3,9 @@ name: Production Match Engine V2
 on:
   pull_request:
     paths:
-      - 'simulation/match/v2/**'
-      - 'tests/match_v2_test.gd'
+      - 'simulation/match/spatial_match_engine_v2.gd'
+      - 'simulation/match/spatial_state.gd'
+      - 'tests/match_engine_v2_test.gd'
       - '.github/workflows/prod-match-v2.yml'
   push:
     branches: ['prod/match-engine-v2']
@@ -22,4 +23,4 @@ jobs:
           version: 4.7.2
           use-dotnet: false
       - run: godot --headless --editor --path . --quit
-      - run: godot --headless --path . --script res://tests/match_v2_test.gd
+      - run: godot --headless --path . --script res://tests/match_engine_v2_test.gd
