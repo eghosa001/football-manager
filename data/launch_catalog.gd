@@ -3,9 +3,9 @@ extends RefCounted
 
 const DatabaseLoaderClass = preload("res://data/database_loader.gd")
 
-func build(max_countries: int = 0) -> Dictionary:
+func build(max_countries: int = 0, expanded: bool = false) -> Dictionary:
 	var loader = DatabaseLoaderClass.new()
-	var data: Dictionary = loader.load_seed()
+	var data: Dictionary = loader.load_seed("res://data/seed/launch_database.json", expanded)
 	if data.is_empty() or not loader.validate_seed(data).is_empty(): return {"countries":[],"clubs":[]}
 	var countries: Array = []
 	var clubs: Array = []
@@ -23,7 +23,7 @@ func build(max_countries: int = 0) -> Dictionary:
 			for club_index in range(team_count):
 				clubs.append({
 					"id":"%s-t%d-c%02d" % [country_id, tier_index + 1, club_index + 1],
-					"name":"%s %s %d" % [String(country.get("name", "Nation")), _club_word(club_index), club_index + 1],
+					"name":loader.club_name(country, club_index, tier_index + 1),
 					"country_id":country_id,
 					"tier":tier_index + 1,
 					"competition_name":String(tier.get("name", "Division")),

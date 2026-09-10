@@ -20,11 +20,15 @@ var managed_club_id := ""
 var save_path := ""
 var seed := 12345
 
-func new_career(manager_name: String, club_id: String = "", world_seed: int = 12345, launch_countries: int = 0) -> Dictionary:
+func new_career(manager_name: String, club_id: String = "", world_seed: int = 12345, launch_countries: int = 0, mods: Array = [], expanded: bool = false) -> Dictionary:
+	var candidate: Dictionary = LaunchWorldBuilderClass.new().build(world_seed, launch_countries, 28 if expanded else 25, expanded)
+	if candidate.is_empty(): candidate = WorldGeneratorClass.new().create_world(world_seed)
+	if not mods.is_empty():
+		var applied: Dictionary = preload("res://tools/modding/mod_loader.gd").new().apply_mods(candidate, mods)
+		if not bool(applied.ok): return {"error":ERR_INVALID_DATA,"message":String(applied.error)}
 	save_path = ""
 	seed = world_seed
-	world = LaunchWorldBuilderClass.new().build(seed, launch_countries, 25)
-	if world.is_empty(): world = WorldGeneratorClass.new().create_world(seed)
+	world = candidate
 	_initialize_world(true)
 	if world.get("clubs", []).is_empty(): return {}
 	managed_club_id = club_id if club_id != "" and _club_exists(club_id) else String(world.clubs[0].id)

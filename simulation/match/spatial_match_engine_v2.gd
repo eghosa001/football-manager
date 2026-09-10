@@ -7,9 +7,12 @@ const SpatialStateClass = preload("res://simulation/match/spatial_state.gd")
 const PITCH_LENGTH := 105.0
 const PITCH_WIDTH := 68.0
 
-func simulate_possession(home_lineup: Array, away_lineup: Array, seed: int, max_actions: int = 24, starting_side: String = "home") -> Dictionary:
-	var state := _initial_state(home_lineup, away_lineup, starting_side)
+func simulate_possession(home_lineup: Array, away_lineup: Array, seed: int, max_actions: int = 24, starting_side: String = "home", previous_state: Dictionary = {}) -> Dictionary:
+	var state := _initial_state(home_lineup, away_lineup, starting_side) if previous_state.is_empty() else previous_state.duplicate(true)
+	_sync_players(state, home_lineup, away_lineup)
+	var initial: Dictionary = state.duplicate(true)
 	var events: Array = []
+	var frames: Array = []
 	for action_index in range(max_actions):
 		var side := String(state.possession_side)
 		var team: Array = home_lineup if side == "home" else away_lineup
@@ -26,9 +29,23 @@ func simulate_possession(home_lineup: Array, away_lineup: Array, seed: int, max_
 		var event := _resolve_action(actor, team, opponents, action, state, seed, action_index)
 		events.append(event)
 		_apply_event(state, event, team, opponents, seed, action_index)
+		frames.append({"ball":state.ball.duplicate(true),"home":state.home_positions.duplicate(true),"away":state.away_positions.duplicate(true)})
 		if String(event.get("type", "")) == "shot" or not bool(event.get("success", true)):
 			break
-	return {"state":state,"events":events}
+	return {"state":state,"events":events,"frames":frames,"initial_state":initial}
+
+func _sync_players(state: Dictionary, home: Array, away: Array) -> void:
+	for side in ["home", "away"]:
+		var team: Array = home if side == "home" else away
+		var positions: Dictionary = state.home_positions if side == "home" else state.away_positions
+		var defaults := _shape(team, side == "home")
+		for id in positions.keys():
+			if not defaults.has(id): positions.erase(id)
+		for id in defaults:
+			if not positions.has(id): positions[id] = defaults[id]
+		if String(state.possession_side) == side and not positions.has(String(state.ball_owner_id)) and not team.is_empty():
+			state.ball_owner_id = String(team[0].id)
+			state.ball = positions[state.ball_owner_id].duplicate(true)
 
 func _initial_state(home_lineup: Array, away_lineup: Array, starting_side: String) -> Dictionary:
 	var home_positions: Dictionary = _shape(home_lineup, true)
@@ -82,7 +99,7 @@ func _resolve_action(actor: Dictionary, team: Array, opponents: Array, action: S
 		var finishing := float(attrs.get("finishing", actor.get("current_ability", 50)))
 		var composure := float(attrs.get("composure", attrs.get("decisions", actor.get("current_ability", 50))))
 		var xg := clampf((0.62 - distance / 120.0) * angle_factor - pressure * 0.16, 0.015, 0.62)
-		var execution := clampf(0.75 + (finishing + composure - 100.0) / 350.0, 0.55, 1.25)
+		var execution := clampf(0.75 + (finishing + composure - 100.0) / 350.0, 0.55, 1.25) * _fitness_factor(actor)
 		var scored := SeededRngClass.unit_for(seed, 6000 + index) < clampf(xg * execution, 0.01, 0.85)
 		var on_target := scored or SeededRngClass.unit_for(seed, 6100 + index) < clampf(0.35 + finishing / 250.0 - pressure * 0.12, 0.2, 0.8)
 		return {"type":"shot","player_id":String(actor.id),"side":side,"outcome":"goal" if scored else ("saved" if on_target else "missed"),"success":scored,"xg":xg,"position":state.ball.duplicate(true),"pressure":pressure}
@@ -97,14 +114,17 @@ func _resolve_action(actor: Dictionary, team: Array, opponents: Array, action: S
 		var technique := float(attrs.get("technique", actor.get("current_ability", 50)))
 		var receiver_pressure := _pressure(state, side, target_position)
 		var success_chance := clampf(0.58 + passing / 300.0 + technique / 500.0 - distance / 180.0 - pressure * 0.18 - receiver_pressure * 0.10, 0.18, 0.96)
-		var success := SeededRngClass.unit_for(seed, 7000 + index) < success_chance
+		var success := SeededRngClass.unit_for(seed, 7000 + index) < success_chance * _fitness_factor(actor)
 		return {"type":"pass","player_id":String(actor.id),"receiver_id":String(receiver.id),"side":side,"success":success,"outcome":"complete" if success else "intercepted","from":state.ball.duplicate(true),"to":target_position.duplicate(true),"distance":distance,"pressure":pressure}
 	var direction := 1.0 if side == "home" else -1.0
 	var target := SpatialStateClass.clamp_position({"x":float(state.ball.x)+direction*6.0,"y":float(state.ball.y)+(SeededRngClass.unit_for(seed, 8100+index)-0.5)*5.0})
 	var dribbling := float(attrs.get("dribbling", attrs.get("pace", actor.get("current_ability", 50))))
 	var chance := clampf(0.48 + dribbling / 260.0 - pressure * 0.42, 0.08, 0.9)
-	var retained := SeededRngClass.unit_for(seed, 8000 + index) < chance
+	var retained := SeededRngClass.unit_for(seed, 8000 + index) < chance * _fitness_factor(actor)
 	return {"type":"dribble","player_id":String(actor.id),"side":side,"success":retained,"outcome":"retained" if retained else "tackled","from":state.ball.duplicate(true),"to":target,"pressure":pressure}
+
+func _fitness_factor(player: Dictionary) -> float:
+	return 0.65 + 0.35 * clampf(float(player.get("fitness", 100)) / 100.0, 0.0, 1.0)
 
 func _best_receiver(actor: Dictionary, team: Array, state: Dictionary, side: String, seed: int, index: int) -> Dictionary:
 	var positions: Dictionary = state.home_positions if side == "home" else state.away_positions

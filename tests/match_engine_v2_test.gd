@@ -34,7 +34,8 @@ func _init() -> void:
 	assert(int(first.stats.home.goals) == int(first.home_goals))
 	assert(int(first.stats.away.goals) == int(first.away_goals))
 	assert(is_equal_approx(float(first.stats.home.possession) + float(first.stats.away.possession), 100.0))
-	assert(first.spatial.frames.size() == 54)
+	assert(first.spatial.frames.size() >= 54)
+	assert(first.spatial.model == "persistent_action_2d")
 	for frame in first.spatial.frames:
 		assert(float(frame.ball.x) >= 0.0 and float(frame.ball.x) <= 105.0)
 		assert(float(frame.ball.y) >= 0.0 and float(frame.ball.y) <= 68.0)

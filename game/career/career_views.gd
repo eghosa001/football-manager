@@ -43,6 +43,19 @@ func add_training(tabs: TabContainer) -> void:
 	var row := HBoxContainer.new(); box.add_child(row)
 	for preset in [{"name":"Recovery","value":0.40},{"name":"Balanced","value":0.65},{"name":"Intense","value":0.85}]:
 		_button(row, String(preset.name), _set_training.bind(float(preset.value)))
+	var choices: Array = []
+	var sessions: Array = preload("res://simulation/players/training_system.gd").SESSIONS
+	for day in range(7):
+		var choice := OptionButton.new()
+		for value in sessions: choice.add_item(tr(String(value).replace("_", " ").capitalize()))
+		choice.select(maxi(0, sessions.find(current.schedule[day])))
+		box.add_child(app.call("_labeled", tr("Day %d") % (day + 1), choice))
+		choices.append(choice)
+	_button(box, tr("Save weekly schedule"), func():
+		var selected: Array = []
+		for choice in choices: selected.append(sessions[choice.selected])
+		_report_command(command.set_training(session.world, session.managed_club_id, selected, float(current.intensity)))
+	)
 
 func add_tactics(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Tactics")

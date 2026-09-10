@@ -103,14 +103,14 @@ func _init() -> void:
 		if bool(row.get("detailed", false)):
 			detailed_count += 1
 			assert(row.result.has("spatial"))
-			assert(String(row.result.spatial.model) == "causal_2d_v2")
+			assert(String(row.result.spatial.model) == "persistent_action_2d")
 			assert(row.result.spatial.frames.size() > 0)
 		else:
 			background_count += 1
 	assert(detailed_count == 1)
 	assert(background_count > 0)
 	assert(session.world.has("last_managed_match"))
-	assert(String(session.world.last_managed_match.result.spatial.model) == "causal_2d_v2")
+	assert(String(session.world.last_managed_match.result.spatial.model) == "persistent_action_2d")
 
 	print("[TEST] RC2 matchday passed")
 	var path := "user://rc2_integration.fdn"
