@@ -1,12 +1,14 @@
 class_name SeasonRunner
 extends RefCounted
 
-const MatchEngineClass = preload("res://simulation/match/tactical_match_engine.gd")
+const AbstractMatchEngineClass = preload("res://simulation/match/abstract_match_engine.gd")
+const TacticalMatchEngineClass = preload("res://simulation/match/tactical_match_engine.gd")
 const LeagueTableClass = preload("res://simulation/competitions/league_table.gd")
 const CalendarClass = preload("res://core/calendar/calendar_service.gd")
 const LeagueSystemClass = preload("res://application/season/league_system.gd")
 
-var _match_engine = MatchEngineClass.new()
+var _abstract_match_engine = AbstractMatchEngineClass.new()
+var _tactical_match_engine = TacticalMatchEngineClass.new()
 var _league_system = LeagueSystemClass.new()
 
 func play_next_fixture(world: Dictionary, competition_id: String, season_seed: int) -> Dictionary:
@@ -103,13 +105,12 @@ func build_season_record(world: Dictionary, competition_id: String) -> Dictionar
 
 func _play_fixture(world: Dictionary, fixture: Dictionary, season_seed: int) -> Dictionary:
 	var match_seed: int = _fixture_seed(season_seed, fixture)
-	var result: Dictionary = _match_engine.simulate_match(
-		_find_club(world.clubs, fixture.home_club_id),
-		_find_club(world.clubs, fixture.away_club_id),
-		world.players,
-		match_seed
-	)
-	_match_engine.apply_to_fixture(fixture, result)
+	var home_club: Dictionary = _find_club(world.clubs, fixture.home_club_id)
+	var away_club: Dictionary = _find_club(world.clubs, fixture.away_club_id)
+	var use_tactics: bool = home_club.has("tactic") or away_club.has("tactic")
+	var engine = _tactical_match_engine if use_tactics else _abstract_match_engine
+	var result: Dictionary = engine.simulate_match(home_club, away_club, world.players, match_seed)
+	engine.apply_to_fixture(fixture, result)
 	return {"fixture": fixture, "result": result, "match_seed": match_seed}
 
 func _fixture_seed(season_seed: int, fixture: Dictionary) -> int:
