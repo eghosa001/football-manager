@@ -1,0 +1,31 @@
+name: RC2 Integration
+
+on:
+  pull_request:
+    paths:
+      - 'application/career/**'
+      - 'game/career/**'
+      - 'data/**'
+      - 'simulation/players/**'
+      - 'simulation/scouting/**'
+      - 'simulation/transfers/**'
+      - 'simulation/match/**'
+      - 'tests/rc2_integration_test.gd'
+      - '.github/workflows/rc2-integration.yml'
+  push:
+    branches: ['prod/rc2-integration']
+
+permissions:
+  contents: read
+
+jobs:
+  rc2-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - run: godot --headless --editor --path . --quit
+      - run: godot --headless --path . --script res://tests/rc2_integration_test.gd
