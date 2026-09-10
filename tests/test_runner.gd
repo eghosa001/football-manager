@@ -34,24 +34,33 @@ func _expect(condition: bool, message: String) -> void:
 		push_error("[TEST] %s" % message)
 
 func _deep_equal(left: Variant, right: Variant) -> bool:
+	return _first_difference(left, right) == ""
+
+func _first_difference(left: Variant, right: Variant, path: String = "root") -> String:
 	var left_type: int = typeof(left)
 	if left_type != typeof(right):
-		return false
+		return "%s type %d != %d" % [path, left_type, typeof(right)]
 	if left_type == TYPE_DICTIONARY:
 		if left.size() != right.size():
-			return false
+			return "%s dictionary size %d != %d" % [path, left.size(), right.size()]
 		for key in left.keys():
-			if not right.has(key) or not _deep_equal(left[key], right[key]):
-				return false
-		return true
+			if not right.has(key):
+				return "%s missing key %s" % [path, str(key)]
+			var diff := _first_difference(left[key], right[key], "%s.%s" % [path, str(key)])
+			if diff != "":
+				return diff
+		return ""
 	if left_type == TYPE_ARRAY:
 		if left.size() != right.size():
-			return false
+			return "%s array size %d != %d" % [path, left.size(), right.size()]
 		for i in range(left.size()):
-			if not _deep_equal(left[i], right[i]):
-				return false
-		return true
-	return left == right
+			var diff := _first_difference(left[i], right[i], "%s[%d]" % [path, i])
+			if diff != "":
+				return diff
+		return ""
+	if left != right:
+		return "%s value %s != %s" % [path, str(left), str(right)]
+	return ""
 
 func _test_rng() -> void:
 	var a = SeededRngClass.new(12345)
@@ -89,7 +98,10 @@ func _test_world_generation() -> Dictionary:
 	_expect(a.staff.size() == 400, "Expected five staff per club")
 	_expect(a.contracts.size() == 2000, "Expected one basic contract per player")
 	_expect(a.competitions.size() == 4, "Expected one competition per country")
-	_expect(_deep_equal(a, b), "Same seed must generate identical world")
+	var same_world_diff := _first_difference(a, b)
+	if same_world_diff != "":
+		print("[DETERMINISM DIAG] world: %s" % same_world_diff)
+	_expect(same_world_diff == "", "Same seed must generate identical world")
 	_expect(not _deep_equal(a, c), "Different seed must generate a different world")
 	return a
 
@@ -110,7 +122,10 @@ func _test_match_engine(world: Dictionary) -> void:
 	var away: Dictionary = world.clubs[1]
 	var first: Dictionary = engine.simulate_match(home, away, world.players, 827183927)
 	var second: Dictionary = engine.simulate_match(home, away, world.players, 827183927)
-	_expect(_deep_equal(first, second), "Match seed must reproduce identical match state and event stream")
+	var same_match_diff := _first_difference(first, second)
+	if same_match_diff != "":
+		print("[DETERMINISM DIAG] match: %s" % same_match_diff)
+	_expect(same_match_diff == "", "Match seed must reproduce identical match state and event stream")
 	_expect(first.lineups.home.size() == 11 and first.lineups.away.size() == 11, "Each starting lineup must contain 11 players")
 	_expect(first.substitutions.size() <= 6, "Default match must not exceed three substitutions per side")
 	_expect(first.stats.home.possession + first.stats.away.possession >= 99.9, "Possession should sum to approximately 100")
