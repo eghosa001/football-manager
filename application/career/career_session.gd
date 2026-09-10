@@ -11,6 +11,7 @@ const ClubEconomyClass = preload("res://simulation/finance/club_economy.gd")
 const StaffContractsClass = preload("res://simulation/staff/staff_contracts.gd")
 const InternationalFootballClass = preload("res://simulation/competitions/international_football.gd")
 const KnockoutSeasonClass = preload("res://application/season/knockout_season.gd")
+const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
 
 var world: Dictionary = {}
 var history: Array = []
@@ -70,12 +71,16 @@ func _initialize_world(is_new: bool) -> void:
 	ClubEconomyClass.new().ensure_world(world)
 	StaffContractsClass.new().ensure_world(world)
 	InternationalFootballClass.new().ensure_world(world)
+	var season_year := int(world.get("season_year",2026))
 	if is_new:
-		KnockoutSeasonClass.new().initialize_all(world, int(world.get("season_year",2026)))
+		KnockoutSeasonClass.new().initialize_all(world, season_year)
 	else:
 		for competition in world.get("competitions", []):
 			if String(competition.get("competition_type","league")) == "knockout" and not competition.has("knockout_bracket"):
-				KnockoutSeasonClass.new().initialize_competition(world, competition, int(world.get("season_year",2026)))
+				KnockoutSeasonClass.new().initialize_competition(world, competition, season_year)
+	var registration = RegistrationServiceClass.new()
+	registration.ensure_world(world)
+	if is_new or world.get("registrations", {}).is_empty(): registration.auto_register_world(world, season_year)
 	world["seed"] = seed
 
 func _club_exists(club_id: String) -> bool:
