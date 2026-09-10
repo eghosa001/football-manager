@@ -29,6 +29,12 @@ jobs:
           use-dotnet: false
           include-templates: false
 
+      - name: Install Godot-SQLite v4.9
+        run: |
+          curl -L --fail --retry 3 https://github.com/2shady4u/godot-sqlite/releases/download/v4.9/addons.zip -o /tmp/godot-sqlite-addons.zip
+          echo "95e91b72fe32984a84edaf6357a78753661f37a170cb362f5b948e0ede7c2cb0  /tmp/godot-sqlite-addons.zip" | sha256sum -c -
+          unzip -q /tmp/godot-sqlite-addons.zip -d .
+
       - name: Verify engine
         run: godot --version
 
@@ -38,8 +44,11 @@ jobs:
       - name: Run Phase 1/2 tests
         run: godot --headless --path . --script res://tests/test_runner.gd
 
-      - name: Run Phase 3 foundation tests
+      - name: Run Phase 3 tests
         run: godot --headless --path . --script res://tests/phase3_test_runner.gd
+
+      - name: Run SQLite integration
+        run: godot --headless --path . --script res://tests/sqlite_integration_test.gd
 
       - name: Run 100k match validation
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_match_validation }}
