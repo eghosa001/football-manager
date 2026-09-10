@@ -56,7 +56,7 @@ This roadmap preserves the design goals but reduces rewrite risk.
 
 **Keep:** immutable starting database, mutable save state, atomic autosaves, simulation tiers, worker isolation and profile-before-native-optimization.
 
-**Blocking decision:** the design specifies SQLite but does not name or vendor a Godot 4.7-compatible SQLite integration. Do not allow persistence code to leak into simulation entities while this dependency remains undecided. Repositories should be interfaces/adapters.
+**Resolved in Phase 3:** persistence now sits behind a repository contract. A typed atomic file adapter is the dependency-free default, while a Godot-SQLite v4.9 adapter is exercised by CI under Godot 4.7.2. Simulation entities remain independent of persistence technology.
 
 **Change:** architecture target and launch scale should be treated as benchmarks, not default loaded-world sizes during development.
 
@@ -116,13 +116,15 @@ Deliver lineups, possession sequences, passes, shots, goals, cards, substitution
 
 **Acceptance:** identical seed reproduces identical match; goals/statistics derive from events; broad distribution harness passes; full 100,000-match validation is available as an explicit CI/manual gate.
 
-**Status:** implemented; statistical calibration still requires running the full 100k gate on CI/hardware.
+**Status:** implemented; the standard 2,000-match statistical gate is passing. The 100k run remains an explicit heavy validation gate.
 
 ## Phase 3 — Season and Persistence Core
 
 Add SQLite adapter, migrations, repository layer, atomic saves, calendar-driven fixture execution, league completion, promotion/relegation and historical season records.
 
 **Acceptance:** save/reload/continue matches uninterrupted deterministic simulation; 10 unattended seasons complete without corruption.
+
+**Status:** implemented. CI verifies calendar-driven matchdays, exact typed save/reload continuation, backup recovery, multi-tier promotion/relegation, season rollover, ten consecutive seasons with save/reload after every season, and a live Godot-SQLite round-trip.
 
 ## Phase 4 — Player Lifecycle
 
@@ -168,7 +170,7 @@ Add relationships, morale, dynamic rivalries, manager careers, reputation moveme
 
 ---
 
-# Phase 1/2 implementation boundaries
+# Phase 1–3 implementation boundaries
 
 The current code intentionally does **not** pretend later systems are complete.
 
@@ -177,6 +179,7 @@ The current code intentionally does **not** pretend later systems are complete.
 - Match ratings are neutral rather than role-aware until tactics/roles exist.
 - The abstract match engine emits canonical logical events so the later spatial engine can preserve downstream statistics/history contracts.
 - The current UI is a smoke-test inspector, not the management interface.
-- SQLite remains a Phase 3 adapter decision; simulation code contains no database dependency.
+- Persistence is accessed through `SaveRepository`; the file and SQLite implementations can change without introducing a storage dependency into simulation code.
+- Promotion/relegation supports adjacent configured tiers. The default Phase 1 world intentionally still contains only one top division per country, so no artificial second divisions are generated merely to exercise the mechanism.
 
-This keeps the two implemented phases useful without lying about systems that have not yet been built.
+This keeps the implemented phases useful without claiming later player-lifecycle, transfer, economy, tactical or career-UI systems already exist.
