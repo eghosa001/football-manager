@@ -56,6 +56,9 @@ func _init() -> void:
 	var schedule = ScheduleConstraintsClass.new()
 	schedule.assign_dates(group_fixtures, {"year":2026,"month":8,"day":1}, 7, 2)
 	if not _must(schedule.validate_rest(group_fixtures, 2).is_empty(), "scheduled group stage should respect minimum rest"): return
+	if not _must(schedule._date_to_ordinal({"year":2026,"month":3,"day":1}) - schedule._date_to_ordinal({"year":2026,"month":2,"day":28}) == 1, "calendar should cross non-leap February correctly"): return
+	if not _must(schedule._date_to_ordinal({"year":2028,"month":3,"day":1}) - schedule._date_to_ordinal({"year":2028,"month":2,"day":29}) == 1, "calendar should cross leap-day correctly"): return
+	if not _must(schedule._date_to_ordinal({"year":2027,"month":1,"day":1}) - schedule._date_to_ordinal({"year":2026,"month":12,"day":31}) == 1, "calendar should cross year boundary correctly"): return
 
 	print("[TEST] competition catalog")
 	var tiers: Array = [[], []]
@@ -74,6 +77,10 @@ func _init() -> void:
 	var nation_id := String(world.countries[0].id)
 	var callup: Dictionary = international.register_callups(world, nation_id, "international-test", 23)
 	if not _must(callup.player_ids.size() <= 23, "call-up should respect squad limit"): return
+	var tiny_squad: Array = international.select_squad(world, nation_id, 1)
+	if not _must(tiny_squad.size() <= 1, "small international squad requests must never exceed their limit"): return
+	var empty_squad: Array = international.select_squad(world, nation_id, 0)
+	if not _must(empty_squad.is_empty(), "zero-sized international squad request should return no players"): return
 	var country_ids: Array = []
 	for country in world.countries: country_ids.append(String(country.id))
 	var qualifying: Dictionary = international.qualifying_groups(country_ids, 2, "qualifiers")
