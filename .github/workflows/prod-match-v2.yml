@@ -1,0 +1,27 @@
+name: Production Match Engine V2
+
+on:
+  pull_request:
+    paths:
+      - 'simulation/match/spatial_match_engine_v2.gd'
+      - 'simulation/match/spatial_state.gd'
+      - 'simulation/match/full_match_engine_v2.gd'
+      - 'tests/match_engine_v2_test.gd'
+      - '.github/workflows/prod-match-v2.yml'
+  push:
+    branches: ['prod/match-engine-v2']
+
+permissions:
+  contents: read
+
+jobs:
+  match-v2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - run: godot --headless --editor --path . --quit
+      - run: godot --headless --path . --script res://tests/match_engine_v2_test.gd
