@@ -5,6 +5,8 @@ const KnockoutClass = preload("res://simulation/competitions/knockout_competitio
 const CatalogClass = preload("res://simulation/competitions/competition_catalog.gd")
 const GroupStageClass = preload("res://simulation/competitions/group_stage.gd")
 const ScheduleConstraintsClass = preload("res://simulation/competitions/schedule_constraints.gd")
+const InternationalClass = preload("res://simulation/competitions/international_football.gd")
+const WorldGeneratorClass = preload("res://simulation/world/world_generator.gd")
 
 func _init() -> void:
 	var loader = DatabaseLoaderClass.new()
@@ -39,5 +41,17 @@ func _init() -> void:
 	assert(competitions.size() == 3)
 	assert(int(competitions[0].tier) == 1)
 	assert(String(competitions[2].rules.type) == "knockout")
+
+	var world: Dictionary = WorldGeneratorClass.new().create_world(80808)
+	var international = InternationalClass.new()
+	international.ensure_world(world)
+	assert(world.national_teams.size() == world.countries.size())
+	var nation_id := String(world.countries[0].id)
+	var callup: Dictionary = international.register_callups(world, nation_id, "international-test", 23)
+	assert(callup.player_ids.size() <= 23)
+	var country_ids: Array = []
+	for country in world.countries: country_ids.append(String(country.id))
+	var qualifying: Dictionary = international.qualifying_groups(country_ids, 2, "qualifiers")
+	assert(qualifying.groups.size() == 2)
 	print("[TEST] DATABASE/COMPETITIONS PASS")
 	quit(0)
