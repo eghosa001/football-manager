@@ -30,7 +30,8 @@ func create_world(seed: int, country_count: int = 4, clubs_per_country: int = 20
 
 	for country_index in range(country_count):
 		var country_id: String = rng.stable_id("country")
-		var country: Dictionary = Models.country(country_id, COUNTRY_NAMES[country_index], COUNTRY_CODES[country_index], rng.randi_range(45, 82))
+		var youth_rating: int = rng.randi_range(45, 82)
+		var country: Dictionary = Models.country(country_id, COUNTRY_NAMES[country_index], COUNTRY_CODES[country_index], youth_rating)
 		world.countries.append(country)
 		var club_ids: Array = []
 		for club_index in range(clubs_per_country):
@@ -38,14 +39,16 @@ func create_world(seed: int, country_count: int = 4, clubs_per_country: int = 20
 			var club_name: String = "%s %s" % [COUNTRY_NAMES[country_index].split(" ")[0], CITY_WORDS[club_index % CITY_WORDS.size()]]
 			if club_index >= CITY_WORDS.size():
 				club_name += " %d" % (club_index + 1)
-			var club: Dictionary = Models.club(club_id, country_id, club_name, rng.randi_range(35, 75))
+			var reputation: int = rng.randi_range(35, 75)
+			var club: Dictionary = Models.club(club_id, country_id, club_name, reputation)
 			world.clubs.append(club)
 			club_ids.append(club_id)
 			_generate_staff(world, rng, club_id)
 			_generate_players(world, rng, club_id, players_per_club)
 
 		var competition_id: String = rng.stable_id("competition")
-		world.competitions.append(Models.competition(competition_id, country_id, "%s Premier Division" % COUNTRY_NAMES[country_index], club_ids))
+		var competition_name := "%s Premier Division" % COUNTRY_NAMES[country_index]
+		world.competitions.append(Models.competition(competition_id, country_id, competition_name, club_ids))
 		world.fixtures.append_array(_round_robin_fixtures(rng, competition_id, club_ids))
 
 	_validate_references(world)
@@ -53,21 +56,29 @@ func create_world(seed: int, country_count: int = 4, clubs_per_country: int = 20
 
 func _generate_staff(world: Dictionary, rng, club_id: String) -> void:
 	for role in ["manager", "assistant", "coach", "scout", "physio"]:
-		var name: String = "%s %s" % [rng.pick(FIRST_NAMES), rng.pick(LAST_NAMES)]
-		world.staff.append(Models.staff(rng.stable_id("staff"), club_id, name, role, rng.randi_range(35, 80)))
+		var first_name: String = rng.pick(FIRST_NAMES)
+		var last_name: String = rng.pick(LAST_NAMES)
+		var name := first_name + " " + last_name
+		var ability: int = rng.randi_range(35, 80)
+		var staff_id: String = rng.stable_id("staff")
+		world.staff.append(Models.staff(staff_id, club_id, name, role, ability))
 
 func _generate_players(world: Dictionary, rng, club_id: String, count: int) -> void:
 	for player_index in range(count):
 		var age: int = rng.randi_range(17, 33)
 		var ca: int = rng.randi_range(35, 78)
-		var potential: int = mini(100, ca + rng.randi_range(0, 25))
+		var potential_gain: int = rng.randi_range(0, 25)
+		var potential: int = mini(100, ca + potential_gain)
 		var position: String = POSITIONS[player_index % POSITIONS.size()]
-		var player: Dictionary = Models.player(
-			rng.stable_id("player"), club_id,
-			rng.pick(FIRST_NAMES), rng.pick(LAST_NAMES), age, position, ca, potential
-		)
+		var player_id: String = rng.stable_id("player")
+		var first_name: String = rng.pick(FIRST_NAMES)
+		var last_name: String = rng.pick(LAST_NAMES)
+		var player: Dictionary = Models.player(player_id, club_id, first_name, last_name, age, position, ca, potential)
 		world.players.append(player)
-		world.contracts.append(Models.contract(rng.stable_id("contract"), player.id, club_id, 2026, rng.randi_range(2027, 2031), rng.randi_range(500, 25_000)))
+		var contract_id: String = rng.stable_id("contract")
+		var end_year: int = rng.randi_range(2027, 2031)
+		var weekly_wage: int = rng.randi_range(500, 25_000)
+		world.contracts.append(Models.contract(contract_id, player.id, club_id, 2026, end_year, weekly_wage))
 
 func _round_robin_fixtures(rng, competition_id: String, input_club_ids: Array) -> Array:
 	var teams: Array = input_club_ids.duplicate()
@@ -80,7 +91,8 @@ func _round_robin_fixtures(rng, competition_id: String, input_club_ids: Array) -
 				var b: String = teams[team_count - 1 - pair_index]
 				var home: String = a if (round_index + pair_index + leg) % 2 == 0 else b
 				var away: String = b if home == a else a
-				fixtures.append(Models.fixture(rng.stable_id("fixture"), competition_id, leg * (team_count - 1) + round_index + 1, home, away))
+				var fixture_id: String = rng.stable_id("fixture")
+				fixtures.append(Models.fixture(fixture_id, competition_id, leg * (team_count - 1) + round_index + 1, home, away))
 			var fixed: String = teams[0]
 			var rotating: Array = teams.slice(1)
 			rotating.push_front(rotating.pop_back())
