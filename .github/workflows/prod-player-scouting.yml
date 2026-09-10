@@ -1,0 +1,27 @@
+name: Production Player Scouting Transfers
+
+on:
+  pull_request:
+    paths:
+      - 'simulation/players/**'
+      - 'simulation/scouting/**'
+      - 'simulation/transfers/**'
+      - 'tests/player_scouting_test.gd'
+      - '.github/workflows/prod-player-scouting.yml'
+  push:
+    branches: ['prod/player-scouting-transfers']
+
+permissions:
+  contents: read
+
+jobs:
+  player-scouting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - run: godot --headless --editor --path . --quit
+      - run: godot --headless --path . --script res://tests/player_scouting_test.gd
