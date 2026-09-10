@@ -21,6 +21,7 @@ var save_path := ""
 var seed := 12345
 
 func new_career(manager_name: String, club_id: String = "", world_seed: int = 12345, launch_countries: int = 0) -> Dictionary:
+	save_path = ""
 	seed = world_seed
 	world = LaunchWorldBuilderClass.new().build(seed, launch_countries, 25)
 	if world.is_empty(): world = WorldGeneratorClass.new().create_world(seed)

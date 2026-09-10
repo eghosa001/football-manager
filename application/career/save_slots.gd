@@ -3,6 +3,13 @@ extends RefCounted
 
 const SaveStoreClass = preload("res://persistence/save_store.gd")
 
+func first_available_slot(max_slots: int = 10) -> int:
+	for slot in range(1, max_slots + 1):
+		var path := slot_path(slot)
+		if not FileAccess.file_exists(path) and not FileAccess.file_exists(path + ".bak"):
+			return slot
+	return 0
+
 func slot_path(slot: int) -> String:
 	return "user://saves/career_%02d.fdn" % clampi(slot, 1, 20)
 

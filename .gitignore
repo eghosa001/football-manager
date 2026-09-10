@@ -1,4 +1,5 @@
 .godot/
+.local-tests/
 *.tmp
 *.log
 .DS_Store

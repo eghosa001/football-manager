@@ -29,10 +29,15 @@ func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 func _advance_medical(world: Dictionary, managed_club_id: String) -> Array:
 	var medical_system = MedicalSystemClass.new()
 	var updates: Array = []
+	var physios: Dictionary = {}
+	for member in world.get("staff", []):
+		if String(member.get("role", "")) != "physio": continue
+		var club_id := String(member.get("club_id", ""))
+		physios[club_id] = maxi(int(physios.get(club_id, 50)), int(member.get("ability", 50)))
 	for player in world.get("players", []):
 		if bool(player.get("retired", false)): continue
 		var was_injured := int(player.get("injured_days", 0)) > 0
-		var physio_quality := _physio_quality(world.get("staff", []), String(player.get("club_id", "")))
+		var physio_quality := int(physios.get(String(player.get("club_id", "")), 50))
 		var result: Dictionary = medical_system.advance_day(player, physio_quality, 0.65)
 		if bool(result.get("recovered", false)):
 			updates.append({"player_id":String(player.get("id", "")),"type":"recovered"})

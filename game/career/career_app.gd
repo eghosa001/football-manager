@@ -48,6 +48,7 @@ func _show_main_menu() -> void:
 	var root := _clear()
 	_add_heading(root, "FOOTBALL DYNASTY", 36)
 	var subtitle := Label.new(); subtitle.text = "Build a dynasty. Shape a football world."; root.add_child(subtitle)
+	if not session.world.is_empty(): _add_button(root, "Resume Career", _show_career)
 	_add_button(root, "New Career", _show_new_career)
 	_add_button(root, "Load Career", _show_load_menu)
 	_add_button(root, "Settings", _show_settings)
@@ -105,6 +106,7 @@ func _show_new_career() -> void:
 	_add_button(buttons, "Back", _show_main_menu)
 
 func _create_career_from_wizard() -> void:
+	active_slot = slots.first_available_slot()
 	var manager_name := _manager_name_input.text.strip_edges()
 	if manager_name == "": manager_name = "Manager"
 	var selected := clampi(_club_selector.selected, 0, maxi(0, _wizard_clubs.size()-1))
@@ -149,7 +151,7 @@ func _show_career() -> void:
 	_add_heading(root, "%s — %s" % [String(club.get("name", "Club")), String(snap.date)], 26)
 	var buttons := HBoxContainer.new(); root.add_child(buttons)
 	_add_button(buttons, "Continue", _advance_day)
-	_add_button(buttons, "Save Slot %d" % active_slot, _save)
+	_add_button(buttons, "Save Slot %d" % active_slot if active_slot > 0 else "Save Career", _save)
 	_add_button(buttons, "Save As", _show_save_as)
 	_add_button(buttons, "Settings", _show_settings)
 	_add_button(buttons, "Main Menu", _show_main_menu)
@@ -181,8 +183,8 @@ func _show_save_as() -> void:
 	_add_button(root, "Back", _show_career)
 
 func _save_to_slot(slot: int) -> void:
-	active_slot = slot
 	var err := slots.save_slot(slot, session.world, session.history, session.manager)
+	if err == OK: active_slot = slot
 	_show_career()
 	if status != null: status.text = "Saved to slot %d" % slot if err == OK else "Save failed (%d)" % err
 
@@ -215,11 +217,17 @@ func _advance_day() -> void:
 	var result: Dictionary = DayRunnerClass.new().advance_day(session.world, session.history, session.seed + int(session.world.get("day_index",0))*17 + int(session.world.get("season_year",2026))*101)
 	if result.has("error"):
 		status.text = "Unable to advance day"; return
-	if bool(settings.get("autosave", true)) and int(session.world.get("day_index", 0)) % int(settings.get("autosave_interval_days", 7)) == 0:
-		slots.save_slot(active_slot, session.world, session.history, session.manager)
+	var save_error: Error = OK
+	if active_slot > 0 and bool(settings.get("autosave", true)) and int(session.world.get("day_index", 0)) % maxi(1, int(settings.get("autosave_interval_days", 7))) == 0:
+		save_error = slots.save_slot(active_slot, session.world, session.history, session.manager)
 	_show_career()
+	if save_error != OK: status.text = "Autosave failed (%d). Please save your career manually." % save_error
+	elif active_slot == 0: status.text = "All save slots are occupied. Use Save As to choose a slot."
 
 func _save() -> void:
+	if active_slot == 0:
+		_show_save_as()
+		return
 	var err := slots.save_slot(active_slot, session.world, session.history, session.manager)
 	status.text = "Saved to slot %d" % active_slot if err == OK else "Save failed (%d)" % err
 

@@ -58,7 +58,7 @@ func player_report(world: Dictionary, player: Dictionary, observer_quality: int,
 	ensure_world(world)
 	var country_id := String(player.get("country_id", ""))
 	var country_bonus := float(world.country_knowledge.get(country_id,0.0))*0.25
-	var knowledge: float = clampf(maxf(float(world.scouting_knowledge.get(String(player.id),0.0)),observer_quality/100.0*0.5,country_bonus),0.0,1.0)
+	var knowledge: float = clampf(maxf(maxf(float(world.scouting_knowledge.get(String(player.id),0.0)),observer_quality/100.0*0.5),country_bonus),0.0,1.0)
 	var attrs: Dictionary = player.get("attributes", {})
 	var visible := {}
 	for name in attrs.keys():

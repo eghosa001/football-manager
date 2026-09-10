@@ -64,7 +64,7 @@ func create_tactic(formation: String, mentality: String = "balanced", tempo: Str
 	var roles := {}; var duties := {}; var role_counts := {}
 	for position in FORMATIONS[formation]:
 		role_counts[position] = int(role_counts.get(position, 0)) + 1
-		var key := position if int(role_counts[position]) == 1 else "%s_%d" % [position, int(role_counts[position])]
+		var key: String = position if int(role_counts[position]) == 1 else "%s_%d" % [position, int(role_counts[position])]
 		roles[key] = String(ROLES.get(position,["support"])[0])
 		duties[key] = _default_duty(position)
 	var tactic := {"formation":formation,"mentality":mentality,"tempo":tempo,"pressing":pressing,"roles":roles,"duties":duties,"familiarity":50.0,"instructions":default_instructions(mentality,tempo,pressing)}

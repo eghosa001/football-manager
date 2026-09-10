@@ -16,6 +16,7 @@ func _init() -> void:
 	assert(session.world.get("countries", []).size() == 8)
 	assert(session.world.get("competitions", []).size() > 8)
 	assert(session.world.get("registrations", {}).size() > 0)
+	print("[TEST] RC2 world initialized")
 	var command = CommandClass.new()
 	var club_id := String(session.managed_club_id)
 
@@ -77,6 +78,7 @@ func _init() -> void:
 		if String(entry.get("category", "")) in ["transfer_fee","signing_bonus","agent_fee"]: transfer_entries += 1
 	assert(transfer_entries >= 3)
 
+	print("[TEST] RC2 commands and transfer passed")
 	for day in range(8):
 		var result: Dictionary = DayRunnerClass.new().advance_day(session.world, session.history, 99000 + day)
 		assert(not result.has("error"))
@@ -110,6 +112,7 @@ func _init() -> void:
 	assert(session.world.has("last_managed_match"))
 	assert(String(session.world.last_managed_match.result.spatial.model) == "causal_2d_v2")
 
+	print("[TEST] RC2 matchday passed")
 	var path := "user://rc2_integration.fdn"
 	assert(session.save_career(path) == OK)
 	var loaded = CareerSessionClass.new()

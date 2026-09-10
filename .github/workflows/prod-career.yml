@@ -10,6 +10,10 @@ on:
   push:
     branches: ['prod/playable-career-ux']
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

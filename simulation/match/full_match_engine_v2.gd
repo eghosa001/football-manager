@@ -144,7 +144,7 @@ func _accumulate_event(stats: Dictionary, goals: Dictionary, event: Dictionary) 
 func _best_set_piece_taker(team: Array) -> Dictionary:
 	var best: Dictionary = team[0]
 	for player in team:
-		var a := player.get("attributes", {}); var b := best.get("attributes", {})
+		var a: Dictionary = player.get("attributes", {}); var b: Dictionary = best.get("attributes", {})
 		var score := int(a.get("corners",a.get("free_kicks",player.get("current_ability",50))))
 		var best_score := int(b.get("corners",b.get("free_kicks",best.get("current_ability",50))))
 		if score > best_score: best = player

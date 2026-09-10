@@ -120,7 +120,7 @@ func _draw_team(positions: Dictionary, color: Color, pitch: Rect2) -> void:
 func _to_screen(position: Dictionary, pitch: Rect2) -> Vector2:
 	var x := float(position.get("x", 0.0))
 	var y := float(position.get("y", 0.0))
-	var spatial := match_result.get("spatial", {})
+	var spatial: Dictionary = match_result.get("spatial", {})
 	var length := float(spatial.get("pitch_length", 1.0))
 	var width := float(spatial.get("pitch_width", 1.0))
 	# Phase 8 legacy frames are normalized; Match Engine v2 frames use metres.

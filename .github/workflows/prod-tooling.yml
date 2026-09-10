@@ -9,6 +9,10 @@ on:
   push:
     branches: ['prod/dev-release-tooling']
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

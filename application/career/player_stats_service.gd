@@ -7,18 +7,22 @@ func record_match(world: Dictionary, fixture: Dictionary, result: Dictionary) ->
 	world["player_match_stats"] = world.get("player_match_stats", [])
 	world["player_history"] = world.get("player_history", [])
 	var lineups: Dictionary = result.get("lineups", {})
+	var player_index: Dictionary = {}
+	for player in world.get("players", []): player_index[String(player.get("id", ""))] = player
+	var match_rows: Dictionary = {}
 	for side in ["home", "away"]:
 		for player_id in lineups.get(side, []):
-			var player := _player(world.get("players", []), String(player_id))
+			var player: Dictionary = player_index.get(String(player_id), {})
 			if player.is_empty(): continue
 			player["season_appearances"] = int(player.get("season_appearances", 0)) + 1
 			player["career_appearances"] = int(player.get("career_appearances", 0)) + 1
 			var row := {"player_id":String(player_id),"fixture_id":String(fixture.get("id", "")),"competition_id":String(fixture.get("competition_id", "")),"season_year":int(world.get("season_year", 2026)),"side":side,"goals":0,"shots":0,"xg":0.0,"passes":0,"passes_completed":0,"dribbles":0,"dribbles_completed":0}
 			world.player_match_stats.append(row)
+			match_rows[String(player_id)] = row
 	for event in result.get("events", []):
 		var player_id := String(event.get("player_id", ""))
 		if player_id == "": continue
-		var row := _match_row(world.player_match_stats, String(fixture.get("id", "")), player_id)
+		var row: Dictionary = match_rows.get(player_id, {})
 		if row.is_empty(): continue
 		match String(event.get("type", "")):
 			"shot":
@@ -31,7 +35,7 @@ func record_match(world: Dictionary, fixture: Dictionary, result: Dictionary) ->
 			"dribble":
 				row.dribbles = int(row.dribbles) + 1
 				if bool(event.get("success", false)): row.dribbles_completed = int(row.dribbles_completed) + 1
-	_update_season_history(world, fixture, result)
+	_update_season_history(world, fixture, result, match_rows)
 
 func season_totals(world: Dictionary, player_id: String, season_year: int = -1) -> Dictionary:
 	var target_year := int(world.get("season_year", 2026)) if season_year < 0 else season_year
@@ -44,7 +48,7 @@ func season_totals(world: Dictionary, player_id: String, season_year: int = -1) 
 	total.xg = snappedf(float(total.xg), 0.01)
 	return total
 
-func _update_season_history(world: Dictionary, fixture: Dictionary, result: Dictionary) -> void:
+func _update_season_history(world: Dictionary, fixture: Dictionary, result: Dictionary, match_rows: Dictionary) -> void:
 	var year := int(world.get("season_year", 2026))
 	for side in ["home", "away"]:
 		var club_id := String(fixture.get("home_club_id", "")) if side == "home" else String(fixture.get("away_club_id", ""))
@@ -54,7 +58,7 @@ func _update_season_history(world: Dictionary, fixture: Dictionary, result: Dict
 				row = {"player_id":String(player_id),"season_year":year,"club_id":club_id,"competition_id":String(fixture.get("competition_id", "")),"appearances":0,"goals":0,"xg":0.0}
 				world.player_history.append(row)
 			row.appearances = int(row.appearances) + 1
-			var match_row := _match_row(world.player_match_stats, String(fixture.get("id", "")), String(player_id))
+			var match_row: Dictionary = match_rows.get(String(player_id), {})
 			if not match_row.is_empty():
 				row.goals = int(row.goals) + int(match_row.goals)
 				row.xg = snappedf(float(row.xg) + float(match_row.xg), 0.01)

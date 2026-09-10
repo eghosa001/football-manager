@@ -28,10 +28,16 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 	if _load_path(temp_path).is_empty():
 		DirAccess.remove_absolute(temp_global)
 		return ERR_FILE_CORRUPT
-	if FileAccess.file_exists(backup_path):
-		DirAccess.remove_absolute(backup_global)
 	if FileAccess.file_exists(path):
-		var backup_error := DirAccess.rename_absolute(save_global, backup_global)
+		var backup_error: Error = OK
+		if _load_path(path).is_empty():
+			# A recovered career must retain its good backup, not replace it with corruption.
+			backup_error = DirAccess.remove_absolute(save_global)
+		else:
+			if FileAccess.file_exists(backup_path):
+				backup_error = DirAccess.remove_absolute(backup_global)
+			if backup_error == OK:
+				backup_error = DirAccess.rename_absolute(save_global, backup_global)
 		if backup_error != OK:
 			DirAccess.remove_absolute(temp_global)
 			return backup_error
@@ -73,6 +79,11 @@ func _load_path(path: String) -> Dictionary:
 	return _migrate(parsed)
 
 func _migrate(payload: Dictionary) -> Dictionary:
+	# Validate before typed assignments so damaged files fall back to the backup.
+	if not payload.get("world") is Dictionary or not payload.get("history", []) is Array:
+		return {}
+	if not payload.get("schema_version", 0) is int:
+		return {}
 	var version: int = int(payload.get("schema_version", 0))
 	if version == 0:
 		payload["history"] = payload.get("history", [])

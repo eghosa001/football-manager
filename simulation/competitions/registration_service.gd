@@ -20,8 +20,10 @@ func eligibility(player: Dictionary, competition: Dictionary, season_year: int) 
 		reasons.append("too_young")
 	return {"eligible":reasons.is_empty(),"reasons":reasons,"homegrown":homegrown,"foreign":home_country != "" and nationality != "" and nationality != home_country,"u21":age <= 21}
 
-func register_squad(world: Dictionary, club_id: String, competition: Dictionary, player_ids: Array, season_year: int) -> Dictionary:
+func register_squad(world: Dictionary, club_id: String, competition: Dictionary, player_ids: Array, season_year: int, player_index: Dictionary = {}) -> Dictionary:
 	ensure_world(world)
+	if player_index.is_empty():
+		for player in world.get("players", []): player_index[String(player.get("id", ""))] = player
 	var rules: Dictionary = competition.get("registration_rules", {})
 	var max_squad := int(rules.get("max_squad", 25))
 	var min_homegrown := int(rules.get("min_homegrown", 0))
@@ -33,7 +35,10 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 	var foreign_count := 0
 	var goalkeeper_count := 0
 	for player_id in player_ids:
-		var player := _player(world, String(player_id))
+		if String(player_id) in accepted:
+			rejected.append({"player_id":String(player_id),"reason":"duplicate"})
+			continue
+		var player: Dictionary = player_index.get(String(player_id), {})
 		if player.is_empty() or String(player.get("club_id", "")) != club_id:
 			rejected.append({"player_id":String(player_id),"reason":"not_at_club"})
 			continue
@@ -58,14 +63,19 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 
 func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
 	ensure_world(world)
+	var player_index: Dictionary = {}
+	var squads: Dictionary = {}
+	for player in world.get("players", []):
+		player_index[String(player.get("id", ""))] = player
+		if bool(player.get("retired", false)): continue
+		var club_id := String(player.get("club_id", ""))
+		if not squads.has(club_id): squads[club_id] = []
+		squads[club_id].append(player)
 	var registered := 0
 	var invalid := 0
 	for competition in world.get("competitions", []):
 		for club_id in competition.get("club_ids", []):
-			var candidates: Array = []
-			for player in world.get("players", []):
-				if String(player.get("club_id", "")) == String(club_id) and not bool(player.get("retired", false)):
-					candidates.append(player)
+			var candidates: Array = squads.get(String(club_id), []).duplicate()
 			candidates.sort_custom(func(a: Dictionary, b: Dictionary):
 				var a_gk := 1 if String(a.get("position", "")) == "GK" else 0
 				var b_gk := 1 if String(b.get("position", "")) == "GK" else 0
@@ -76,7 +86,7 @@ func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
 			)
 			var ids: Array = []
 			for player in candidates: ids.append(String(player.get("id", "")))
-			var result: Dictionary = register_squad(world, String(club_id), competition, ids, season_year)
+			var result: Dictionary = register_squad(world, String(club_id), competition, ids, season_year, player_index)
 			registered += 1
 			if not bool(result.get("valid", false)): invalid += 1
 	return {"registered":registered,"invalid":invalid}
@@ -88,7 +98,7 @@ func registered_players(world: Dictionary, club_id: String, competition_id: Stri
 	var ids: Array = world.registrations[key].get("player_ids", [])
 	var players: Array = []
 	for player in world.get("players", []):
-		if String(player.get("id", "")) in ids: players.append(player)
+		if String(player.get("id", "")) in ids and String(player.get("club_id", "")) == club_id and not bool(player.get("retired", false)): players.append(player)
 	return players
 
 func is_registered(world: Dictionary, club_id: String, competition_id: String, season_year: int, player_id: String) -> bool:
