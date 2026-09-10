@@ -7,10 +7,17 @@ const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const CareerQueryClass = preload("res://application/career/career_query.gd")
 const CareerViewsClass = preload("res://game/career/career_views.gd")
 const WorldGeneratorClass = preload("res://simulation/world/world_generator.gd")
+const SettingsStoreClass = preload("res://application/settings/settings_store.gd")
+const LocalizationServiceClass = preload("res://game/localization/localization_service.gd")
+
+const SETTINGS_PATH := "user://settings.json"
 
 var session = CareerSessionClass.new()
 var slots = SaveSlotsClass.new()
 var query = CareerQueryClass.new()
+var settings_store = SettingsStoreClass.new()
+var localization = LocalizationServiceClass.new()
+var settings: Dictionary = {}
 var active_slot := 1
 var content: VBoxContainer
 var status: Label
@@ -19,19 +26,21 @@ var _club_selector: OptionButton
 var _wizard_clubs: Array = []
 
 func _ready() -> void:
+	settings = settings_store.load(SETTINGS_PATH)
+	_apply_runtime_settings()
 	_show_main_menu()
 
 func _clear() -> VBoxContainer:
 	for child in get_children(): child.queue_free()
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_top", 22)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_bottom", 22)
+	margin.add_theme_constant_override("margin_left", int(28 * float(settings.get("ui_scale", 1.0))))
+	margin.add_theme_constant_override("margin_top", int(22 * float(settings.get("ui_scale", 1.0))))
+	margin.add_theme_constant_override("margin_right", int(28 * float(settings.get("ui_scale", 1.0))))
+	margin.add_theme_constant_override("margin_bottom", int(22 * float(settings.get("ui_scale", 1.0))))
 	add_child(margin)
 	content = VBoxContainer.new()
-	content.add_theme_constant_override("separation", 10)
+	content.add_theme_constant_override("separation", int(10 * float(settings.get("ui_scale", 1.0))))
 	margin.add_child(content)
 	return content
 
@@ -41,7 +50,41 @@ func _show_main_menu() -> void:
 	var subtitle := Label.new(); subtitle.text = "Build a dynasty. Shape a football world."; root.add_child(subtitle)
 	_add_button(root, "New Career", _show_new_career)
 	_add_button(root, "Load Career", _show_load_menu)
+	_add_button(root, "Settings", _show_settings)
 	_add_button(root, "Quit", func(): get_tree().quit())
+
+func _show_settings() -> void:
+	var root := _clear()
+	_add_heading(root, "Settings", 28)
+	var language := OptionButton.new()
+	for code in LocalizationServiceClass.SUPPORTED:
+		language.add_item(String(code).to_upper())
+	language.select(maxi(0, LocalizationServiceClass.SUPPORTED.find(String(settings.get("language", "en")))))
+	root.add_child(_labeled("Language", language))
+	var ui_scale := HSlider.new(); ui_scale.min_value = 0.75; ui_scale.max_value = 2.0; ui_scale.step = 0.05; ui_scale.value = float(settings.get("ui_scale",1.0)); root.add_child(_labeled("UI scale", ui_scale))
+	var font_scale := HSlider.new(); font_scale.min_value = 0.8; font_scale.max_value = 2.0; font_scale.step = 0.05; font_scale.value = float(settings.get("font_scale",1.0)); root.add_child(_labeled("Font scale", font_scale))
+	var contrast := CheckBox.new(); contrast.text = "High contrast"; contrast.button_pressed = bool(settings.get("high_contrast",false)); root.add_child(contrast)
+	var motion := CheckBox.new(); motion.text = "Reduce motion"; motion.button_pressed = bool(settings.get("reduce_motion",false)); root.add_child(motion)
+	var reader := CheckBox.new(); reader.text = "Screen-reader labels"; reader.button_pressed = bool(settings.get("screen_reader_labels",true)); root.add_child(reader)
+	var autosave := CheckBox.new(); autosave.text = "Autosave"; autosave.button_pressed = bool(settings.get("autosave",true)); root.add_child(autosave)
+	var interval := SpinBox.new(); interval.min_value = 1; interval.max_value = 30; interval.value = int(settings.get("autosave_interval_days",7)); root.add_child(_labeled("Autosave interval (days)", interval))
+	var row := HBoxContainer.new(); root.add_child(row)
+	_add_button(row, "Apply", func():
+		settings.language = LocalizationServiceClass.SUPPORTED[language.selected]
+		settings.ui_scale = ui_scale.value
+		settings.font_scale = font_scale.value
+		settings.high_contrast = contrast.button_pressed
+		settings.reduce_motion = motion.button_pressed
+		settings.screen_reader_labels = reader.button_pressed
+		settings.autosave = autosave.button_pressed
+		settings.autosave_interval_days = int(interval.value)
+		settings = settings_store.sanitize(settings)
+		settings_store.save(SETTINGS_PATH, settings)
+		_apply_runtime_settings()
+		_show_main_menu()
+	)
+	_add_button(row, "Reset", func(): settings = settings_store.defaults(); settings_store.save(SETTINGS_PATH, settings); _apply_runtime_settings(); _show_settings())
+	_add_button(row, "Back", _show_main_menu)
 
 func _show_new_career() -> void:
 	var root := _clear()
@@ -102,6 +145,7 @@ func _show_career() -> void:
 	_add_button(buttons, "Continue", _advance_day)
 	_add_button(buttons, "Save Slot %d" % active_slot, _save)
 	_add_button(buttons, "Save As", _show_save_as)
+	_add_button(buttons, "Settings", _show_settings)
 	_add_button(buttons, "Main Menu", _show_main_menu)
 	status = Label.new(); status.text = "Manager: %s  •  Season %d  •  Inbox %d" % [String(session.manager.get("name", "Manager")), int(snap.season_year), int(dashboard.get("unread_messages",0))]; root.add_child(status)
 	var tabs := TabContainer.new(); tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL; root.add_child(tabs)
@@ -165,14 +209,31 @@ func _advance_day() -> void:
 	var result: Dictionary = DayRunnerClass.new().advance_day(session.world, session.history, session.seed + int(session.world.get("day_index",0))*17 + int(session.world.get("season_year",2026))*101)
 	if result.has("error"):
 		status.text = "Unable to advance day"; return
+	if bool(settings.get("autosave", true)) and int(session.world.get("day_index", 0)) % int(settings.get("autosave_interval_days", 7)) == 0:
+		slots.save_slot(active_slot, session.world, session.history, session.manager)
 	_show_career()
 
 func _save() -> void:
 	var err := slots.save_slot(active_slot, session.world, session.history, session.manager)
 	status.text = "Saved to slot %d" % active_slot if err == OK else "Save failed (%d)" % err
 
+func _apply_runtime_settings() -> void:
+	var scale := float(settings.get("ui_scale", 1.0))
+	self.scale = Vector2.ONE * scale
+	if bool(settings.get("high_contrast", false)):
+		modulate = Color(1.0, 1.0, 1.0, 1.0)
+	else:
+		modulate = Color.WHITE
+
+func _labeled(text: String, control: Control) -> Control:
+	var row := HBoxContainer.new()
+	var label := Label.new(); label.text = text; label.custom_minimum_size.x = 220; row.add_child(label)
+	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(control)
+	return row
+
 func _add_heading(parent: Control, text: String, size: int) -> void:
-	var label := Label.new(); label.text = text; label.add_theme_font_size_override("font_size", size); parent.add_child(label)
+	var label := Label.new(); label.text = text; label.add_theme_font_size_override("font_size", int(size * float(settings.get("font_scale", 1.0)))); parent.add_child(label)
 
 func _add_button(parent: Control, text: String, callback: Callable) -> void:
 	var button := Button.new(); button.text = text; button.pressed.connect(callback); parent.add_child(button)
