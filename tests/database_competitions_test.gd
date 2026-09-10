@@ -40,12 +40,17 @@ func _init() -> void:
 	print("[TEST] knockout")
 	var clubs := []
 	for i in range(8): clubs.append("club-%d" % i)
-	var bracket: Dictionary = KnockoutClass.new().create_bracket(clubs, 123)
+	var knockout = KnockoutClass.new()
+	var bracket: Dictionary = knockout.create_bracket(clubs, 123)
 	if not _must(bracket.matches.size() == 4, "8-team bracket should start with four matches"): return
+	var empty_bracket: Dictionary = knockout.create_bracket([], 123)
+	if not _must(bool(empty_bracket.complete) and empty_bracket.matches.is_empty() and String(empty_bracket.winner) == "", "empty knockout bracket should complete safely without a winner"): return
+	var single_bracket: Dictionary = knockout.create_bracket(["only-club"], 123)
+	if not _must(bool(single_bracket.complete) and single_bracket.matches.is_empty() and String(single_bracket.winner) == "only-club", "single-team knockout should complete with that team as winner"): return
 	var results := []
 	for match in bracket.matches:
 		results.append({"home_goals":1,"away_goals":0})
-	bracket = KnockoutClass.new().advance_round(bracket, results)
+	bracket = knockout.advance_round(bracket, results)
 	if not _must(bracket.entrants.size() == 4, "knockout should halve entrants"): return
 
 	print("[TEST] group scheduling")
