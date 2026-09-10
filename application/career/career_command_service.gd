@@ -9,6 +9,7 @@ const AgentServiceClass = preload("res://simulation/transfers/agent_service.gd")
 const LedgerClass = preload("res://simulation/finance/ledger.gd")
 const TacticsManagerClass = preload("res://simulation/tactics/tactics_manager.gd")
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
+const PlayerPromisesClass = preload("res://simulation/players/player_promises.gd")
 
 func set_training(world: Dictionary, club_id: String, sessions: Array, intensity: float) -> Error:
 	var club := _club(world, club_id)
@@ -29,6 +30,21 @@ func set_tactical_instruction(world: Dictionary, club_id: String, phase: String,
 	if club.is_empty(): return ERR_DOES_NOT_EXIST
 	if not club.has("tactic"): club["tactic"] = TacticsManagerClass.new().create_tactic("4-3-3")
 	return TacticsManagerClass.new().set_instruction(club.tactic, phase, key, value)
+
+func make_player_promise(world: Dictionary, club_id: String, player_id: String, promise_type: String, target_value: int, days: int) -> Dictionary:
+	var player := _player(world, player_id)
+	if player.is_empty() or String(player.get("club_id", "")) != club_id:
+		return {"error":ERR_INVALID_PARAMETER}
+	var promise := PlayerPromisesClass.new().make_promise(world, player_id, promise_type, target_value, int(world.get("day_index", 0)) + maxi(1, days))
+	InboxServiceClass.new().add_message(world, "dressing_room", "Promise made to %s" % _player_name(player), "You promised %s a %s target." % [_player_name(player), promise_type])
+	return promise
+
+func hold_team_meeting(world: Dictionary, club_id: String, tone: String) -> Dictionary:
+	var club := _club(world, club_id)
+	if club.is_empty(): return {"error":ERR_DOES_NOT_EXIST}
+	var room := PlayerPromisesClass.new().hold_team_meeting(world, club_id, tone)
+	InboxServiceClass.new().add_message(world, "dressing_room", "Team meeting completed", "The %s team meeting changed dressing-room atmosphere to %.1f." % [tone, float(room.get("atmosphere", 0.0))])
+	return room
 
 func assign_scout(world: Dictionary, club_id: String, player_id: String) -> Dictionary:
 	var scout := _best_staff(world, club_id, "scout")
