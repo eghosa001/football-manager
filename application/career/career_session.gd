@@ -8,6 +8,7 @@ const PlayerLifecycleClass = preload("res://simulation/players/player_lifecycle.
 const TacticsManagerClass = preload("res://simulation/tactics/tactics_manager.gd")
 const ClubEconomyClass = preload("res://simulation/finance/club_economy.gd")
 const StaffContractsClass = preload("res://simulation/staff/staff_contracts.gd")
+const InternationalFootballClass = preload("res://simulation/competitions/international_football.gd")
 
 var world: Dictionary = {}
 var history: Array = []
@@ -73,6 +74,7 @@ func _initialize_world() -> void:
 	TacticsManagerClass.new().ensure_world(world, seed)
 	ClubEconomyClass.new().ensure_world(world)
 	StaffContractsClass.new().ensure_world(world)
+	InternationalFootballClass.new().ensure_world(world)
 	world["seed"] = seed
 
 func _initialize_loaded_world() -> void:
@@ -81,6 +83,7 @@ func _initialize_loaded_world() -> void:
 	TacticsManagerClass.new().ensure_world(world, seed)
 	ClubEconomyClass.new().ensure_world(world)
 	StaffContractsClass.new().ensure_world(world)
+	InternationalFootballClass.new().ensure_world(world)
 
 func _club_exists(club_id: String) -> bool:
 	for club in world.get("clubs", []):
