@@ -10,6 +10,7 @@ const LivingWorldClass = preload("res://simulation/world/living_world.gd")
 const StaffMarketClass = preload("res://simulation/staff/staff_market.gd")
 const StaffContractsClass = preload("res://simulation/staff/staff_contracts.gd")
 const InternationalSeasonClass = preload("res://application/season/international_season.gd")
+const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
 
 var _season_runner = SeasonRunnerClass.new()
 var _lifecycle = LifecycleClass.new()
@@ -20,6 +21,7 @@ var _living_world = LivingWorldClass.new()
 var _staff_market = StaffMarketClass.new()
 var _staff_contracts = StaffContractsClass.new()
 var _international = InternationalSeasonClass.new()
+var _registration = RegistrationServiceClass.new()
 
 func complete_year(world: Dictionary, history: Array, season_seed: int, promotion_places: int = 3) -> Dictionary:
 	_tactics.ensure_world(world, season_seed + 600_001)
@@ -37,6 +39,7 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	var contract_result: Dictionary = _market.process_contracts(world, next_year, season_seed + 700_003)
 	var staff_contract_result: Dictionary = _staff_contracts.process_expiring(world, next_year)
 	var squad_result: Dictionary = _market.rebalance_ai_squads(world, next_year, season_seed + 700_007, 20, 30)
+	var registration_result: Dictionary = _registration.auto_register_world(world, next_year)
 	for club in world.clubs:
 		var competition: Dictionary = _competition_for_club(world.competitions, String(club.id))
 		var opponent_id := ""
@@ -48,7 +51,7 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	world["international_history"] = world.get("international_history", [])
 	world.international_history.append({"year":completed_year,"champion_country_id":String(international_result.get("champion", "")),"qualified":international_result.get("qualified", []).duplicate()})
 	var living_result: Dictionary = _living_world.advance_year(world, season_result.records, season_seed + 900_001)
-	return {"season":season_result,"economy":economy_result,"lifecycle":lifecycle_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"squads":squad_result,"living_world":living_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
+	return {"season":season_result,"economy":economy_result,"lifecycle":lifecycle_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"squads":squad_result,"registrations":registration_result,"living_world":living_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
 
 func _process_ai_manager_market(world: Dictionary, records: Array, year: int) -> Dictionary:
 	var human_club_id := String(world.get("human_manager", {}).get("club_id", ""))
