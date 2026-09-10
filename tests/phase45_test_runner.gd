@@ -3,6 +3,7 @@ extends SceneTree
 const WorldGeneratorClass = preload("res://simulation/world/world_generator.gd")
 const LifecycleClass = preload("res://simulation/players/player_lifecycle.gd")
 const MarketClass = preload("res://simulation/transfers/transfer_market.gd")
+const CareerCycleClass = preload("res://application/career/career_cycle.gd")
 
 var failures := 0
 var checks := 0
@@ -11,6 +12,8 @@ func _init() -> void:
 	print("[TEST] Football Dynasty Phase 4/5")
 	_test_attributes_training_and_lifecycle()
 	_test_transfer_ledger_and_loans()
+	_test_career_cycle_integration()
+	_test_fifty_year_population_health()
 	_test_twenty_season_squad_soak()
 	if failures == 0:
 		print("[TEST] PHASE 4/5 PASS — %d checks" % checks)
@@ -81,6 +84,52 @@ func _test_transfer_ledger_and_loans() -> void:
 	_expect(String(loan_player.get("loan_parent_club_id", "")) == parent_id, "Loan must preserve parent club")
 	_expect(market.return_expired_loans(world, 2027) == 1, "Expired loan must return exactly once")
 	_expect(String(loan_player.club_id) == parent_id, "Loan player must return to parent club")
+
+func _test_career_cycle_integration() -> void:
+	var generator = WorldGeneratorClass.new()
+	var cycle = CareerCycleClass.new()
+	var world: Dictionary = generator.create_world(57501, 1, 4, 25)
+	var history: Array = []
+	var result: Dictionary = cycle.complete_year(world, history, 57501)
+	_expect(int(result.season_year) == 2027, "Career cycle must roll into next season")
+	_expect(history.size() == 1, "Career cycle must archive completed competition")
+	_expect(result.lifecycle.youth.size() == 8, "Career cycle must run youth intake")
+	_expect(world.players.size() >= 108, "Career cycle must retain and extend player population")
+	for club in world.clubs:
+		_expect(MarketClass.new().squad_is_viable(world, String(club.id), 18), "Career cycle must leave viable squads")
+
+func _test_fifty_year_population_health() -> void:
+	var generator = WorldGeneratorClass.new()
+	var lifecycle = LifecycleClass.new()
+	var market = MarketClass.new()
+	var world: Dictionary = generator.create_world(61001, 1, 4, 25)
+	for year_offset in range(50):
+		var year: int = 2026 + year_offset
+		world.season_year = year
+		lifecycle.advance_year(world, 61001 + year_offset * 173, 2)
+		market.process_contracts(world, year, 61001 + year_offset * 179)
+		market.rebalance_ai_squads(world, year, 61001 + year_offset * 181, 18, 30)
+	var active_count := 0
+	var total_ca := 0
+	var ids := {}
+	for player in world.players:
+		_expect(not ids.has(String(player.id)), "50-year population must preserve unique player IDs")
+		ids[String(player.id)] = true
+		if bool(player.get("retired", false)):
+			continue
+		active_count += 1
+		total_ca += int(player.current_ability)
+		_expect(int(player.age) >= 16 and int(player.age) <= 39, "Active player age must stay in viable bounds")
+		_expect(int(player.current_ability) >= 1 and int(player.current_ability) <= 100, "CA must remain bounded over 50 years")
+		_expect(int(player.potential) >= int(player.current_ability) or int(player.age) > 28, "Young active players cannot develop beyond potential")
+		for value in player.attributes.values():
+			_expect(int(value) >= 1 and int(value) <= 100, "Attributes must remain bounded over 50 years")
+	_expect(active_count >= 72 and active_count <= 220, "50-year active population must remain healthy and bounded")
+	var average_ca: float = float(total_ca) / maxf(float(active_count), 1.0)
+	_expect(average_ca >= 25.0 and average_ca <= 80.0, "50-year average ability must remain plausible")
+	_expect(world.staff.size() > 20, "Retired experienced players must feed staff population")
+	for club in world.clubs:
+		_expect(market.squad_is_viable(world, String(club.id), 18), "50-year clubs must remain positionally viable")
 
 func _test_twenty_season_squad_soak() -> void:
 	var generator = WorldGeneratorClass.new()
