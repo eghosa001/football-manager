@@ -23,6 +23,17 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 120
     steps:
+      - name: Checkout current CI harness
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          clean: false
+
+      - name: Preserve self-hosted test helper
+        shell: powershell
+        run: Copy-Item .\tools\test-headless.ps1 (Join-Path $env:RUNNER_TEMP 'test-headless.ps1') -Force
+
       - name: Checkout selected ref
         uses: actions/checkout@v4
         with:
@@ -38,11 +49,12 @@ jobs:
 
       - name: Import project
         shell: powershell
-        run: .\tools\test-headless.ps1 -Script import
+        run: '& (Join-Path $env:RUNNER_TEMP ''test-headless.ps1'') -Script import'
 
       - name: Run full phase test suite
         shell: powershell
         run: |
+          $helper = Join-Path $env:RUNNER_TEMP 'test-headless.ps1'
           $suites = @(
             'tests/test_runner.gd',
             'tests/phase3_test_runner.gd',
@@ -59,7 +71,7 @@ jobs:
               continue
             }
             try {
-              .\tools\test-headless.ps1 -Script $suite
+              & $helper -Script $suite
             } catch {
               $failed += $suite
               Write-Host "FAILED: $suite"
@@ -75,7 +87,7 @@ jobs:
       - name: Run career performance test
         if: ${{ hashFiles('tests/career_performance_test.gd') != '' }}
         shell: powershell
-        run: .\tools\test-headless.ps1 -Script tests/career_performance_test.gd
+        run: '& (Join-Path $env:RUNNER_TEMP ''test-headless.ps1'') -Script tests/career_performance_test.gd'
 
       - name: Verify tests did not modify tracked source
         shell: powershell
