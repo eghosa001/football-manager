@@ -1,0 +1,59 @@
+name: Release Candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Godot 4.7.2 with export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Import and run release tests
+        run: |
+          godot --headless --editor --path . --quit
+          godot --headless --path . --script res://tests/phase1011_test_runner.gd
+
+      - name: Build Linux release
+        run: |
+          mkdir -p build/linux
+          godot --headless --path . --export-release "Linux/X11" build/linux/FootballDynasty.x86_64
+          test -s build/linux/FootballDynasty.x86_64
+          chmod +x build/linux/FootballDynasty.x86_64
+
+      - name: Smoke-test Linux release offline
+        run: timeout 30s build/linux/FootballDynasty.x86_64 --headless --quit-after 1
+
+      - name: Build Windows release
+        run: |
+          mkdir -p build/windows
+          godot --headless --path . --export-release "Windows Desktop" build/windows/FootballDynasty.exe
+          test -s build/windows/FootballDynasty.exe
+
+      - name: Create integrity hashes
+        run: |
+          sha256sum build/linux/FootballDynasty.x86_64 > build/linux/SHA256SUMS.txt
+          sha256sum build/windows/FootballDynasty.exe > build/windows/SHA256SUMS.txt
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: FootballDynasty-linux-x86_64
+          path: build/linux/
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: FootballDynasty-windows-x86_64
+          path: build/windows/
