@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "countries": [
+    {"id":"nga","name":"Nigeria","code":"NGA","youth_rating":72},
+    {"id":"eng","name":"England","code":"ENG","youth_rating":86},
+    {"id":"esp","name":"Spain","code":"ESP","youth_rating":88},
+    {"id":"bra","name":"Brazil","code":"BRA","youth_rating":92},
+    {"id":"gha","name":"Ghana","code":"GHA","youth_rating":70},
+    {"id":"zaf","name":"South Africa","code":"RSA","youth_rating":75},
+    {"id":"deu","name":"Germany","code":"GER","youth_rating":87},
+    {"id":"fra","name":"France","code":"FRA","youth_rating":87}
+  ],
+  "competition_templates": [
+    {"id":"league-20","type":"league","teams":20,"rounds":2,"points_win":3,"points_draw":1},
+    {"id":"league-18","type":"league","teams":18,"rounds":2,"points_win":3,"points_draw":1},
+    {"id":"cup-32","type":"knockout","teams":32,"legs":1,"extra_time":true,"penalties":true},
+    {"id":"cup-64","type":"knockout","teams":64,"legs":1,"extra_time":true,"penalties":true}
+  ],
+  "league_systems": [
+    {"country_id":"nga","tiers":[{"name":"National Premier Division","template":"league-20","promotion":0,"relegation":3},{"name":"National League","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"Federation Cup","template":"cup-32"}},
+    {"country_id":"eng","tiers":[{"name":"Premier Division","template":"league-20","promotion":0,"relegation":3},{"name":"Championship Division","template":"league-20","promotion":3,"relegation":3},{"name":"League One","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"National Cup","template":"cup-64"}},
+    {"country_id":"esp","tiers":[{"name":"Primera Division","template":"league-20","promotion":0,"relegation":3},{"name":"Segunda Division","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"Royal Cup","template":"cup-32"}},
+    {"country_id":"bra","tiers":[{"name":"Serie A","template":"league-20","promotion":0,"relegation":4},{"name":"Serie B","template":"league-20","promotion":4,"relegation":4}],"cup":{"name":"National Cup","template":"cup-32"}},
+    {"country_id":"gha","tiers":[{"name":"Premier Division","template":"league-18","promotion":0,"relegation":3},{"name":"National Division","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"FA Cup","template":"cup-32"}},
+    {"country_id":"zaf","tiers":[{"name":"Premier Division","template":"league-18","promotion":0,"relegation":2},{"name":"First Division","template":"league-18","promotion":2,"relegation":2}],"cup":{"name":"National Cup","template":"cup-32"}},
+    {"country_id":"deu","tiers":[{"name":"Bundes Division","template":"league-18","promotion":0,"relegation":3},{"name":"Second Division","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"National Pokal","template":"cup-32"}},
+    {"country_id":"fra","tiers":[{"name":"Ligue One","template":"league-18","promotion":0,"relegation":3},{"name":"Ligue Two","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"National Cup","template":"cup-32"}}
+  ],
+  "registration_defaults": {"max_squad":25,"min_goalkeepers":2,"max_foreign":17,"homegrown_required":8,"transfer_windows":["summer","winter"]}
+}
