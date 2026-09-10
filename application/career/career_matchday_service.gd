@@ -8,15 +8,18 @@ const FullMatchEngineV2Class = preload("res://simulation/match/full_match_engine
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const PlayerStatsServiceClass = preload("res://application/career/player_stats_service.gd")
 const DressingRoomClass = preload("res://simulation/players/dressing_room.gd")
+const KnockoutSeasonClass = preload("res://application/season/knockout_season.gd")
 
 var _abstract = AbstractMatchEngineClass.new()
 var _tactical = TacticalMatchEngineClass.new()
 var _detailed = FullMatchEngineV2Class.new()
 var _stats = PlayerStatsServiceClass.new()
+var _knockout = KnockoutSeasonClass.new()
 
 func play_date(world: Dictionary, date_string: String, managed_club_id: String, season_seed: int) -> Array:
 	SeasonRunnerClass.new().assign_fixture_dates(world)
 	var results: Array = []
+	var touched_competitions := {}
 	for fixture in world.get("fixtures", []):
 		if bool(fixture.get("played", false)) or String(fixture.get("date", "")) != date_string:
 			continue
@@ -40,6 +43,9 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 			_stats.record_match(world, fixture, result)
 			_apply_dressing_room_result(world, home, away, result)
 		results.append({"fixture":fixture,"result":result,"match_seed":match_seed,"detailed":is_managed})
+		touched_competitions[String(fixture.get("competition_id", ""))] = true
+	for competition_id in touched_competitions.keys():
+		_knockout.advance_ready(world, String(competition_id), date_string)
 	world["date"] = date_string
 	return results
 
