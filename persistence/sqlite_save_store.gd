@@ -1,5 +1,5 @@
 class_name SqliteSaveStore
-extends RefCounted
+extends "res://persistence/save_repository.gd"
 
 const CURRENT_SCHEMA_VERSION := 1
 
@@ -19,8 +19,9 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 	var ok := bool(database.call("query", "BEGIN IMMEDIATE;"))
 	ok = ok and bool(database.call("query", "CREATE TABLE IF NOT EXISTS save_state (slot INTEGER PRIMARY KEY CHECK(slot = 1), schema_version INTEGER NOT NULL, payload TEXT NOT NULL);"))
 	ok = ok and bool(database.call("query_with_bindings", "INSERT INTO save_state(slot, schema_version, payload) VALUES(1, ?, ?) ON CONFLICT(slot) DO UPDATE SET schema_version=excluded.schema_version, payload=excluded.payload;", [CURRENT_SCHEMA_VERSION, payload]))
-	ok = ok and bool(database.call("query", "COMMIT;"))
-	if not ok:
+	if ok:
+		ok = bool(database.call("query", "COMMIT;"))
+	else:
 		database.call("query", "ROLLBACK;")
 	database.call("close_db")
 	return OK if ok else FAILED
@@ -33,6 +34,9 @@ func load_save(path: String) -> Dictionary:
 		return {}
 	database.set("path", path)
 	if not bool(database.call("open_db")):
+		return {}
+	if not bool(database.call("query", "CREATE TABLE IF NOT EXISTS save_state (slot INTEGER PRIMARY KEY CHECK(slot = 1), schema_version INTEGER NOT NULL, payload TEXT NOT NULL);")):
+		database.call("close_db")
 		return {}
 	if not bool(database.call("query", "SELECT schema_version, payload FROM save_state WHERE slot = 1;")):
 		database.call("close_db")
@@ -52,5 +56,6 @@ func _migrate(payload: Dictionary) -> Dictionary:
 		payload["history"] = payload.get("history", [])
 		payload["schema_version"] = 1
 		version = 1
-	assert(version == CURRENT_SCHEMA_VERSION, "Unsupported SQLite save schema version: %d" % version)
+	if version != CURRENT_SCHEMA_VERSION:
+		return {}
 	return payload
