@@ -1,0 +1,26 @@
+name: Production Database Competitions
+
+on:
+  pull_request:
+    paths:
+      - 'data/**'
+      - 'simulation/competitions/**'
+      - 'tests/database_competitions_test.gd'
+      - '.github/workflows/prod-database.yml'
+  push:
+    branches: ['prod/database-competitions']
+
+permissions:
+  contents: read
+
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - run: godot --headless --editor --path . --quit
+      - run: godot --headless --path . --script res://tests/database_competitions_test.gd
