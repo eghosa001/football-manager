@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "countries": [
+    {"id":"nga","name":"Nigeria","code":"NGA","youth_rating":72},
+    {"id":"eng","name":"England","code":"ENG","youth_rating":86},
+    {"id":"esp","name":"Spain","code":"ESP","youth_rating":88},
+    {"id":"bra","name":"Brazil","code":"BRA","youth_rating":92}
+  ],
+  "competition_templates": [
+    {"id":"league-20","type":"league","teams":20,"rounds":2,"points_win":3,"points_draw":1},
+    {"id":"cup-32","type":"knockout","teams":32,"legs":1,"extra_time":true,"penalties":true}
+  ]
+}
