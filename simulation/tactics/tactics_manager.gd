@@ -1,6 +1,8 @@
 class_name TacticsManager
 extends RefCounted
 
+const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
+
 const FORMATIONS := {
 	"4-3-3": ["GK", "DR", "DC", "DC", "DL", "DM", "MC", "MC", "AMR", "AML", "ST"],
 	"4-2-3-1": ["GK", "DR", "DC", "DC", "DL", "DM", "MC", "AMR", "AMC", "AML", "ST"],
@@ -56,15 +58,7 @@ func create_tactic(formation: String, mentality: String = "balanced", tempo: Str
 		if not roles.has(position):
 			roles[position] = String(ROLES.get(position, ["support"])[0])
 			duties[position] = "support"
-	return {
-		"formation": formation,
-		"mentality": mentality,
-		"tempo": tempo,
-		"pressing": pressing,
-		"roles": roles,
-		"duties": duties,
-		"familiarity": 50.0,
-	}
+	return {"formation": formation, "mentality": mentality, "tempo": tempo, "pressing": pressing, "roles": roles, "duties": duties, "familiarity": 50.0}
 
 func train_tactic(club: Dictionary, sessions: int = 1) -> void:
 	if not club.has("tactic"):
@@ -170,15 +164,8 @@ func style_modifiers(tactic: Dictionary) -> Dictionary:
 	elif pressing == "low":
 		possession_modifier -= 0.012
 		card_modifier -= 0.003
-	var familiarity_bonus: float = (familiarity - 50.0) / 1000.0
-	pass_modifier += familiarity_bonus
-	return {
-		"possession": possession_modifier,
-		"shot": shot_modifier,
-		"pass": pass_modifier,
-		"card": card_modifier,
-		"sequence_multiplier": clampf(sequence_multiplier, 0.82, 1.18),
-	}
+	pass_modifier += (familiarity - 50.0) / 1000.0
+	return {"possession": possession_modifier, "shot": shot_modifier, "pass": pass_modifier, "card": card_modifier, "sequence_multiplier": clampf(sequence_multiplier, 0.82, 1.18)}
 
 func _slot_score(player: Dictionary, slot: String, tactic: Dictionary) -> float:
 	var score: float = role_rating(player, tactic)
@@ -192,8 +179,8 @@ func _slot_score(player: Dictionary, slot: String, tactic: Dictionary) -> float:
 func _compatible(position: String, slot: String) -> bool:
 	if position == slot:
 		return true
-	var wide := [["DR", "DL"], ["MR", "ML", "AMR", "AML"], ["DM", "MC", "AMC"], ["ST", "AMC"]]
-	for group in wide:
+	var groups := [["DR", "DL"], ["MR", "ML", "AMR", "AML"], ["DM", "MC", "AMC"], ["ST", "AMC"]]
+	for group in groups:
 		if position in group and slot in group:
 			return true
 	return false
