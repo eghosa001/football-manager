@@ -4,33 +4,25 @@ A deterministic, simulation-first football-management game built with Godot 4.7.
 
 ## Current implementation
 
-Phases 1–5 are implemented: Deterministic World Model, Abstract Match Engine, Season & Persistence Core, Player Lifecycle, and Squad Building/Contracts/Transfer Market.
+Phases 1–9 are implemented: Deterministic World Model, Abstract Match Engine, Season & Persistence Core, Player Lifecycle, Squad Building/Contracts/Transfer Market, Club Economy & Institutions, Tactics & Manager AI, Spatial Match Simulation, and Career UI/2D Viewer/Analysis.
 
 The current vertical slice can:
 
-- deterministically generate 4 countries, 80 clubs, 2,000 players, 400 staff, contracts, competitions and 1,520 league fixtures;
-- validate entity references and deterministic IDs;
-- build double round-robin league schedules and league tables;
-- select lineups and simulate possession sequences, passes, shots, goals, cards and substitutions;
-- derive match statistics and player ratings from the canonical event stream;
-- reproduce worlds and matches exactly from their seeds;
-- assign calendar matchdays and advance the world by fixture date;
-- complete leagues and entire seasons, record champions and final tables, and roll into the next season;
-- apply configurable promotion/relegation between adjacent competition tiers;
-- save and reload exact Godot Variant state through a persistence repository abstraction;
-- perform atomic file saves with validated temporary files and last-known-good backup recovery;
-- persist the same typed payload through the Godot-SQLite adapter;
-- retain multi-season historical records;
-- model nine player attributes, training focus, development, aging, decline, injuries, youth intake and retirement;
-- convert experienced retired players into staff;
-- value players and negotiate contracts deterministically;
-- process contract renewals, releases and free agents;
-- execute transfers and loans through balanced financial ledger entries;
-- return expired loans to parent clubs;
-- rebalance AI squads for depth and GK/DC/ST positional viability;
-- run an integrated career-year cycle from season completion through lifecycle and squad planning;
-- pass 10-season persistence, 20-season squad/budget and 50-year population-health soak tests;
-- run headless tests and a broad statistical match-validation harness;
+- deterministically generate countries, clubs, players, staff, contracts, competitions and league fixtures;
+- simulate canonical event-driven football matches and reproduce them exactly from seeds;
+- run calendar-driven seasons, league tables, promotion/relegation and historical records;
+- save/reload exact typed state through atomic file and Godot-SQLite persistence adapters;
+- model player attributes, training, development, aging, injuries, youth intake, retirement and staff conversion;
+- process contracts, free agents, transfers and loans through balanced ledger accounting;
+- maintain AI squad depth and positional viability;
+- model sponsorship, commercial and ticket income, prize money, wages, operating costs, debt, budgets, stadiums, facilities, boards and supporters;
+- assign manager tactical identities, formations, roles, duties, mentality, tempo, pressing and familiarity;
+- select role-aware lineups and produce tactically distinct match styles and ratings;
+- run detailed spatial matches with normalized 2D player coordinates, pressure, passing lanes, goalkeeper positioning and set pieces while preserving the canonical event schema;
+- expose a thin career UI for dashboard, squad, tactics, medical, schedule, competitions, transfers, staff, finances and world search;
+- render detailed-match spatial frames in a 2D pitch viewer and expose post-match shots, set pieces and spatial analysis;
+- keep expensive spatial simulation as a detailed-match tier while unattended seasons use the cheaper tactical tier;
+- pass persistence, population, squad/budget, economy, tactical-style and spatial acceptance tests;
 - optionally run the full 100,000-match validation through GitHub Actions.
 
 ## Run
@@ -41,7 +33,7 @@ Install Godot 4.7.2 and open `project.godot`, or run:
 godot --path .
 ```
 
-The current UI is intentionally only a smoke-test screen. It generates the world and displays one deterministic sample match.
+The current main scene opens the Phase 9 career shell and generates a deterministic sample career world plus a detailed spatial match for the analysis viewer.
 
 ## Persistence
 
@@ -49,22 +41,12 @@ The current UI is intentionally only a smoke-test screen. It generates the world
 
 ## Tests
 
-Core Phase 1/2 tests:
-
 ```bash
 godot --headless --path . --script res://tests/test_runner.gd
-```
-
-Phase 3 season/persistence acceptance tests:
-
-```bash
 godot --headless --path . --script res://tests/phase3_test_runner.gd
-```
-
-Phase 4/5 lifecycle, transfer and long-save acceptance tests:
-
-```bash
 godot --headless --path . --script res://tests/phase45_test_runner.gd
+godot --headless --path . --script res://tests/phase67_test_runner.gd
+godot --headless --path . --script res://tests/phase89_test_runner.gd
 ```
 
 SQLite integration, with the Godot-SQLite addon installed:
@@ -79,10 +61,10 @@ Full Phase 2 statistical acceptance harness:
 godot --headless --path . --script res://tests/test_runner.gd -- --full-match-validation
 ```
 
-The normal test suite samples 2,000 matches to keep pull-request CI practical. The full flag runs 100,000 matches. CI imports the project headlessly first so parser/import failures are caught before simulation tests run.
+The normal test suite samples 2,000 abstract matches and 250 detailed spatial matches to keep pull-request CI practical. The full flag runs 100,000 abstract matches. CI imports the project headlessly before tests so parser/import failures are caught first.
 
 ## Architecture
 
-Simulation code has no dependency on scenes, rendering or persistence adapters. Application services coordinate season and career progression; persistence implementations conform to a repository boundary. All simulation randomness flows through `SeededRng`, making generated worlds, match outcomes, player lifecycle decisions and save/reload continuation reproducible from seeds.
+Simulation code has no dependency on scenes, rendering or persistence adapters. Application services coordinate season/career progression and expose read-only queries to the UI. Background fixtures use the tactical engine; detailed viewed matches can use the spatial engine. Both preserve the canonical logical event contract consumed by statistics and analysis.
 
 See `docs/AUDIT_AND_ROADMAP.md` for the design audit, corrected sequencing and development roadmap.
