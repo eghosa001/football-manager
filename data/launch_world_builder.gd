@@ -69,7 +69,7 @@ func _round_robin(competition_id: String, club_ids: Array, seed: int, country_in
 	var teams := club_ids.duplicate(); var fixtures: Array = []; var n := teams.size()
 	for leg in range(2):
 		for round_index in range(n-1):
-			for pair in range(n/2):
+			for pair in range(int(n / 2)):
 				var a := String(teams[pair]); var b := String(teams[n-1-pair])
 				var home := a if (round_index+pair+leg)%2==0 else b; var away := b if home==a else a
 				fixtures.append(DomainModelsClass.fixture("fixture-%s-%d-%d-%d" % [competition_id,leg,round_index,pair],competition_id,leg*(n-1)+round_index+1,home,away))
