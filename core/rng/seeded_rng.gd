@@ -5,6 +5,7 @@ extends RefCounted
 # replay behaviour explicit and independent of engine RNG implementation changes.
 const MODULUS := 2_147_483_647
 const MULTIPLIER := 48_271
+const HEX := "0123456789abcdef"
 
 var seed_value: int
 var _state: int
@@ -52,4 +53,11 @@ func stable_id(_namespace: String = "") -> String:
 		bytes.append(randi_range(0, 255))
 	bytes[6] = (bytes[6] & 0x0f) | 0x40
 	bytes[8] = (bytes[8] & 0x3f) | 0x80
-	return "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x" % bytes
+	var text := ""
+	for i in range(16):
+		if i in [4, 6, 8, 10]:
+			text += "-"
+		var value: int = bytes[i]
+		text += HEX[(value >> 4) & 0x0f]
+		text += HEX[value & 0x0f]
+	return text
