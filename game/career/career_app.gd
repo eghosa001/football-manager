@@ -6,7 +6,7 @@ const DayRunnerClass = preload("res://application/career/day_runner.gd")
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const CareerQueryClass = preload("res://application/career/career_query.gd")
 const CareerViewsClass = preload("res://game/career/career_views.gd")
-const LaunchWorldBuilderClass = preload("res://data/launch_world_builder.gd")
+const LaunchCatalogClass = preload("res://data/launch_catalog.gd")
 const SettingsStoreClass = preload("res://application/settings/settings_store.gd")
 const LocalizationServiceClass = preload("res://game/localization/localization_service.gd")
 
@@ -92,7 +92,7 @@ func _show_new_career() -> void:
 	_manager_name_input = LineEdit.new(); _manager_name_input.text = "Manager"; _manager_name_input.placeholder_text = "Enter manager name"; root.add_child(_manager_name_input)
 	var club_label := Label.new(); club_label.text = "Choose club — launch database"; root.add_child(club_label)
 	_club_selector = OptionButton.new()
-	var preview: Dictionary = LaunchWorldBuilderClass.new().build(12345, 0, 25)
+	var preview: Dictionary = LaunchCatalogClass.new().build(0)
 	_wizard_clubs = preview.get("clubs", [])
 	for club in _wizard_clubs:
 		var country_name := _country_name(preview.get("countries", []), String(club.get("country_id", "")))
