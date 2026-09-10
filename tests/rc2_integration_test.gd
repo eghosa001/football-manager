@@ -4,6 +4,8 @@ const CareerSessionClass = preload("res://application/career/career_session.gd")
 const DayRunnerClass = preload("res://application/career/day_runner.gd")
 const CommandClass = preload("res://application/career/career_command_service.gd")
 const InboxClass = preload("res://application/career/inbox_service.gd")
+const RegistrationClass = preload("res://simulation/competitions/registration_service.gd")
+const YouthAcademyClass = preload("res://simulation/players/youth_academy.gd")
 
 func _init() -> void:
 	var session = CareerSessionClass.new()
@@ -19,6 +21,30 @@ func _init() -> void:
 	assert(command.set_tactical_instruction(session.world, club_id, "transition", "counter_press", true) == OK)
 	assert(bool(club.tactic.instructions.transition.counter_press))
 	assert(command.set_training(session.world, club_id, ["recovery","technical","tactical","physical","set_pieces","match_prep","rest"], 0.7) == OK)
+
+	var own_player := _own_player(session.world, club_id)
+	assert(not own_player.is_empty())
+	var promise: Dictionary = command.make_player_promise(session.world, club_id, String(own_player.id), "morale", 0, 1)
+	assert(not promise.has("error"))
+	var room: Dictionary = command.hold_team_meeting(session.world, club_id, "encourage")
+	assert(not room.has("error"))
+	assert(float(room.get("atmosphere", 0.0)) > 0.0)
+
+	var competition := _competition_for_club(session.world, club_id)
+	assert(not competition.is_empty())
+	competition["registration_rules"] = {"max_squad":25,"min_homegrown":0,"max_foreign":25,"min_age":15}
+	var ids: Array = []
+	for player in session.world.players:
+		if String(player.get("club_id", "")) == club_id and ids.size() < 25: ids.append(String(player.id))
+	var registration: Dictionary = RegistrationClass.new().register_squad(session.world, club_id, competition, ids, int(session.world.season_year))
+	assert(bool(registration.valid))
+	assert(registration.registered.size() > 0)
+	assert(RegistrationClass.new().is_registered(session.world, club_id, String(competition.id), int(session.world.season_year), String(registration.registered[0])))
+
+	var preview: Array = YouthAcademyClass.new().intake_preview(session.world, club_id, 99119, 6)
+	assert(preview.size() == 6)
+	for prospect in preview:
+		assert(int(prospect.potential) >= int(prospect.ability))
 
 	var target := _external_player(session.world, club_id)
 	assert(not target.is_empty())
@@ -51,6 +77,7 @@ func _init() -> void:
 	assert(int(session.world.get("day_index", 0)) == 8)
 	assert(session.world.has("scout_assignments"))
 	assert(InboxClass.new().unread(session.world).size() > 0)
+	assert(String(promise.status) in ["fulfilled","broken"])
 
 	# Force the next advance onto the first scheduled matchday and verify the
 	# human club is routed through the detailed causal engine while background
@@ -86,6 +113,7 @@ func _init() -> void:
 	assert(bool(loaded_club.tactic.instructions.transition.counter_press))
 	var loaded_target := _player(loaded.world, target_id)
 	assert(String(loaded_target.club_id) == club_id)
+	assert(loaded.world.get("registrations", {}).size() > 0)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path + ".bak"))
 	print("[TEST] RC2 INTEGRATION PASS")
@@ -101,7 +129,17 @@ func _player(world: Dictionary, player_id: String) -> Dictionary:
 		if String(player.id) == player_id: return player
 	return {}
 
+func _own_player(world: Dictionary, club_id: String) -> Dictionary:
+	for player in world.players:
+		if String(player.club_id) == club_id and not bool(player.get("retired", false)): return player
+	return {}
+
 func _external_player(world: Dictionary, club_id: String) -> Dictionary:
 	for player in world.players:
 		if String(player.club_id) != club_id and not bool(player.get("retired", false)): return player
+	return {}
+
+func _competition_for_club(world: Dictionary, club_id: String) -> Dictionary:
+	for competition in world.competitions:
+		if club_id in competition.get("club_ids", []): return competition
 	return {}
