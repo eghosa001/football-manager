@@ -1,7 +1,7 @@
 class_name SaveStore
 extends "res://persistence/save_repository.gd"
 
-const CURRENT_SCHEMA_VERSION := 1
+const CURRENT_SCHEMA_VERSION := 2
 const MAGIC := 1_179_016_753 # "FDN1"
 const HEADER_BYTES := 8
 
@@ -78,6 +78,18 @@ func _migrate(payload: Dictionary) -> Dictionary:
 		payload["history"] = payload.get("history", [])
 		payload["schema_version"] = 1
 		version = 1
+	if version == 1:
+		var world: Dictionary = payload.get("world", {})
+		world["relationships"] = world.get("relationships", [])
+		world["rivalries"] = world.get("rivalries", [])
+		world["awards"] = world.get("awards", [])
+		world["legends"] = world.get("legends", [])
+		world["news"] = world.get("news", [])
+		world["manager_careers"] = world.get("manager_careers", [])
+		world["active_mods"] = world.get("active_mods", [])
+		payload["world"] = world
+		payload["schema_version"] = 2
+		version = 2
 	if version != CURRENT_SCHEMA_VERSION:
 		return {}
 	return payload
