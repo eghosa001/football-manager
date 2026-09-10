@@ -20,26 +20,52 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          clean: false
 
-      - name: Setup Godot 4.7.2
-        uses: chickensoft-games/setup-godot@v2
-        with:
-          version: 4.7.2
-          use-dotnet: false
-          include-templates: true
-
-      - name: Verify engine
+      - name: Use installed Godot
         shell: powershell
         run: |
-          godot --version
+          $ErrorActionPreference = 'Stop'
+
+          $candidates = @()
+          if ($env:GODOT_PATH) { $candidates += $env:GODOT_PATH }
+
+          $commands = @('godot', 'godot4')
+          foreach ($commandName in $commands) {
+            $cmd = Get-Command $commandName -ErrorAction SilentlyContinue
+            if ($cmd) { $candidates += $cmd.Source }
+          }
+
+          $candidates += @(
+            'C:\Program Files\Godot\Godot_v4.7.2-stable_win64.exe',
+            'C:\Program Files\Godot\Godot.exe',
+            "$env:LOCALAPPDATA\Programs\Godot\Godot_v4.7.2-stable_win64.exe",
+            "$env:LOCALAPPDATA\Programs\Godot\Godot.exe"
+          )
+
+          $godot = $null
+          foreach ($candidate in $candidates) {
+            if ($candidate -and (Test-Path $candidate)) {
+              $godot = (Resolve-Path $candidate).Path
+              break
+            }
+          }
+
+          if (-not $godot) {
+            throw 'Godot is not installed or not visible to the runner. Add Godot to PATH or set GODOT_PATH on the runner. This workflow intentionally does not download Godot.'
+          }
+
+          "GODOT_EXE=$godot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Using installed Godot: $godot"
+          & $godot --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Import project
         shell: powershell
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'godot-import.log'
-          godot --headless --editor --path . --import --quit 2>&1 | Tee-Object -FilePath $log
+          & $env:GODOT_EXE --headless --editor --path . --import --quit 2>&1 | Tee-Object -FilePath $log
           $status = $LASTEXITCODE
           if ($status -ne 0) { exit $status }
           if (Select-String -Path $log -Pattern 'SCRIPT ERROR:|ERROR:|Assertion failed' -Quiet) {
@@ -65,7 +91,7 @@ jobs:
             Write-Host "===== $suite ====="
             $logName = ($suite.Replace('/', '_') -replace '\.gd$', '.log')
             $log = Join-Path 'test_artifacts' $logName
-            godot --headless --path . --script "res://$suite" 2>&1 | Tee-Object -FilePath $log
+            & $env:GODOT_EXE --headless --path . --script "res://$suite" 2>&1 | Tee-Object -FilePath $log
             $status = $LASTEXITCODE
             $hasErrors = Select-String -Path $log -Pattern 'SCRIPT ERROR:|ERROR:|Assertion failed' -Quiet
             $hasPass = Select-String -Path $log -Pattern 'PASS' -Quiet
@@ -84,7 +110,7 @@ jobs:
         shell: powershell
         run: |
           $log = 'test_artifacts/career_performance_test.log'
-          godot --headless --path . --script res://tests/career_performance_test.gd 2>&1 | Tee-Object -FilePath $log
+          & $env:GODOT_EXE --headless --path . --script res://tests/career_performance_test.gd 2>&1 | Tee-Object -FilePath $log
           $status = $LASTEXITCODE
           if ($status -ne 0 -or (Select-String -Path $log -Pattern 'SCRIPT ERROR:|ERROR:|Assertion failed' -Quiet) -or -not (Select-String -Path $log -Pattern 'PASS' -Quiet)) {
             exit 1
@@ -99,11 +125,11 @@ jobs:
             throw 'Tests modified tracked repository files.'
           }
 
-      - name: Upload self-hosted logs
-        if: always()
+      - name: Upload logs only on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: self-hosted-test-logs
           path: test_artifacts/**
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 7
