@@ -121,6 +121,7 @@ func _apply_subs_for_side(result: Dictionary, side: String, squad: Array, lineup
 	for player in squad:
 		if not lineup_ids.has(player.id):
 			bench.append(player)
+	bench.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return String(a.id) < String(b.id))
 	var count: int = mini(3, bench.size())
 	for i in range(count):
 		var minute: int = 60 + i * 10 + rng.randi_range(-3, 3)
@@ -172,7 +173,11 @@ func _players_for_club(players: Array, club_id: String) -> Array:
 
 func _select_lineup(players: Array) -> Array:
 	var sorted: Array = players.duplicate()
-	sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.current_ability > b.current_ability)
+	sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a.current_ability != b.current_ability:
+			return a.current_ability > b.current_ability
+		return String(a.id) < String(b.id)
+	)
 	return sorted.slice(0, 11)
 
 func _lineup_strength(lineup: Array) -> float:
