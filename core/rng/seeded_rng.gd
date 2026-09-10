@@ -47,9 +47,8 @@ func shuffled_copy(values: Array) -> Array:
 		result[j] = temp
 	return result
 
-func stable_id(namespace: String = "entity") -> String:
-	# Stable, opaque identifier. Formatting is deliberately simple: identity
-	# semantics matter more than presentation, and IDs are never user-facing.
-	# This counter does not consume the simulation random stream.
+func stable_id(namespace_name: String = "entity") -> String:
+	# Stable, opaque identifier. Identity semantics matter more than presentation,
+	# and IDs are never user-facing. This counter does not consume the RNG stream.
 	_id_counter += 1
-	return namespace + "-" + str(seed_value) + "-" + str(_id_counter)
+	return namespace_name + "-" + str(seed_value) + "-" + str(_id_counter)
