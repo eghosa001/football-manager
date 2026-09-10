@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, phase-3-season-persistence-core]
+    branches: [main, phase-4-5-lifecycle-transfers]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -40,6 +40,9 @@ jobs:
 
       - name: Run Phase 3 tests
         run: godot --headless --path . --script res://tests/phase3_test_runner.gd
+
+      - name: Run Phase 4/5 tests
+        run: godot --headless --path . --script res://tests/phase45_test_runner.gd
 
       - name: Install Godot-SQLite v4.9
         run: |
