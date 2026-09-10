@@ -1,24 +1,37 @@
 class_name SeededRng
 extends RefCounted
 
-var _rng := RandomNumberGenerator.new()
+# Park-Miller minimal-standard PRNG. Keeping the algorithm in project code makes
+# replay behaviour explicit and independent of engine RNG implementation changes.
+const MODULUS := 2_147_483_647
+const MULTIPLIER := 48_271
+
 var seed_value: int
+var _state: int
 
 func _init(seed: int) -> void:
 	seed_value = seed
-	_rng.seed = seed
+	_state = abs(seed) % MODULUS
+	if _state == 0:
+		_state = 1
+
+func _next_int() -> int:
+	_state = (_state * MULTIPLIER) % MODULUS
+	return _state
 
 func randf() -> float:
-	return _rng.randf()
+	return float(_next_int()) / float(MODULUS)
 
 func randf_range(min_value: float, max_value: float) -> float:
-	return _rng.randf_range(min_value, max_value)
+	return min_value + (max_value - min_value) * randf()
 
 func randi_range(min_value: int, max_value: int) -> int:
-	return _rng.randi_range(min_value, max_value)
+	assert(max_value >= min_value)
+	var span: int = max_value - min_value + 1
+	return min_value + (_next_int() % span)
 
 func chance(probability: float) -> bool:
-	return _rng.randf() < clampf(probability, 0.0, 1.0)
+	return randf() < clampf(probability, 0.0, 1.0)
 
 func pick(values: Array) -> Variant:
 	assert(not values.is_empty(), "Cannot pick from an empty array")
@@ -34,8 +47,6 @@ func shuffled_copy(values: Array) -> Array:
 	return result
 
 func stable_id(_namespace: String = "") -> String:
-	# Deterministic RFC-4122-shaped UUID v4. The namespace parameter documents call intent;
-	# uniqueness comes from this controlled RNG stream, not global randomness.
 	var bytes: Array[int] = []
 	for _i in range(16):
 		bytes.append(randi_range(0, 255))
