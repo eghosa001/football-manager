@@ -1,28 +1,49 @@
 class_name SeededRng
 extends RefCounted
 
-# Use a dedicated RandomNumberGenerator instance rather than global RNG state.
-# The project pins Godot 4.7.2, so the generator implementation is stable for
-# saves/tests built against this phase while remaining isolated per world/match.
+# Counter-based deterministic PRNG. Each draw is a pure function of the seed and
+# draw index, so replay does not depend on mutable engine RNG internals.
+const MODULUS := 2_147_483_647
+const MULTIPLIER_A := 48_271
+const MULTIPLIER_B := 69_621
+const OFFSET := 12_345
+
 var seed_value: int
-var _rng: RandomNumberGenerator
+var _draw_counter := 0
 var _id_counter := 0
 
 func _init(seed: int) -> void:
 	seed_value = seed
+	_draw_counter = 0
 	_id_counter = 0
-	_rng = RandomNumberGenerator.new()
-	_rng.seed = seed
+
+static func value_for(seed: int, draw_index: int) -> int:
+	var normalized_seed: int = posmod(seed, MODULUS)
+	var normalized_index: int = posmod(draw_index + 1, MODULUS)
+	var value: int = posmod(normalized_seed * MULTIPLIER_A + normalized_index * MULTIPLIER_B + OFFSET, MODULUS)
+	value = posmod(value * MULTIPLIER_A + normalized_index * 7_919 + OFFSET, MODULUS)
+	value = posmod(value * MULTIPLIER_B + normalized_seed * 104_729 + OFFSET, MODULUS)
+	return value
+
+static func unit_for(seed: int, draw_index: int) -> float:
+	return float(value_for(seed, draw_index)) / float(MODULUS)
+
+func _next_int() -> int:
+	var value: int = value_for(seed_value, _draw_counter)
+	_draw_counter += 1
+	return value
 
 func randf() -> float:
-	return _rng.randf()
+	return float(_next_int()) / float(MODULUS)
 
 func randf_range(min_value: float, max_value: float) -> float:
-	return _rng.randf_range(min_value, max_value)
+	var unit: float = randf()
+	return min_value + (max_value - min_value) * unit
 
 func randi_range(min_value: int, max_value: int) -> int:
 	assert(max_value >= min_value)
-	return _rng.randi_range(min_value, max_value)
+	var span: int = max_value - min_value + 1
+	return min_value + (_next_int() % span)
 
 func chance(probability: float) -> bool:
 	return randf() < clampf(probability, 0.0, 1.0)
@@ -42,7 +63,5 @@ func shuffled_copy(values: Array) -> Array:
 	return result
 
 func stable_id(namespace_name: String = "entity") -> String:
-	# Stable, opaque identifier. Identity semantics matter more than presentation,
-	# and IDs are never user-facing. This counter does not consume the RNG stream.
 	_id_counter += 1
 	return namespace_name + "-" + str(seed_value) + "-" + str(_id_counter)
