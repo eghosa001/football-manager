@@ -25,11 +25,13 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 	var rules: Dictionary = competition.get("registration_rules", {})
 	var max_squad := int(rules.get("max_squad", 25))
 	var min_homegrown := int(rules.get("min_homegrown", 0))
+	var min_goalkeepers := int(rules.get("min_goalkeepers", 0))
 	var max_foreign := int(rules.get("max_foreign", 99))
 	var accepted: Array = []
 	var rejected: Array = []
 	var homegrown_count := 0
 	var foreign_count := 0
+	var goalkeeper_count := 0
 	for player_id in player_ids:
 		var player := _player(world, String(player_id))
 		if player.is_empty() or String(player.get("club_id", "")) != club_id:
@@ -48,15 +50,54 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 		accepted.append(String(player_id))
 		if bool(check.homegrown): homegrown_count += 1
 		if bool(check.foreign): foreign_count += 1
-	var valid := homegrown_count >= mini(min_homegrown, accepted.size())
-	var key := "%s:%s:%d" % [club_id, String(competition.get("id", "competition")), season_year]
-	world.registrations[key] = {"club_id":club_id,"competition_id":String(competition.get("id", "")),"season_year":season_year,"player_ids":accepted.duplicate(),"homegrown":homegrown_count,"foreign":foreign_count,"valid":valid}
-	return {"valid":valid,"registered":accepted,"rejected":rejected,"homegrown":homegrown_count,"foreign":foreign_count}
+		if String(player.get("position", "")) == "GK": goalkeeper_count += 1
+	var valid := homegrown_count >= mini(min_homegrown, accepted.size()) and goalkeeper_count >= mini(min_goalkeepers, accepted.size())
+	var key := _key(club_id, String(competition.get("id", "competition")), season_year)
+	world.registrations[key] = {"club_id":club_id,"competition_id":String(competition.get("id", "")),"season_year":season_year,"player_ids":accepted.duplicate(),"homegrown":homegrown_count,"foreign":foreign_count,"goalkeepers":goalkeeper_count,"valid":valid}
+	return {"valid":valid,"registered":accepted,"rejected":rejected,"homegrown":homegrown_count,"foreign":foreign_count,"goalkeepers":goalkeeper_count}
+
+func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
+	ensure_world(world)
+	var registered := 0
+	var invalid := 0
+	for competition in world.get("competitions", []):
+		for club_id in competition.get("club_ids", []):
+			var candidates: Array = []
+			for player in world.get("players", []):
+				if String(player.get("club_id", "")) == String(club_id) and not bool(player.get("retired", false)):
+					candidates.append(player)
+			candidates.sort_custom(func(a: Dictionary, b: Dictionary):
+				var a_gk := 1 if String(a.get("position", "")) == "GK" else 0
+				var b_gk := 1 if String(b.get("position", "")) == "GK" else 0
+				if a_gk != b_gk: return a_gk > b_gk
+				var aa := int(a.get("current_ability", 0)); var bb := int(b.get("current_ability", 0))
+				if aa == bb: return String(a.get("id", "")) < String(b.get("id", ""))
+				return aa > bb
+			)
+			var ids: Array = []
+			for player in candidates: ids.append(String(player.get("id", "")))
+			var result: Dictionary = register_squad(world, String(club_id), competition, ids, season_year)
+			registered += 1
+			if not bool(result.get("valid", false)): invalid += 1
+	return {"registered":registered,"invalid":invalid}
+
+func registered_players(world: Dictionary, club_id: String, competition_id: String, season_year: int) -> Array:
+	ensure_world(world)
+	var key := _key(club_id, competition_id, season_year)
+	if not world.registrations.has(key): return []
+	var ids: Array = world.registrations[key].get("player_ids", [])
+	var players: Array = []
+	for player in world.get("players", []):
+		if String(player.get("id", "")) in ids: players.append(player)
+	return players
 
 func is_registered(world: Dictionary, club_id: String, competition_id: String, season_year: int, player_id: String) -> bool:
 	ensure_world(world)
-	var key := "%s:%s:%d" % [club_id, competition_id, season_year]
+	var key := _key(club_id, competition_id, season_year)
 	return player_id in world.registrations.get(key, {}).get("player_ids", [])
+
+func _key(club_id: String, competition_id: String, season_year: int) -> String:
+	return "%s:%s:%d" % [club_id, competition_id, season_year]
 
 func _player(world: Dictionary, player_id: String) -> Dictionary:
 	for player in world.get("players", []):
