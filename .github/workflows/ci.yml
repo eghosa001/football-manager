@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, phase-8-9-spatial-ui]
+    branches: [main, phase-10-11-living-world-release]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -49,6 +49,9 @@ jobs:
 
       - name: Run Phase 8/9 tests
         run: godot --headless --path . --script res://tests/phase89_test_runner.gd
+
+      - name: Run Phase 10/11 tests
+        run: godot --headless --path . --script res://tests/phase1011_test_runner.gd
 
       - name: Install Godot-SQLite v4.9
         run: |
