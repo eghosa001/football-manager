@@ -1,0 +1,4158 @@
+# FOOTBALL DYNASTY
+
+## Technical Design Document v1.0
+
+**Project type:** Deep football-management simulation
+**Target quality:** Commercial-quality indie title approaching Football Manager-level systemic depth in selected areas
+**Primary platform:** Windows PC
+**Secondary platforms:** Linux/macOS; Android later
+**Engine:** Godot 4.7.x stable
+**Primary language:** GDScript initially
+**Performance modules:** C++ through GDExtension only where profiling proves necessary
+**Database:** SQLite
+**Architecture:** Data-driven, deterministic, simulation-first
+**Networking:** None for v1.0
+**Business model:** Premium game
+**Design principle:** A living football world, not a collection of disconnected menus.
+
+---
+
+# 1. PRODUCT VISION
+
+Football Dynasty is a football-management simulation in which:
+
+* players develop realistic careers;
+* clubs pursue independent sporting and financial objectives;
+* managers have tactical identities;
+* transfer markets respond to supply and demand;
+* leagues rise and decline;
+* countries develop;
+* rivalries emerge;
+* clubs build history;
+* retired players become staff;
+* new generations replace old ones;
+* the football world can remain coherent for 100+ simulated seasons.
+
+The game must create stories through simulation rather than primarily through scripted events.
+
+A successful save should create situations such as:
+
+> A 17-year-old academy striker debuts for a Nigerian second-tier club in 2028, becomes captain, leads the club to continental success, transfers abroad, returns at age 33, retires as the club's record goalscorer, becomes an assistant coach and eventually manages the club.
+
+No developer has manually scripted that sequence.
+
+The systems created it.
+
+---
+
+# 2. NON-NEGOTIABLE ENGINEERING RULES
+
+The project must follow these rules.
+
+## 2.1 Simulation must be independent of UI
+
+The following must work without loading a visual scene:
+
+```text
+create_world()
+simulate_day()
+simulate_match()
+simulate_transfer_window()
+advance_player_development()
+simulate_season()
+simulate_years(100)
+```
+
+UI reads simulation state.
+
+UI never defines simulation state.
+
+---
+
+## 2.2 No business logic inside UI scenes
+
+Bad:
+
+```text
+TransferScreen.gd
+    calculates player value
+    determines AI bid
+    modifies finances
+    updates contract
+```
+
+Correct:
+
+```text
+TransferScreen
+      ↓
+TransferService
+      ↓
+TransferEngine
+      ↓
+FinanceService
+      ↓
+Database
+```
+
+The UI only issues commands and renders results.
+
+---
+
+# 3. HIGH-LEVEL ARCHITECTURE
+
+```text
+┌───────────────────────────────────────────────┐
+│                 PRESENTATION                  │
+│                                               │
+│ Dashboard / Squad / Tactics / Match Viewer    │
+└─────────────────────┬─────────────────────────┘
+                      │ Commands / Queries
+                      ▼
+┌───────────────────────────────────────────────┐
+│                APPLICATION                    │
+│                                               │
+│ GameController                               │
+│ CalendarService                              │
+│ SaveManager                                  │
+│ EventBus                                     │
+│ CommandProcessor                             │
+└─────────────────────┬─────────────────────────┘
+                      ▼
+┌───────────────────────────────────────────────┐
+│              SIMULATION DOMAIN                │
+│                                               │
+│ Match Engine       Transfer Engine             │
+│ Tactical Engine    Scouting Engine             │
+│ Development        Finance Engine              │
+│ Training           Competition Engine          │
+│ Injury Engine      Reputation Engine           │
+│ AI Managers        Relationship Engine         │
+└─────────────────────┬─────────────────────────┘
+                      ▼
+┌───────────────────────────────────────────────┐
+│                  DATA LAYER                   │
+│                                               │
+│ Repositories                                  │
+│ SQLite                                        │
+│ Static database                               │
+│ Save database                                 │
+└───────────────────────────────────────────────┘
+```
+
+---
+
+# 4. REPOSITORY STRUCTURE
+
+```text
+football-dynasty/
+
+├── project.godot
+├── README.md
+├── CHANGELOG.md
+├── LICENSE
+│
+├── game/
+│   ├── scenes/
+│   ├── ui/
+│   ├── themes/
+│   ├── audio/
+│   ├── localization/
+│   └── presentation/
+│
+├── core/
+│   ├── game_controller/
+│   ├── calendar/
+│   ├── events/
+│   ├── commands/
+│   ├── rng/
+│   └── utilities/
+│
+├── simulation/
+│   ├── match/
+│   │   ├── state/
+│   │   ├── movement/
+│   │   ├── possession/
+│   │   ├── decisions/
+│   │   ├── passing/
+│   │   ├── shooting/
+│   │   ├── defending/
+│   │   ├── goalkeeping/
+│   │   ├── set_pieces/
+│   │   ├── refereeing/
+│   │   └── statistics/
+│   │
+│   ├── tactics/
+│   ├── players/
+│   ├── development/
+│   ├── training/
+│   ├── fitness/
+│   ├── injuries/
+│   ├── contracts/
+│   ├── transfers/
+│   ├── scouting/
+│   ├── finance/
+│   ├── competitions/
+│   ├── reputation/
+│   ├── relationships/
+│   ├── youth/
+│   └── world/
+│
+├── ai/
+│   ├── manager/
+│   ├── squad_planning/
+│   ├── transfers/
+│   ├── contracts/
+│   ├── tactics/
+│   ├── lineup/
+│   ├── substitutions/
+│   └── board/
+│
+├── data/
+│   ├── database/
+│   ├── migrations/
+│   ├── seed/
+│   ├── rules/
+│   ├── names/
+│   └── templates/
+│
+├── persistence/
+│   ├── repositories/
+│   ├── sqlite/
+│   ├── save_manager/
+│   └── serialization/
+│
+├── tools/
+│   ├── database_editor/
+│   ├── competition_editor/
+│   ├── match_debugger/
+│   ├── world_inspector/
+│   └── balancing/
+│
+└── tests/
+    ├── unit/
+    ├── integration/
+    ├── match/
+    ├── ai/
+    ├── economy/
+    ├── regression/
+    ├── soak/
+    └── fixtures/
+```
+
+---
+
+# 5. DOMAIN ENTITIES
+
+Core objects:
+
+```text
+World
+Country
+Region
+City
+
+Competition
+CompetitionStage
+Season
+Fixture
+
+Club
+Stadium
+Board
+Supporters
+Facility
+
+Person
+Player
+Manager
+Coach
+Scout
+Physio
+Agent
+
+Contract
+Transfer
+LoanAgreement
+
+Tactic
+Formation
+Role
+
+Match
+MatchTeam
+MatchPlayer
+MatchEvent
+
+Injury
+Suspension
+
+Relationship
+
+NewsEvent
+Award
+Record
+```
+
+Every persistent entity gets a stable UUID.
+
+Never rely solely on database row position.
+
+---
+
+# 6. DATABASE STRATEGY
+
+Use two logical databases.
+
+## Static database
+
+Contains the starting universe:
+
+```text
+countries
+cities
+competition definitions
+club definitions
+name pools
+starting reputations
+competition rules
+```
+
+## Save database
+
+Contains mutable state:
+
+```text
+players
+clubs
+finances
+contracts
+matches
+transfers
+injuries
+relationships
+history
+records
+reputation
+manager careers
+youth generations
+```
+
+The original database should never be modified by a save.
+
+---
+
+# 7. IMPORTANT DATABASE TABLES
+
+## players
+
+```text
+id UUID
+first_name
+last_name
+date_of_birth
+nationality_id
+secondary_nationality_id
+club_id
+height_cm
+weight_kg
+preferred_foot
+weak_foot
+primary_position
+current_ability
+potential_base
+potential_ceiling
+reputation
+personality_id
+retired
+```
+
+---
+
+## player_attributes
+
+```text
+player_id
+
+finishing
+first_touch
+passing
+technique
+dribbling
+crossing
+heading
+tackling
+marking
+long_shots
+set_pieces
+penalties
+
+anticipation
+composure
+concentration
+decisions
+determination
+flair
+leadership
+off_ball
+positioning
+teamwork
+vision
+work_rate
+aggression
+bravery
+
+acceleration
+pace
+agility
+balance
+jumping
+strength
+stamina
+natural_fitness
+```
+
+Values:
+
+```text
+1–20 displayed
+```
+
+Internally use:
+
+```text
+1–100
+```
+
+This provides greater simulation granularity.
+
+Example:
+
+```text
+Displayed Finishing: 15
+
+Internal:
+73
+```
+
+---
+
+# 8. GOALKEEPER ATTRIBUTES
+
+```text
+aerial_reach
+command_area
+communication
+handling
+kicking
+one_on_ones
+reflexes
+rushing_out
+throwing
+goalkeeper_positioning
+```
+
+Goalkeepers also use normal:
+
+```text
+decisions
+anticipation
+composure
+concentration
+agility
+strength
+```
+
+---
+
+# 9. HIDDEN PLAYER ATTRIBUTES
+
+```text
+professionalism
+ambition
+loyalty
+pressure
+temperament
+consistency
+important_matches
+adaptability
+sportsmanship
+injury_proneness
+versatility
+controversy
+```
+
+Values:
+
+```text
+1–100
+```
+
+These should NEVER normally be directly visible.
+
+Scouts instead describe behaviour:
+
+> Performs consistently.
+
+> May struggle under pressure.
+
+> Extremely professional.
+
+---
+
+# 10. PLAYER STATE
+
+Attributes represent ability.
+
+State represents current condition.
+
+Each player also has:
+
+```text
+fitness            0–100
+match_sharpness    0–100
+fatigue             0–100
+morale              0–100
+confidence          0–100
+happiness           0–100
+form                 dynamic
+```
+
+A world-class player at 65% physical condition should not perform like a fully fit world-class player.
+
+---
+
+# 11. PLAYER PERFORMANCE MODEL
+
+Effective ability:
+
+```text
+effective_attribute =
+base_attribute
+× fitness_modifier
+× fatigue_modifier
+× morale_modifier
+× confidence_modifier
+× familiarity_modifier
+```
+
+Modifiers must remain fairly subtle.
+
+Morale should matter without converting mediocre players into superstars.
+
+Example bounds:
+
+```text
+Morale:
+0.94 – 1.04
+
+Fitness:
+0.65 – 1.00
+
+Fatigue:
+0.82 – 1.00
+```
+
+---
+
+# 12. PLAYER DEVELOPMENT
+
+Development should occur continuously.
+
+Concept:
+
+```text
+development_points =
+age_curve
+× professionalism
+× coaching_quality
+× facility_quality
+× training_quality
+× playing_time
+× competition_quality
+× morale
+× potential_gap
+× random_variation
+```
+
+Potential gap:
+
+```text
+potential_ceiling - current_ability
+```
+
+The smaller the gap becomes, the harder improvement becomes.
+
+---
+
+# 13. DEVELOPMENT AGE CURVES
+
+General guideline:
+
+```text
+15–17    very rapid potential
+18–20    rapid
+21–23    strong
+24–26    moderate
+27–29    limited
+30+      decline increasingly likely
+```
+
+Different attributes follow separate curves.
+
+Physical:
+
+```text
+peak earlier
+decline earlier
+```
+
+Mental:
+
+```text
+develop longer
+decline slowly
+```
+
+Technical:
+
+```text
+middle
+```
+
+Goalkeeping:
+
+```text
+later development
+later peak
+```
+
+---
+
+# 14. PLAYER DECLINE
+
+Decline depends upon:
+
+```text
+age
+natural fitness
+injuries
+minutes played
+physical workload
+position
+professionalism
+```
+
+An extremely fit professional may play effectively until 36–39.
+
+A highly injury-prone winger dependent on pace may decline at 30.
+
+---
+
+# 15. PLAYER POSITIONS
+
+Internal positional familiarity:
+
+```text
+0–100
+```
+
+Positions:
+
+```text
+GK
+
+DL
+DC
+DR
+
+WBL
+WBR
+
+DM
+
+ML
+MC
+MR
+
+AML
+AMC
+AMR
+
+ST
+```
+
+Players can know multiple positions.
+
+---
+
+# 16. PLAYER TRAITS
+
+Examples:
+
+```text
+cuts_inside
+stays_wide
+tries_long_shots
+likes_to_round_keeper
+plays_one_twos
+dictates_tempo
+switches_ball
+dives_into_tackles
+avoids_weak_foot
+runs_with_ball
+arrives_late_box
+drops_deep
+beats_offside_trap
+```
+
+Traits modify decision-selection weights.
+
+They are not simply attribute bonuses.
+
+---
+
+# 17. PERSONALITY SYSTEM
+
+Personality is derived from underlying attributes.
+
+Example:
+
+```text
+Professionalism > 85
+Determination > 75
+Ambition > 65
+```
+
+may generate:
+
+```text
+Driven Professional
+```
+
+But gameplay should use the actual hidden values, not the label.
+
+---
+
+# 18. RELATIONSHIP GRAPH
+
+Store:
+
+```text
+source_person_id
+target_person_id
+relationship_type
+strength
+last_changed
+```
+
+Strength:
+
+```text
+-100 to +100
+```
+
+Examples:
+
+```text
+friendship
+respect
+dislike
+mentor
+family
+manager_relationship
+agent_relationship
+```
+
+Relationships decay gradually unless reinforced.
+
+---
+
+# 19. DRESSING-ROOM SYSTEM
+
+Influence score:
+
+```text
+leadership
++ reputation
++ club_tenure
++ appearances
++ personality
++ squad_status
+```
+
+Groups:
+
+```text
+Team Leaders
+Highly Influential
+Influential
+Others
+Prospects
+```
+
+The result influences:
+
+```text
+morale propagation
+manager support
+captaincy
+responses to disputes
+responses to transfers
+```
+
+---
+
+# 20. MATCH ENGINE PRINCIPLE
+
+Never generate a result first.
+
+Wrong:
+
+```text
+Result = 2-1
+Generate fake events
+Generate fake statistics
+```
+
+Correct:
+
+```text
+simulation
+↓
+events
+↓
+shots
+↓
+goals
+↓
+result
+↓
+statistics
+```
+
+Every statistic derives from actual simulation events.
+
+---
+
+# 21. MATCH STATE
+
+At any simulation step:
+
+```text
+MatchState
+
+clock
+score
+
+ball:
+    position
+    velocity
+    owner
+    state
+
+players:
+    position
+    velocity
+    orientation
+    stamina
+    role
+    current_action
+    tactical_target
+
+teams:
+    possession_state
+    tactical_phase
+    shape
+```
+
+---
+
+# 22. PITCH MODEL
+
+Internal pitch:
+
+```text
+105m × 68m
+```
+
+Coordinate convention:
+
+```text
+x = length
+y = width
+```
+
+Normalize if required:
+
+```text
+0.0–1.0
+```
+
+Renderer converts coordinates to screen space.
+
+Simulation must not know screen resolution.
+
+---
+
+# 23. MATCH SIMULATION FREQUENCY
+
+Use different update frequencies.
+
+Movement:
+
+```text
+10–20 simulation ticks/sec
+```
+
+Decision evaluation:
+
+```text
+2–5 times/sec depending on possession
+```
+
+High-level tactical calculations:
+
+```text
+1–2 times/sec
+```
+
+No reason to execute expensive strategic calculations every frame.
+
+---
+
+# 24. PLAYER DECISION ENGINE
+
+A player evaluates candidate actions.
+
+Example:
+
+```text
+PASS
+DRIBBLE
+SHOOT
+CROSS
+CLEAR
+HOLD
+RECYCLE
+THROUGH_BALL
+```
+
+Each candidate receives:
+
+```text
+utility(action) =
+technical_score
++ spatial_score
++ tactical_score
++ mental_score
++ player_trait_score
++ game_context_score
+- risk_score
+```
+
+Then choose probabilistically.
+
+Do not simply select maximum utility.
+
+Use a softmax-like model.
+
+This produces variation without pure randomness.
+
+---
+
+# 25. PASS MODEL
+
+Pass difficulty considers:
+
+```text
+distance
+angle
+pressure
+receiver movement
+ball velocity
+passing lane
+weak foot
+body orientation
+weather
+```
+
+Player ability:
+
+```text
+passing
+technique
+vision
+decisions
+composure
+```
+
+Opposition:
+
+```text
+marking
+positioning
+anticipation
+pace
+pressing pressure
+```
+
+---
+
+# 26. PASS OUTCOMES
+
+Possible states:
+
+```text
+successful
+slightly_misplaced
+intercepted
+blocked
+out_of_play
+receiver_loses_control
+```
+
+The engine must preserve distinction between:
+
+```text
+pass failure
+```
+
+and:
+
+```text
+receiver control failure
+```
+
+because statistics differ.
+
+---
+
+# 27. FIRST-TOUCH MODEL
+
+Uses:
+
+```text
+first_touch
+technique
+composure
+pressure
+pass_speed
+pass_accuracy
+body_orientation
+```
+
+Poor first touch can:
+
+```text
+slow attack
+move ball away
+allow interception
+lose possession
+```
+
+---
+
+# 28. DRIBBLING MODEL
+
+Attacker:
+
+```text
+dribbling
+technique
+agility
+acceleration
+flair
+balance
+```
+
+Defender:
+
+```text
+tackling
+anticipation
+agility
+positioning
+strength
+```
+
+Context:
+
+```text
+space
+direction
+speed
+support
+defensive cover
+```
+
+---
+
+# 29. SHOOTING MODEL
+
+First calculate shot quality.
+
+Inputs:
+
+```text
+distance
+angle
+defender pressure
+goalkeeper positioning
+body orientation
+ball height
+preferred foot
+shot type
+```
+
+Produces:
+
+```text
+base_xG
+```
+
+Then player execution uses:
+
+```text
+finishing
+composure
+technique
+balance
+fatigue
+```
+
+Goalkeeper response:
+
+```text
+reflexes
+positioning
+one_on_ones
+agility
+anticipation
+```
+
+---
+
+# 30. IMPORTANT SHOOTING RULE
+
+Finishing should primarily affect **execution**, not create impossible xG.
+
+A 20-finishing striker taking a shot from 35 metres should not have an excellent scoring probability.
+
+Similarly:
+
+A mediocre striker receiving a tap-in should still have a high chance.
+
+---
+
+# 31. HEADING
+
+Inputs:
+
+```text
+jumping
+height
+heading
+strength
+bravery
+position
+cross_quality
+opponent_pressure
+```
+
+Height is not interchangeable with jumping reach.
+
+---
+
+# 32. DEFENDING
+
+Defenders continuously evaluate:
+
+```text
+mark player
+cover space
+press
+track run
+intercept
+tackle
+hold line
+```
+
+Tactical instructions modify priorities.
+
+---
+
+# 33. PRESSING
+
+Press trigger score:
+
+```text
+team_press_intensity
++ player_work_rate
++ aggression
++ tactical_role
++ trigger_context
+- fatigue
+```
+
+Triggers include:
+
+```text
+bad touch
+backward pass
+isolated receiver
+touchline trap
+weak-foot reception
+```
+
+---
+
+# 34. TACKLES
+
+Outcome depends upon:
+
+```text
+tackling
+timing
+decisions
+aggression
+speed differential
+ball position
+opponent dribbling
+```
+
+Possible outcomes:
+
+```text
+clean win
+deflection
+failed tackle
+foul
+yellow
+red
+```
+
+Referee profile affects disciplinary outcome.
+
+---
+
+# 35. GOALKEEPER AI
+
+Goalkeepers need their own decision system:
+
+```text
+stay
+rush
+claim
+punch
+catch
+parry
+sweep
+distribute
+```
+
+Sweeper-keeper role changes thresholds.
+
+---
+
+# 36. SET PIECES
+
+v1:
+
+```text
+corners
+free kicks
+penalties
+throw-ins
+kick-offs
+goal kicks
+```
+
+Each set piece uses:
+
+```text
+assigned taker
+target zones
+player duties
+marking scheme
+```
+
+---
+
+# 37. TACTICAL MODEL
+
+Tactic consists of:
+
+```text
+Formation
+Mentality
+Player Roles
+Player Duties
+Team Instructions
+Transition Instructions
+Out-of-Possession Instructions
+Set Pieces
+```
+
+---
+
+# 38. TEAM MENTALITY
+
+Possible:
+
+```text
+Very Defensive
+Defensive
+Cautious
+Balanced
+Positive
+Attacking
+Very Attacking
+```
+
+Mentality modifies risk thresholds rather than providing arbitrary attribute boosts.
+
+---
+
+# 39. IN-POSSESSION TACTICS
+
+```text
+width
+tempo
+passing_directness
+build_from_back
+overlap_left
+overlap_right
+underlap_left
+underlap_right
+crossing_style
+creative_freedom
+time_wasting
+final_third_risk
+```
+
+---
+
+# 40. TRANSITION TACTICS
+
+```text
+counterpress
+regroup
+
+counter
+hold_shape
+
+GK:
+short_distribution
+long_distribution
+target_centrebacks
+target_fullbacks
+target_playmaker
+target_forward
+```
+
+---
+
+# 41. OUT-OF-POSSESSION
+
+```text
+defensive_line
+engagement_line
+pressing_intensity
+defensive_width
+offside_trap
+marking_style
+tackling_intensity
+pressing_traps
+```
+
+---
+
+# 42. PLAYER ROLES
+
+Roles should be data-driven.
+
+Example:
+
+```text
+AdvancedForward
+```
+
+defines:
+
+```text
+starting_position
+movement_bias
+run_frequency
+pressing_bias
+passing_risk
+shooting_bias
+support_distance
+```
+
+Adding a new role should primarily require data, not rewriting match logic.
+
+---
+
+# 43. TACTICAL FAMILIARITY
+
+Track:
+
+```text
+formation
+role
+pressing
+tempo
+passing_style
+defensive_shape
+```
+
+0–100.
+
+Training increases familiarity.
+
+Radical tactical changes temporarily reduce coordination.
+
+---
+
+# 44. MATCH FITNESS
+
+During match:
+
+```text
+stamina decreases according to:
+
+distance
+sprints
+pressing
+duels
+weather
+player stamina
+natural fitness
+match intensity
+```
+
+Fatigue reduces:
+
+```text
+acceleration
+decision speed
+pressing effort
+technical execution
+concentration
+```
+
+---
+
+# 45. MATCH STATISTICS
+
+Generate directly:
+
+```text
+possession
+passes
+completed passes
+progressive passes
+key passes
+crosses
+shots
+shots on target
+xG
+xA
+touches
+tackles
+interceptions
+clearances
+blocks
+headers
+pressures
+offsides
+fouls
+cards
+distance
+sprints
+```
+
+---
+
+# 46. PLAYER RATINGS
+
+Start:
+
+```text
+6.5
+```
+
+Evaluation must depend upon role.
+
+Central defender:
+
+```text
+duels
+interceptions
+mistakes
+passing
+positioning
+goals conceded responsibility
+```
+
+Striker:
+
+```text
+shots
+xG
+finishing
+link play
+chance creation
+pressing
+goals
+```
+
+Goalkeeper:
+
+```text
+post-shot xG
+saves
+cross claims
+distribution
+mistakes
+```
+
+Never excessively reward goals regardless of role.
+
+---
+
+# 47. MATCH EVENT LOG
+
+Example:
+
+```json
+{
+  "time": 4312,
+  "type": "shot",
+  "player": "uuid",
+  "x": 87.2,
+  "y": 31.8,
+  "xg": 0.37,
+  "body_part": "right_foot",
+  "outcome": "saved"
+}
+```
+
+The 2D renderer should replay the same event stream.
+
+---
+
+# 48. DETERMINISM
+
+Every simulation receives a seed.
+
+```text
+World seed
+Season seed
+Match seed
+Youth-generation seed
+```
+
+Random generation must use controlled RNG instances.
+
+Never scatter uncontrolled random calls throughout code.
+
+Bug report:
+
+```text
+match_seed = 827183927
+```
+
+must reproduce the same simulation.
+
+---
+
+# 49. COMPETITION ENGINE
+
+Competitions use rules instead of specialized code.
+
+Competition definition:
+
+```text
+team_count
+group_count
+round_robin_count
+points_win
+points_draw
+promotion
+relegation
+qualification
+tie_breakers
+extra_time
+penalties
+registration_rules
+foreign_player_rules
+```
+
+---
+
+# 50. SCHEDULING ENGINE
+
+Constraints include:
+
+```text
+venue conflicts
+minimum rest
+continental matches
+international windows
+cup rounds
+weather
+season boundaries
+```
+
+Fixture generator should support rescheduling.
+
+---
+
+# 51. LEAGUE TABLE
+
+Tie-breakers must be configurable:
+
+```text
+points
+goal_difference
+goals_scored
+head_to_head
+wins
+playoff
+```
+
+Never assume every league uses the same rules.
+
+---
+
+# 52. TRANSFER MARKET
+
+Player valuation is not a fixed formula exposed to clubs.
+
+Estimated market value considers:
+
+```text
+ability
+potential
+age
+position
+form
+contract length
+league reputation
+club reputation
+player reputation
+nationality
+scarcity
+economic environment
+```
+
+Actual asking price additionally considers:
+
+```text
+seller finances
+replacement availability
+player happiness
+importance
+transfer deadline proximity
+buyer wealth
+rivalry
+```
+
+---
+
+# 53. AI SQUAD PLANNER
+
+Every AI club maintains depth requirements.
+
+Example:
+
+```text
+GK: 3
+CB: 4
+FB/WB: 4
+DM/CM: 5
+AM/W: 5
+ST: 3
+```
+
+Requirements depend upon manager formation.
+
+---
+
+# 54. SQUAD NEED SCORE
+
+Example:
+
+```text
+Need =
+DepthDeficit × 3
++ StarterQualityGap × 2
++ AgingRisk
++ InjuryRisk
++ ContractRisk
+```
+
+AI only searches positions with meaningful need unless exceptional opportunities arise.
+
+---
+
+# 55. AI TRANSFER PROCESS
+
+```text
+Analyse squad
+↓
+Identify need
+↓
+Build player profile
+↓
+Search known database
+↓
+Request scouting
+↓
+Create shortlist
+↓
+Estimate affordability
+↓
+Estimate interest
+↓
+Bid
+↓
+Negotiate
+↓
+Contract
+```
+
+AI must not magically know every player's attributes.
+
+---
+
+# 56. AI MANAGER PROFILE
+
+```text
+preferred_formations
+pressing
+tempo
+risk
+directness
+possession
+width
+youth_preference
+rotation
+discipline
+adaptability
+transfer_preferences
+```
+
+Managers modify clubs.
+
+Clubs should not completely overwrite managers.
+
+This creates tension between:
+
+```text
+club identity
+```
+
+and:
+
+```text
+manager philosophy
+```
+
+---
+
+# 57. AI LINEUP SELECTION
+
+Player suitability:
+
+```text
+role_ability
+× condition
+× tactical_familiarity
+× form
+× manager_preference
+× match_context
+```
+
+Also consider:
+
+```text
+rotation
+injury risk
+future fixtures
+competition priority
+```
+
+---
+
+# 58. AI SUBSTITUTIONS
+
+Triggers:
+
+```text
+injury
+fatigue
+poor performance
+yellow card
+score state
+tactical mismatch
+time remaining
+```
+
+Managers should behave differently.
+
+A conservative manager at 1–0 may reinforce defence.
+
+An aggressive manager losing 0–1 may add attackers.
+
+---
+
+# 59. SCOUTING
+
+Knowledge is imperfect.
+
+Unknown attribute:
+
+```text
+Passing: ?
+```
+
+Initial assessment:
+
+```text
+Passing: 9–16
+```
+
+Better scouting:
+
+```text
+Passing: 13–15
+```
+
+Full knowledge:
+
+```text
+Passing: 14
+```
+
+Accuracy depends on:
+
+```text
+scout judgment
+assignment duration
+match observation
+region knowledge
+player reputation
+```
+
+---
+
+# 60. WORLD KNOWLEDGE
+
+Each club has knowledge by:
+
+```text
+country
+competition
+club
+player
+```
+
+Knowledge decays.
+
+Signing international scouts expands coverage.
+
+---
+
+# 61. CONTRACTS
+
+Support:
+
+```text
+base wage
+signing bonus
+appearance bonus
+goal bonus
+assist bonus
+clean-sheet bonus
+competition bonus
+release clauses
+extension options
+promotion wage rise
+relegation wage drop
+```
+
+---
+
+# 62. PLAYER INTEREST
+
+Interest depends upon:
+
+```text
+club reputation
+league reputation
+wages
+playing time
+manager reputation
+country preference
+adaptability
+ambition
+existing relationships
+continental football
+```
+
+A superstar should refuse a tiny club simply because it can somehow afford him.
+
+---
+
+# 63. CLUB FINANCE
+
+Track separate accounts:
+
+```text
+cash
+transfer_budget
+wage_budget
+debt
+receivables
+payables
+```
+
+Income:
+
+```text
+tickets
+broadcasting
+sponsorship
+merchandise
+prize money
+transfers
+continental football
+```
+
+Expenses:
+
+```text
+wages
+staff wages
+bonuses
+transfers
+facilities
+stadium
+scouting
+youth system
+debt service
+```
+
+---
+
+# 64. FINANCIAL AI
+
+Clubs have policies:
+
+```text
+conservative
+balanced
+ambitious
+reckless
+```
+
+They should not all spend identically.
+
+Board may intervene when finances deteriorate.
+
+---
+
+# 65. CLUB REPUTATION
+
+Dynamic:
+
+```text
+domestic_reputation
+continental_reputation
+global_reputation
+```
+
+Results change reputation gradually.
+
+One upset must not transform a tiny club overnight.
+
+---
+
+# 66. LEAGUE REPUTATION
+
+Inputs:
+
+```text
+continental results
+club reputation
+player quality
+manager quality
+international interest
+finances
+attendance
+```
+
+This should create long-term mobility.
+
+---
+
+# 67. COUNTRY FOOTBALL STRENGTH
+
+Track:
+
+```text
+football_popularity
+youth_rating
+infrastructure
+coaching_quality
+economic_strength
+league_reputation
+national_team_reputation
+```
+
+These values change slowly over decades.
+
+---
+
+# 68. YOUTH GENERATION
+
+For each new player:
+
+```text
+country
+region
+club
+position
+physical profile
+technical profile
+personality
+potential
+family name
+preferred foot
+```
+
+Potential distribution should have a long tail.
+
+Most players:
+
+```text
+ordinary
+```
+
+Few:
+
+```text
+excellent
+```
+
+Extremely few:
+
+```text
+generational
+```
+
+---
+
+# 69. YOUTH QUALITY
+
+Concept:
+
+```text
+TalentProbability =
+CountryYouthRating
+× ClubYouthRecruitment
+× AcademyQuality
+× PopulationFactor
+× FootballPopularity
+× random_distribution
+```
+
+Never guarantee elite prospects to elite clubs.
+
+---
+
+# 70. RETIREMENT
+
+Retirement probability:
+
+```text
+age
+ability
+club level
+fitness
+injuries
+contract
+motivation
+personality
+```
+
+Retired players may become:
+
+```text
+manager
+assistant
+coach
+scout
+director
+agent
+```
+
+---
+
+# 71. STAFF DEVELOPMENT
+
+Staff ability changes with:
+
+```text
+experience
+courses
+reputation
+performance
+age
+```
+
+A former player does not automatically become a good manager.
+
+---
+
+# 72. BOARD SYSTEM
+
+Board evaluates:
+
+```text
+results
+finances
+objectives
+playing style
+youth usage
+transfers
+fan sentiment
+```
+
+Board confidence:
+
+```text
+0–100
+```
+
+Short-term and long-term expectations differ.
+
+---
+
+# 73. SUPPORTER MODEL
+
+Track:
+
+```text
+size
+loyalty
+patience
+passion
+expectation
+wealth
+```
+
+Supporter confidence reacts to:
+
+```text
+results
+manager
+transfers
+ticket prices
+rivals
+club direction
+```
+
+---
+
+# 74. ATTENDANCE
+
+Concept:
+
+```text
+attendance =
+supporter_base
+× club_form
+× opposition_interest
+× competition_importance
+× rivalry
+× ticket_affordability
+× weather
+```
+
+Capped by stadium capacity.
+
+---
+
+# 75. FACILITIES
+
+```text
+training
+youth_training
+youth_recruitment
+sports_science
+medical
+scouting
+```
+
+Ratings:
+
+```text
+1–20
+```
+
+Upgrades cost money and time.
+
+---
+
+# 76. STADIUM SYSTEM
+
+Fields:
+
+```text
+capacity
+seated_capacity
+corporate_capacity
+pitch_quality
+roof
+location
+ownership
+expansion_capacity
+```
+
+Clubs may:
+
+```text
+expand
+renovate
+relocate
+build new stadium
+```
+
+---
+
+# 77. INJURY ENGINE
+
+Risk:
+
+```text
+BaseRisk
+× InjuryProneness
+× Fatigue
+× MatchIntensity
+× TrainingLoad
+× Age
+× Surface
+× PreviousInjuryModifier
+```
+
+Injuries must have:
+
+```text
+type
+severity
+estimated recovery
+recurrence risk
+rehabilitation stage
+```
+
+---
+
+# 78. MEDICAL UNCERTAINTY
+
+Do not give perfect recovery dates.
+
+Example:
+
+```text
+Expected:
+3–5 weeks
+```
+
+Better medical staff narrow uncertainty.
+
+---
+
+# 79. TRAINING
+
+Weekly schedule contains sessions:
+
+```text
+recovery
+physical
+technical
+attacking
+defending
+possession
+tactical
+set_piece
+match_preparation
+rest
+```
+
+Training affects:
+
+```text
+development
+fitness
+fatigue
+morale
+injury risk
+tactical familiarity
+```
+
+---
+
+# 80. INDIVIDUAL TRAINING
+
+Player chooses:
+
+```text
+role training
+position training
+attribute focus
+trait development
+```
+
+Excessive workload produces penalties.
+
+---
+
+# 81. MORALE
+
+Morale changes from:
+
+```text
+results
+playing time
+contracts
+manager treatment
+relationships
+training
+transfers
+media
+club performance
+```
+
+Do not reset morale each season.
+
+---
+
+# 82. HAPPINESS
+
+Separate categories:
+
+```text
+playing_time
+contract
+training
+manager
+club_performance
+squad_harmony
+transfer_status
+```
+
+Overall happiness aggregates them.
+
+This allows:
+
+> Happy with club but unhappy with playing time.
+
+---
+
+# 83. NEWS SYSTEM
+
+Events emit structured data.
+
+Example:
+
+```text
+PLAYER_SIGNED
+player
+old_club
+new_club
+fee
+date
+```
+
+News renderer applies templates.
+
+The simulation event exists independently of its article.
+
+---
+
+# 84. EVENT BUS
+
+Core events:
+
+```text
+MATCH_FINISHED
+GOAL_SCORED
+PLAYER_INJURED
+PLAYER_SIGNED
+CONTRACT_SIGNED
+MANAGER_FIRED
+MANAGER_HIRED
+PLAYER_RETIRED
+YOUTH_INTAKE
+CLUB_PROMOTED
+CLUB_RELEGATED
+COMPETITION_WON
+RECORD_BROKEN
+```
+
+Systems subscribe rather than being tightly coupled.
+
+---
+
+# 85. HISTORY
+
+Store permanent significant achievements.
+
+Player history:
+
+```text
+season
+club
+appearances
+starts
+goals
+assists
+rating
+```
+
+Club history:
+
+```text
+league finish
+cup performance
+manager
+revenue
+attendance
+```
+
+Competition:
+
+```text
+winner
+runner-up
+top scorer
+best player
+records
+```
+
+---
+
+# 86. LEGENDS
+
+Club legend score:
+
+```text
+appearances
+goals
+trophies
+captaincy
+club tenure
+important goals
+loyalty
+fan popularity
+```
+
+Thresholds:
+
+```text
+Favoured
+Icon
+Legend
+```
+
+---
+
+# 87. DYNAMIC RIVALRIES
+
+Rivalry changes from:
+
+```text
+geography
+historic rivalry
+title races
+cup finals
+controversial matches
+player transfers
+frequency of important meetings
+```
+
+New rivalries can emerge.
+
+---
+
+# 88. SAVE FORMAT
+
+Save folder:
+
+```text
+save_name/
+
+world.db
+metadata.json
+thumbnail.png
+```
+
+Metadata:
+
+```json
+{
+  "version": "1.0.0",
+  "manager": "...",
+  "club": "...",
+  "date": "...",
+  "playtime": 12345,
+  "database_version": 7
+}
+```
+
+---
+
+# 89. DATABASE MIGRATIONS
+
+Every schema modification requires:
+
+```text
+migration_001
+migration_002
+migration_003
+```
+
+Never tell users:
+
+> Start a new save.
+
+unless fundamentally unavoidable.
+
+---
+
+# 90. AUTOSAVE
+
+Support:
+
+```text
+weekly
+monthly
+after match
+rolling 3 files
+rolling 5 files
+manual only
+```
+
+Autosaves are written atomically:
+
+```text
+temporary save
+↓
+validation
+↓
+rename
+```
+
+Never overwrite a valid save before new data is confirmed.
+
+---
+
+# 91. SIMULATION TIERS
+
+## Tier 1: User league
+
+Full match simulation.
+
+## Tier 2: Detailed leagues
+
+Simplified event simulation.
+
+## Tier 3: Background leagues
+
+Statistical simulation.
+
+## Tier 4: Inactive world
+
+Periodic aggregate updates.
+
+This is necessary for performance.
+
+---
+
+# 92. THREADING MODEL
+
+Main thread:
+
+```text
+UI
+scene tree
+input
+rendering
+```
+
+Worker jobs:
+
+```text
+background matches
+player development
+scouting updates
+AI analysis
+world calculations
+```
+
+Workers operate on isolated/plain data.
+
+Results return through safe queues.
+
+Worker threads must not directly manipulate active UI scenes.
+
+---
+
+# 93. NATIVE OPTIMIZATION
+
+Start in GDScript.
+
+Profile first.
+
+Only migrate demonstrated hotspots.
+
+Candidates:
+
+```text
+spatial queries
+movement calculations
+mass match simulation
+large statistical loops
+pathfinding
+```
+
+GDExtension allows native libraries to extend Godot without compiling a custom engine build.
+
+---
+
+# 94. PERFORMANCE TARGETS
+
+Recommended hardware target:
+
+```text
+4-core CPU
+8 GB RAM
+integrated graphics
+```
+
+Goals:
+
+```text
+UI: 60 FPS
+
+2D match:
+60 FPS rendering
+
+World advance:
+<2 seconds typical day
+
+Match simulation:
+significantly faster than real time
+
+Save:
+<5 seconds typical database
+```
+
+---
+
+# 95. INITIAL DATABASE SCALE
+
+Version 1:
+
+```text
+20 countries
+500–800 clubs
+20,000–30,000 players
+3,000 staff
+60–100 competitions
+```
+
+Architecture target:
+
+```text
+150,000+ people
+5,000+ clubs
+100+ countries
+```
+
+Don't ship maximum scale first.
+
+---
+
+# 96. USER INTERFACE
+
+Global left navigation:
+
+```text
+Home
+
+Inbox
+
+Squad
+Dynamics
+Tactics
+Training
+Medical
+
+Schedule
+Competitions
+
+Scouting
+Transfers
+
+Staff
+
+Finances
+Club
+
+World
+```
+
+Top bar:
+
+```text
+date
+club
+search
+continue
+```
+
+---
+
+# 97. DASHBOARD
+
+Manager home:
+
+```text
+Next Match
+
+League Position
+
+Recent Results
+
+Upcoming Fixtures
+
+Squad Morale
+
+Injuries
+
+Board Confidence
+
+Transfer Activity
+
+Inbox
+
+Financial Snapshot
+```
+
+No duplicated information.
+
+No meaningless cards.
+
+---
+
+# 98. PLAYER PROFILE
+
+Tabs:
+
+```text
+Overview
+Attributes
+Performance
+Development
+Contract
+Medical
+History
+Relationships
+Reports
+```
+
+Header:
+
+```text
+Name
+Age
+Nationality
+Positions
+Value
+Wage
+Contract
+Morale
+Condition
+```
+
+---
+
+# 99. SQUAD SCREEN
+
+Table customization:
+
+```text
+name
+position
+age
+condition
+sharpness
+morale
+form
+appearances
+goals
+assists
+rating
+value
+contract
+```
+
+Support:
+
+```text
+sort
+filter
+search
+saved views
+```
+
+---
+
+# 100. TACTICS SCREEN
+
+Interactive pitch.
+
+Drag player into slot.
+
+Select:
+
+```text
+role
+duty
+individual instructions
+```
+
+Side panel:
+
+```text
+team instructions
+```
+
+Tactical issues should be communicated clearly.
+
+Example:
+
+> Left flank may be vulnerable during transitions.
+
+---
+
+# 101. MATCH VIEWER
+
+Modes:
+
+```text
+Full match
+Comprehensive
+Extended
+Key
+Goals
+Instant
+```
+
+Display:
+
+```text
+2D pitch
+score
+clock
+possession
+shots
+xG
+player condition
+match ratings
+commentary
+tactical controls
+```
+
+---
+
+# 102. DATA ANALYSIS
+
+After match:
+
+```text
+xG timeline
+shot map
+average positions
+passing network
+heat maps
+possession zones
+player statistics
+```
+
+All generated from actual match events.
+
+---
+
+# 103. SEARCH
+
+Universal search must find:
+
+```text
+players
+clubs
+competitions
+countries
+staff
+```
+
+Search indexing should avoid querying entire DB character-by-character.
+
+---
+
+# 104. MODDING
+
+External database packages should eventually support:
+
+```text
+clubs
+players
+competitions
+rules
+countries
+names
+graphics
+kits
+logos
+```
+
+Game logic must not depend on licensed names.
+
+---
+
+# 105. DATABASE EDITOR
+
+Eventually ship an editor supporting:
+
+```text
+create club
+edit club
+create player
+edit player
+create competition
+change rules
+edit country
+validate database
+```
+
+Validation is essential.
+
+---
+
+# 106. TESTING PHILOSOPHY
+
+A feature is incomplete until it has:
+
+```text
+specification
+implementation
+unit tests
+integration tests
+simulation validation
+acceptance criteria
+```
+
+---
+
+# 107. UNIT TESTS
+
+Examples:
+
+```text
+player age calculation
+contract expiry
+league points
+goal difference
+injury recovery
+value calculation
+training calculation
+registration
+relegation
+promotion
+```
+
+---
+
+# 108. MATCH INVARIANTS
+
+Tests must guarantee:
+
+```text
+11 maximum active players per side
+
+substituted player cannot return unless rules permit
+
+red-carded player cannot act
+
+ball has one state
+
+goal only counts legally
+
+match clock cannot reverse
+
+penalty shootout resolves winner
+
+substitution count obeys competition rules
+```
+
+---
+
+# 109. ECONOMIC INVARIANTS
+
+Examples:
+
+```text
+money cannot disappear without ledger entry
+
+transfer installments balance
+
+wages are paid once
+
+prize money paid once
+
+loan fees counted correctly
+```
+
+Use a financial ledger.
+
+Do not merely mutate cash balances.
+
+---
+
+# 110. TRANSFER AI TESTS
+
+Automatically create scenarios:
+
+```text
+club has no goalkeeper
+club needs striker
+club over wage budget
+club has aging squad
+club receives huge offer
+```
+
+Verify sensible responses.
+
+---
+
+# 111. MATCH BALANCING HARNESS
+
+Run:
+
+```text
+100,000 simulated matches
+```
+
+Analyse:
+
+```text
+goals
+shots
+xG
+possession
+passes
+cards
+penalties
+fouls
+corners
+home advantage
+```
+
+Compare distributions with realistic football ranges.
+
+Do not tune based on five matches.
+
+---
+
+# 112. TACTICAL TESTING
+
+Play identical teams repeatedly using:
+
+```text
+high press vs low block
+possession vs direct
+narrow vs wide
+high line vs deep line
+```
+
+Check that tactical differences appear statistically.
+
+No tactic should simply provide a universal numerical bonus.
+
+---
+
+# 113. ATTRIBUTE SENSITIVITY
+
+Create identical players except:
+
+```text
+Finishing 40
+vs
+Finishing 90
+```
+
+Simulate thousands of shots.
+
+Verify meaningful but realistic difference.
+
+Repeat for every important attribute.
+
+This prevents attributes becoming cosmetic.
+
+---
+
+# 114. 100-YEAR SOAK TEST
+
+Automatically simulate:
+
+```text
+100 full seasons
+```
+
+Check every decade.
+
+Metrics:
+
+```text
+population
+age distribution
+average CA
+average PA
+wages
+transfer fees
+club cash
+league reputation
+goals
+injuries
+retirement
+youth generation
+```
+
+---
+
+# 115. WORLD HEALTH ASSERTIONS
+
+Flag:
+
+```text
+clubs with no goalkeeper
+clubs with zero players
+clubs with 100 players
+competitions missing fixtures
+negative age
+500-year contracts
+impossible wages
+runaway inflation
+no youth players
+no retiring players
+identical league winners repeatedly
+```
+
+---
+
+# 116. SAVE/LOAD TESTING
+
+Critical test:
+
+```text
+simulate world
+↓
+save
+↓
+load
+↓
+continue simulation
+```
+
+Compare against uninterrupted deterministic run.
+
+State must match.
+
+---
+
+# 117. PERFORMANCE TESTING
+
+Benchmark:
+
+```text
+1 match
+100 matches
+1 day
+1 week
+1 month
+1 season
+10 seasons
+100 seasons
+```
+
+Record:
+
+```text
+CPU
+memory
+database size
+elapsed time
+```
+
+Performance regressions should fail CI beyond tolerance.
+
+---
+
+# 118. CI PIPELINE
+
+Every pull request:
+
+```text
+format/lint
+↓
+unit tests
+↓
+integration tests
+↓
+deterministic simulation tests
+↓
+headless Godot tests
+↓
+build
+```
+
+Main branch:
+
+```text
+additional simulation tests
+```
+
+Nightly/manual:
+
+```text
+100k matches
+100-year soak
+performance benchmark
+```
+
+CI must never automatically rewrite source code to make tests pass.
+
+---
+
+# 119. LOGGING
+
+Structured categories:
+
+```text
+MATCH
+AI
+TRANSFER
+DATABASE
+FINANCE
+SAVE
+COMPETITION
+WORLD
+PERFORMANCE
+```
+
+Example:
+
+```text
+[MATCH][seed=819271][player=uuid]
+Shot resolved xG=0.27 outcome=saved
+```
+
+Allow developer logging to be disabled in release builds.
+
+---
+
+# 120. DEBUGGER TOOLS
+
+Create internal tools early.
+
+## Match debugger
+
+Shows:
+
+```text
+coordinates
+player decision
+action utilities
+tactical role
+pressure
+target
+ball state
+```
+
+## AI debugger
+
+Shows:
+
+```text
+squad needs
+transfer shortlist
+evaluation score
+rejection reason
+```
+
+## Economy inspector
+
+Shows:
+
+```text
+club cash
+revenue
+expenses
+inflation
+```
+
+These tools will save months of debugging.
+
+---
+
+# 121. CODING STANDARDS
+
+Maximum file responsibility should remain narrow.
+
+Avoid:
+
+```text
+GameManager.gd
+15,000 lines
+```
+
+Prefer:
+
+```text
+MatchController
+PassResolver
+ShotResolver
+MovementSystem
+TransferEvaluator
+FinanceLedger
+```
+
+---
+
+# 122. DEPENDENCY DIRECTION
+
+Allowed:
+
+```text
+UI → Application → Domain → Data Interface
+```
+
+Forbidden:
+
+```text
+Domain → UI
+```
+
+The match engine must have no dependency on the match viewer.
+
+---
+
+# 123. AI CODING AGENT RULES
+
+Every AI agent receives these rules:
+
+1. Read relevant specification before changing code.
+2. Inspect existing implementation before creating anything.
+3. Do not duplicate an existing system.
+4. Never modify architecture merely to make one feature easier.
+5. Do not put business logic in UI.
+6. Do not disable failing tests.
+7. Do not weaken assertions.
+8. Do not replace deterministic behaviour with uncontrolled randomness.
+9. Add tests for new behaviour.
+10. Run applicable tests before completion.
+11. Document database migrations.
+12. Preserve backward-compatible saves where practical.
+13. No placeholder implementation may be described as complete.
+14. Do not silently catch exceptions.
+15. Do not commit generated junk files.
+16. Do not rewrite unrelated files.
+
+---
+
+# 124. DEFINITION OF DONE
+
+A feature is complete only when:
+
+```text
+implementation works
+tests pass
+no known crash path
+save/load supported
+UI state refreshes correctly
+error handling exists
+performance acceptable
+documentation updated
+```
+
+---
+
+# 125. DEVELOPMENT PHASE 0 — FOUNDATION
+
+Build only:
+
+```text
+repository structure
+Godot project
+testing framework
+CI
+logging
+RNG system
+SQLite layer
+migration system
+event bus
+basic domain models
+```
+
+Acceptance:
+
+```text
+empty project starts
+headless tests run
+DB creates
+DB migrates
+save can be created
+deterministic RNG verified
+```
+
+---
+
+# 126. PHASE 1 — WORLD MODEL
+
+Implement:
+
+```text
+countries
+clubs
+players
+staff
+competitions
+calendar
+fixtures
+league tables
+basic contracts
+```
+
+Acceptance:
+
+> Generate a new world and inspect all entities without UI corruption or broken references.
+
+---
+
+# 127. PHASE 2 — ABSTRACT MATCH ENGINE
+
+Before 2D movement, create a high-level engine.
+
+Implement:
+
+```text
+lineups
+possession sequences
+passes
+shots
+goals
+cards
+substitutions
+ratings
+statistics
+```
+
+Acceptance:
+
+```text
+100,000 matches
+```
+
+produce believable statistical distributions.
+
+---
+
+# 128. PHASE 3 — SEASON SIMULATION
+
+Implement:
+
+```text
+calendar advance
+league matches
+cups
+tables
+promotion
+relegation
+champions
+records
+```
+
+Acceptance:
+
+```text
+10 seasons unattended
+```
+
+without corruption.
+
+---
+
+# 129. PHASE 4 — PLAYER LIFECYCLE
+
+Implement:
+
+```text
+training
+development
+aging
+decline
+injuries
+youth
+retirement
+staff conversion
+```
+
+Acceptance:
+
+```text
+50-year world
+```
+
+maintains healthy player population.
+
+---
+
+# 130. PHASE 5 — TRANSFERS
+
+Implement:
+
+```text
+AI squad planning
+scouting
+valuation
+bids
+negotiation
+contracts
+loans
+free agents
+```
+
+Acceptance:
+
+AI squads remain structurally sensible for:
+
+```text
+20 simulated seasons.
+```
+
+---
+
+# 131. PHASE 6 — ECONOMY
+
+Implement:
+
+```text
+club accounts
+budgets
+wages
+tickets
+sponsors
+prize money
+TV
+facilities
+stadiums
+```
+
+Acceptance:
+
+100-year test shows no uncontrolled economic explosion or collapse.
+
+---
+
+# 132. PHASE 7 — TACTICS
+
+Implement:
+
+```text
+formations
+roles
+duties
+team instructions
+familiarity
+AI manager philosophies
+```
+
+Acceptance:
+
+Different tactical systems produce measurable stylistic differences.
+
+---
+
+# 133. PHASE 8 — SPATIAL MATCH ENGINE
+
+Now upgrade matches to coordinate simulation.
+
+Implement:
+
+```text
+pitch
+player positions
+movement
+space
+marking
+pressing
+passing lanes
+shots
+goalkeeping
+```
+
+Do NOT delete the abstract match tests.
+
+They remain valuable validation.
+
+---
+
+# 134. PHASE 9 — 2D VIEWER
+
+Render spatial simulation:
+
+```text
+pitch
+players
+ball
+passes
+shots
+goals
+highlights
+camera
+commentary
+```
+
+Acceptance:
+
+The visual sequence accurately reflects simulation state.
+
+---
+
+# 135. PHASE 10 — MANAGEMENT UI
+
+Implement:
+
+```text
+dashboard
+inbox
+squad
+player profile
+tactics
+training
+medical
+schedule
+competitions
+scouting
+transfers
+staff
+finances
+club
+world
+```
+
+Keyboard/mouse first.
+
+---
+
+# 136. PHASE 11 — DYNAMICS
+
+Implement:
+
+```text
+morale
+relationships
+hierarchy
+captaincy
+happiness
+manager relationships
+club loyalty
+```
+
+Acceptance:
+
+Changes propagate logically without extreme oscillation.
+
+---
+
+# 137. PHASE 12 — LIVING WORLD
+
+Implement:
+
+```text
+manager hiring/firing
+staff careers
+reputations
+league growth
+country growth
+dynamic rivalries
+club legends
+records
+awards
+news
+```
+
+Acceptance:
+
+50-year save tells recognizably different football history from initial world.
+
+---
+
+# 138. PHASE 13 — MODDING
+
+Implement:
+
+```text
+external DB
+validation
+competition rules
+graphics replacement
+editor
+```
+
+Core game should remain functional with default fictional database.
+
+---
+
+# 139. PHASE 14 — POLISH
+
+Focus exclusively on:
+
+```text
+UX
+tutorial
+loading
+animations
+audio
+accessibility
+performance
+crashes
+localization
+save stability
+```
+
+Do not add giant new systems during polishing.
+
+---
+
+# 140. VERSION 0.1 TARGET
+
+Not public release.
+
+Contains:
+
+```text
+4 countries
+80 clubs
+2,000 players
+leagues
+fixtures
+basic matches
+tables
+save/load
+```
+
+Purpose:
+
+architecture verification.
+
+---
+
+# 141. VERSION 0.2
+
+```text
+player development
+contracts
+transfers
+AI squad building
+injuries
+```
+
+---
+
+# 142. VERSION 0.3
+
+```text
+tactics
+player roles
+advanced statistics
+manager AI
+```
+
+---
+
+# 143. VERSION 0.4
+
+```text
+spatial match engine
+2D viewer
+```
+
+---
+
+# 144. VERSION 0.5
+
+First genuinely playable career.
+
+```text
+10 countries
+200 clubs
+8,000 players
+```
+
+---
+
+# 145. VERSION 0.7
+
+Living-world features:
+
+```text
+youth
+retirement
+staff careers
+relationships
+finances
+facilities
+history
+```
+
+---
+
+# 146. VERSION 0.8
+
+Content expansion:
+
+```text
+20 countries
+500+ clubs
+20,000+ players
+continental tournaments
+international football
+```
+
+---
+
+# 147. VERSION 0.9
+
+Feature freeze.
+
+Only:
+
+```text
+bugs
+balance
+performance
+UX
+compatibility
+```
+
+---
+
+# 148. VERSION 1.0
+
+Commercial target:
+
+```text
+20+ nations
+500–800 clubs
+20,000–30,000 players
+
+deep tactics
+2D match engine
+transfers
+scouting
+training
+staff
+finances
+injuries
+dynamics
+youth
+manager careers
+dynamic reputation
+history
+records
+mod support
+```
+
+---
+
+# 149. FEATURES DELIBERATELY EXCLUDED FROM 1.0
+
+Do not build:
+
+```text
+3D match graphics
+multiplayer
+online accounts
+real-money marketplace
+LLM-dependent gameplay
+licensed databases
+mobile version
+cloud saves
+live-service architecture
+```
+
+These dramatically increase risk without improving the core simulation enough.
+
+---
+
+# 150. QUALITY TARGET
+
+The target is NOT:
+
+> Have as many screens as Football Manager.
+
+The target is:
+
+> Every implemented system has enough depth that the player can understand why events occur and exploit football knowledge to make better decisions.
+
+That means:
+
+```text
+less breadth
+more coherence
+```
+
+---
+
+# 151. CORE DIFFERENTIATORS
+
+Football Dynasty should eventually become particularly strong in:
+
+## Living football history
+
+The future football world evolves naturally.
+
+## Long careers
+
+100-season saves remain interesting and stable.
+
+## Dynamic league strength
+
+Countries can rise and decline.
+
+## African football
+
+Africa is treated as a first-class football ecosystem.
+
+## Transparent tactical simulation
+
+Players can understand why their tactic succeeds or fails.
+
+## Modding
+
+Database and competition structure remain highly extensible.
+
+---
+
+# 152. RELEASE GATE
+
+The game cannot be called release-ready until:
+
+```text
+100-year simulation passes
+
+100,000-match validation passes
+
+save corruption tests pass
+
+all competitions complete correctly
+
+AI clubs maintain viable squads
+
+economy remains stable
+
+player population remains stable
+
+no reproducible critical crash
+
+new career works
+
+old save migration works
+
+Windows build passes
+
+install/uninstall passes
+
+offline play passes
+```
+
+---
+
+# 153. DEVELOPMENT PRIORITY
+
+When choosing between:
+
+```text
+a prettier transfer screen
+```
+
+and:
+
+```text
+AI clubs correctly understanding squad weaknesses
+```
+
+build the second.
+
+When choosing between:
+
+```text
+press-conference dialogue
+```
+
+and:
+
+```text
+better player development
+```
+
+build the second.
+
+When choosing between:
+
+```text
+3D stadium
+```
+
+and:
+
+```text
+better match decisions
+```
+
+build the second.
+
+The simulation creates retention.
+
+Presentation helps sell the simulation.
+
+It cannot replace it.
+
+---
+
+# 154. FIRST IMPLEMENTATION EPIC
+
+The very first coding milestone should be:
+
+## EPIC-001 — Deterministic Football World Foundation
+
+Deliverables:
+
+```text
+Godot 4.7 project
+
+core architecture
+
+SQLite access
+
+database migrations
+
+UUID entity IDs
+
+seeded RNG service
+
+World entity
+
+Country entity
+
+Club entity
+
+Player entity
+
+Competition entity
+
+Repository interfaces
+
+event bus
+
+headless testing
+
+structured logging
+```
+
+Automated acceptance:
+
+```text
+Create world using seed 12345.
+
+Generate:
+4 countries
+80 clubs
+2,000 players.
+
+Save database.
+
+Reload database.
+
+Verify entity counts.
+
+Verify foreign keys.
+
+Regenerate world with seed 12345.
+
+Verify generated world equals original.
+
+Generate using seed 54321.
+
+Verify world differs.
+
+Run tests headlessly.
+
+Exit code must equal zero.
+```
+
+Only after this passes should development continue to match simulation.
+
+---
+
+# 155. FINAL ARCHITECTURAL PRINCIPLE
+
+The game should be capable of answering:
+
+> Why did this happen?
+
+If a player develops rapidly:
+
+There should be a reason.
+
+If an AI club signs someone:
+
+There should be a reason.
+
+If a striker misses repeatedly:
+
+There should be measurable reasons.
+
+If a club becomes wealthy:
+
+The money should come from somewhere.
+
+If a league becomes stronger:
+
+Historical events should explain it.
+
+If a team dominates:
+
+Its players, manager, finances and tactics should explain it.
+
+That causal consistency is what will separate Football Dynasty from a shallow AI-generated football manager.
+
+**The world should not pretend to simulate football.**
+
+**The world should actually simulate its own version of football.**
