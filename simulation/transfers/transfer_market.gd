@@ -10,11 +10,13 @@ func player_value(player: Dictionary, season_year: int) -> int:
 	if bool(player.get("retired", false)):
 		return 0
 	var ca: int = int(player.current_ability)
-	var potential: int = int(player.potential)
+	var upside: int = maxi(0, int(player.potential) - ca)
 	var age: int = int(player.age)
 	var peak_factor: float = 1.0 if age <= 28 else maxf(0.35, 1.0 - float(age - 28) * 0.08)
-	var upside: int = maxi(0, potential - ca)
 	return maxi(5_000, int((ca * ca * 700 + upside * 45_000) * peak_factor))
+
+func recommended_wage(player: Dictionary) -> int:
+	return clampi(int(player.current_ability) * int(player.current_ability) * 5, 500, 60_000)
 
 func process_contracts(world: Dictionary, season_year: int, seed: int) -> Dictionary:
 	_ledger.ensure(world)
@@ -27,19 +29,16 @@ func process_contracts(world: Dictionary, season_year: int, seed: int) -> Dictio
 		if player.is_empty() or bool(player.get("retired", false)):
 			continue
 		var club: Dictionary = _find_club(world.clubs, String(contract.club_id))
-		var proposed_wage: int = recommended_wage(player)
-		if int(player.current_ability) >= 45 and proposed_wage <= int(club.wage_budget):
+		var wage: int = recommended_wage(player)
+		if not club.is_empty() and int(player.current_ability) >= 45 and wage <= int(club.wage_budget):
 			contract.start_year = season_year
 			contract.end_year = season_year + 3
-			contract.weekly_wage = proposed_wage
+			contract.weekly_wage = wage
 			renewed.append(String(player.id))
 		else:
 			player.club_id = ""
 			released.append(String(player.id))
 	return {"renewed": renewed, "released": released}
-
-func recommended_wage(player: Dictionary) -> int:
-	return clampi(int(player.current_ability) * int(player.current_ability) * 5, 500, 60_000)
 
 func negotiate_contract(player: Dictionary, club: Dictionary, offered_wage: int, years: int, seed: int) -> bool:
 	if years < 1 or years > 5:
@@ -75,7 +74,7 @@ func execute_loan(world: Dictionary, player_id: String, borrower_id: String, fee
 	_ledger.ensure(world)
 	var player: Dictionary = _find_player(world.players, player_id)
 	var borrower: Dictionary = _find_club(world.clubs, borrower_id)
-	if player.is_empty() or borrower.is_empty() or String(player.club_id) == "":
+	if player.is_empty() or borrower.is_empty() or String(player.get("club_id", "")) == "":
 		return ERR_INVALID_PARAMETER
 	if int(borrower.transfer_budget) < fee:
 		return ERR_UNAVAILABLE
@@ -100,69 +99,91 @@ func return_expired_loans(world: Dictionary, season_year: int) -> int:
 
 func rebalance_ai_squads(world: Dictionary, season_year: int, seed: int, min_squad: int = 20, max_squad: int = 30) -> Dictionary:
 	_ledger.ensure(world)
-	var free_agents: Array = []
-	for player in world.players:
-		if not bool(player.get("retired", false)) and String(player.get("club_id", "")) == "":
-			free_agents.append(player)
+	var free_agents: Array = _free_agents(world.players)
 	var signings := 0
 	var releases := 0
 	for club in world.clubs:
 		var squad: Array = _squad(world.players, String(club.id))
 		while squad.size() > max_squad:
-			var weakest: Dictionary = _weakest(squad)
+			var weakest: Dictionary = _weakest_noncritical(squad)
 			weakest.club_id = ""
 			free_agents.append(weakest)
 			squad.erase(weakest)
 			releases += 1
+		for required_position in ["GK", "DC", "ST"]:
+			if _has_position(squad, required_position):
+				continue
+			var specialist: Dictionary = _best_available_position(free_agents, required_position)
+			if specialist.is_empty():
+				continue
+			if _sign_free_agent(world, specialist, club, season_year):
+				squad.append(specialist)
+				free_agents.erase(specialist)
+				signings += 1
 		while squad.size() < min_squad and not free_agents.is_empty():
 			var target: Dictionary = _best_fit(free_agents, squad)
-			var wage: int = recommended_wage(target)
-			if wage > int(club.wage_budget):
-				free_agents.erase(target)
-				continue
-			target.club_id = String(club.id)
-			_upsert_contract(world, String(target.id), String(club.id), season_year, season_year + 2, wage)
-			squad.append(target)
+			if _sign_free_agent(world, target, club, season_year):
+				squad.append(target)
+				signings += 1
 			free_agents.erase(target)
-			signings += 1
 	return {"signings": signings, "releases": releases, "free_agents": free_agents.size()}
 
 func squad_is_viable(world: Dictionary, club_id: String, min_squad: int = 18) -> bool:
 	var squad: Array = _squad(world.players, club_id)
-	if squad.size() < min_squad:
+	return squad.size() >= min_squad and _has_position(squad, "GK") and _has_position(squad, "DC") and _has_position(squad, "ST")
+
+func _sign_free_agent(world: Dictionary, player: Dictionary, club: Dictionary, season_year: int) -> bool:
+	var wage: int = recommended_wage(player)
+	if wage > int(club.wage_budget):
 		return false
-	var has_gk := false
-	var has_dc := false
-	var has_st := false
+	player.club_id = String(club.id)
+	_upsert_contract(world, String(player.id), String(club.id), season_year, season_year + 2, wage)
+	return true
+
+func _free_agents(players: Array) -> Array:
+	var result: Array = []
+	for player in players:
+		if not bool(player.get("retired", false)) and String(player.get("club_id", "")) == "":
+			result.append(player)
+	return result
+
+func _has_position(squad: Array, position: String) -> bool:
 	for player in squad:
-		has_gk = has_gk or String(player.position) == "GK"
-		has_dc = has_dc or String(player.position) == "DC"
-		has_st = has_st or String(player.position) == "ST"
-	return has_gk and has_dc and has_st
+		if String(player.position) == position:
+			return true
+	return false
+
+func _best_available_position(free_agents: Array, position: String) -> Dictionary:
+	var best: Dictionary = {}
+	for player in free_agents:
+		if String(player.position) != position:
+			continue
+		if best.is_empty() or int(player.current_ability) > int(best.current_ability):
+			best = player
+	return best
 
 func _best_fit(free_agents: Array, squad: Array) -> Dictionary:
-	var need_gk := true
-	var need_dc := true
-	var need_st := true
-	for player in squad:
-		need_gk = need_gk and String(player.position) != "GK"
-		need_dc = need_dc and String(player.position) != "DC"
-		need_st = need_st and String(player.position) != "ST"
 	var best: Dictionary = free_agents[0]
 	var best_score := -99999
 	for player in free_agents:
 		var score: int = int(player.current_ability)
-		if need_gk and String(player.position) == "GK": score += 200
-		if need_dc and String(player.position) == "DC": score += 200
-		if need_st and String(player.position) == "ST": score += 200
+		if not _has_position(squad, String(player.position)):
+			score += 25
 		if score > best_score:
 			best = player
 			best_score = score
 	return best
 
-func _weakest(squad: Array) -> Dictionary:
+func _weakest_noncritical(squad: Array) -> Dictionary:
 	var weakest: Dictionary = squad[0]
 	for player in squad:
+		var position: String = String(player.position)
+		var count := 0
+		for teammate in squad:
+			if String(teammate.position) == position:
+				count += 1
+		if position in ["GK", "DC", "ST"] and count <= 1:
+			continue
 		if int(player.current_ability) < int(weakest.current_ability):
 			weakest = player
 	return weakest
