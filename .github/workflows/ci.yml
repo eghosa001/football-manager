@@ -12,70 +12,110 @@ on:
         default: false
         type: boolean
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Godot 4.7.2
-        uses: chickensoft-games/setup-godot@v2
         with:
-          version: 4.7.2
-          use-dotnet: false
-          include-templates: true
-
-      - name: Verify engine
-        run: godot --version
+          fetch-depth: 1
+          clean: false
 
       - name: Import project
-        run: godot --headless --editor --path . --quit
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
 
       - name: Run Phase 1/2 tests
-        run: godot --headless --path . --script res://tests/test_runner.gd
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/test_runner.gd
 
       - name: Run Phase 3 tests
-        run: godot --headless --path . --script res://tests/phase3_test_runner.gd
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/phase3_test_runner.gd
 
       - name: Run Phase 4/5 tests
-        run: godot --headless --path . --script res://tests/phase45_test_runner.gd
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/phase45_test_runner.gd
 
       - name: Run Phase 6/7 tests
-        run: godot --headless --path . --script res://tests/phase67_test_runner.gd
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/phase67_test_runner.gd
 
       - name: Run Phase 8/9 tests
-        run: godot --headless --path . --script res://tests/phase89_test_runner.gd
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/phase89_test_runner.gd
 
       - name: Run Phase 10/11 tests
-        run: godot --headless --path . --script res://tests/phase1011_test_runner.gd
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/phase1011_test_runner.gd
+
+      - name: Resolve Godot for exports
+        shell: powershell
+        run: |
+          $candidate = $null
+          if ($env:GODOT_EXE -and (Test-Path $env:GODOT_EXE)) { $candidate = $env:GODOT_EXE }
+          elseif ($env:GODOT_PATH -and (Test-Path $env:GODOT_PATH)) { $candidate = $env:GODOT_PATH }
+          else {
+            foreach ($name in @('godot','godot4')) {
+              $cmd = Get-Command $name -ErrorAction SilentlyContinue
+              if ($cmd) { $candidate = $cmd.Source; break }
+            }
+          }
+          if (-not $candidate) { throw 'Godot executable not found for export.' }
+          "GODOT_EXE=$candidate" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $candidate --version
 
       - name: Build Linux release candidate
+        shell: powershell
         run: |
-          mkdir -p build/linux
-          godot --headless --path . --export-release "Linux/X11" build/linux/FootballDynasty.x86_64
-          test -s build/linux/FootballDynasty.x86_64
-          chmod +x build/linux/FootballDynasty.x86_64
-          timeout 30s build/linux/FootballDynasty.x86_64 --headless --quit-after 1
+          New-Item -ItemType Directory -Force -Path build/linux | Out-Null
+          & $env:GODOT_EXE --headless --path . --export-release 'Linux/X11' build/linux/FootballDynasty.x86_64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path build/linux/FootballDynasty.x86_64) -or (Get-Item build/linux/FootballDynasty.x86_64).Length -le 0) { throw 'Linux export missing.' }
 
       - name: Build Windows release candidate
+        shell: powershell
         run: |
-          mkdir -p build/windows
-          godot --headless --path . --export-release "Windows Desktop" build/windows/FootballDynasty.exe
-          test -s build/windows/FootballDynasty.exe
+          New-Item -ItemType Directory -Force -Path build/windows | Out-Null
+          & $env:GODOT_EXE --headless --path . --export-release 'Windows Desktop' build/windows/FootballDynasty.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path build/windows/FootballDynasty.exe) -or (Get-Item build/windows/FootballDynasty.exe).Length -le 0) { throw 'Windows export missing.' }
 
-      - name: Install Godot-SQLite v4.9
+      - name: Smoke-test Windows release
+        shell: powershell
         run: |
-          curl -L --fail --retry 3 https://github.com/2shady4u/godot-sqlite/releases/download/v4.9/addons.zip -o /tmp/godot-sqlite-addons.zip
-          echo "95e91b72fe32984a84edaf6357a78753661f37a170cb362f5b948e0ede7c2cb0  /tmp/godot-sqlite-addons.zip" | sha256sum -c -
-          unzip -q /tmp/godot-sqlite-addons.zip -d .
+          $log = 'build/windows/runtime.log'
+          $proc = Start-Process -FilePath (Resolve-Path 'build/windows/FootballDynasty.exe') -ArgumentList @('--headless','--','--release-smoke') -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError ($log + '.err')
+          if (-not $proc.WaitForExit(180000)) { try { $proc.Kill($true) } catch {}; throw 'Windows release smoke timed out.' }
+          if (Test-Path ($log + '.err')) { Get-Content ($log + '.err') | Add-Content $log }
+          Get-Content $log
+          $text = Get-Content $log -Raw
+          if ($proc.ExitCode -ne 0 -or $text -match 'SCRIPT ERROR:|ERROR:' -or $text -notmatch 'RELEASE SMOKE PASS') { throw 'Windows release smoke failed.' }
+
+      - name: Install Godot-SQLite v4.9 if missing
+        shell: powershell
+        run: |
+          if (Test-Path 'addons/godot-sqlite') { Write-Host 'Godot-SQLite already present; skipping download.'; exit 0 }
+          $zip = Join-Path $env:RUNNER_TEMP 'godot-sqlite-addons.zip'
+          Invoke-WebRequest -Uri 'https://github.com/2shady4u/godot-sqlite/releases/download/v4.9/addons.zip' -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '95e91b72fe32984a84edaf6357a78753661f37a170cb362f5b948e0ede7c2cb0') { throw 'Godot-SQLite checksum mismatch.' }
+          Expand-Archive -Path $zip -DestinationPath . -Force
 
       - name: Run SQLite integration
-        run: godot --headless --path . --script res://tests/sqlite_integration_test.gd
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/sqlite_integration_test.gd
 
       - name: Run 100k match validation
         if: ${{ github.ref == 'refs/heads/phase-10-11-living-world-release' || (github.event_name == 'workflow_dispatch' && inputs.full_match_validation) }}
-        run: godot --headless --path . --script res://tests/test_runner.gd -- --full-match-validation
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/test_runner.gd -TimeoutSeconds 3600 -ExtraArgs @('--','--full-match-validation')
