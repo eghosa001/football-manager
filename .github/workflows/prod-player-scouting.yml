@@ -21,12 +21,13 @@ permissions:
 
 jobs:
   player-scouting:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
     steps:
       - uses: actions/checkout@v4
-      - uses: chickensoft-games/setup-godot@v2
         with:
-          version: 4.7.2
-          use-dotnet: false
-      - run: bash tools/test-headless.sh import
-      - run: bash tools/test-headless.sh tests/player_scouting_test.gd
+          fetch-depth: 1
+          clean: false
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/player_scouting_test.gd
