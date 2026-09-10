@@ -28,11 +28,12 @@ func ensure(player: Dictionary) -> void:
 
 func personality(player: Dictionary) -> String:
 	ensure(player)
-	var h: Dictionary = player.hidden_attributes
-	if int(h.professionalism) >= 75 and int(h.determination) >= 70:
+	var hidden: Dictionary = player.hidden_attributes
+	var attributes: Dictionary = player.attributes
+	if int(hidden.professionalism) >= 75 and int(attributes.determination) >= 70:
 		return "Driven Professional"
-	if int(h.ambition) >= 80 and int(h.loyalty) <= 35:
+	if int(hidden.ambition) >= 80 and int(hidden.loyalty) <= 35:
 		return "Ambitious Mercenary"
-	if int(h.temperament) <= 30:
+	if int(hidden.temperament) <= 30:
 		return "Temperamental"
 	return "Balanced"
