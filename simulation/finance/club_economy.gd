@@ -2,7 +2,6 @@ class_name ClubEconomy
 extends RefCounted
 
 const LedgerClass = preload("res://simulation/finance/ledger.gd")
-const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
 
 var _ledger = LedgerClass.new()
 
@@ -14,30 +13,15 @@ func ensure_world(world: Dictionary) -> void:
 func ensure_club(club: Dictionary) -> void:
 	var reputation: int = int(club.get("reputation", 50))
 	if not club.has("stadium"):
-		club["stadium"] = {
-			"capacity": 8_000 + reputation * 260,
-			"condition": 80,
-		}
+		club["stadium"] = {"capacity": 8_000 + reputation * 260, "condition": 80}
 	if not club.has("facilities"):
-		club["facilities"] = {
-			"training": clampi(35 + reputation / 2, 20, 90),
-			"youth": clampi(30 + reputation / 2, 20, 90),
-			"medical": clampi(30 + reputation / 2, 20, 90),
-		}
+		club["facilities"] = {"training": clampi(35 + reputation / 2, 20, 90), "youth": clampi(30 + reputation / 2, 20, 90), "medical": clampi(30 + reputation / 2, 20, 90)}
 	if not club.has("supporters"):
-		club["supporters"] = {
-			"core": 2_000 + reputation * 300,
-			"mood": 65,
-			"expectation": clampi(reputation, 30, 85),
-		}
+		club["supporters"] = {"core": 2_000 + reputation * 300, "mood": 65, "expectation": clampi(reputation, 30, 85)}
 	if not club.has("board"):
-		club["board"] = {
-			"patience": 65,
-			"ambition": clampi(35 + reputation / 2, 35, 80),
-			"confidence": 65,
-		}
+		club["board"] = {"patience": 65, "ambition": clampi(35 + reputation / 2, 35, 80), "confidence": 65}
 	club["ticket_price"] = int(club.get("ticket_price", 15 + reputation / 5))
-	club["commercial_revenue"] = int(club.get("commercial_revenue", 250_000 + reputation * 18_000))
+	club["commercial_revenue"] = int(club.get("commercial_revenue", 750_000 + reputation * 35_000))
 	club["debt"] = maxi(0, int(club.get("debt", 0)))
 	club["financial_status"] = String(club.get("financial_status", "secure"))
 
@@ -49,7 +33,9 @@ func run_season_finances(world: Dictionary, season_year: int, competition_record
 		var opening_cash: int = int(club.cash)
 		var entry_start: int = world.ledger.size()
 		var reputation: int = int(club.reputation)
-		var sponsor: int = 350_000 + reputation * 28_000
+		# Commercial distributions scale with club reputation so elite clubs can
+		# support elite wage bills while smaller clubs still face real constraints.
+		var sponsor: int = 4_000_000 + reputation * 100_000
 		var commercial: int = int(club.commercial_revenue)
 		var gate: int = _annual_gate_revenue(club)
 		var prize: int = _prize_money(club_id, competition_records)
@@ -64,20 +50,12 @@ func run_season_finances(world: Dictionary, season_year: int, competition_record
 		_ledger.post(world, club_id, -operations, "operations", "operations-%s-%d" % [club_id, season_year], season_year)
 		_apply_financial_safety(world, club, season_year)
 		_refresh_budgets(club)
-		_update_institutions(club, season_year)
+		_update_institutions(club)
 		var movement := 0
 		for i in range(entry_start, world.ledger.size()):
 			if String(world.ledger[i].club_id) == club_id:
 				movement += int(world.ledger[i].amount)
-		reports.append({
-			"club_id": club_id,
-			"opening_cash": opening_cash,
-			"closing_cash": int(club.cash),
-			"ledger_movement": movement,
-			"income": sponsor + commercial + gate + prize,
-			"expenses": wages + operations,
-			"financial_status": club.financial_status,
-		})
+		reports.append({"club_id": club_id, "opening_cash": opening_cash, "closing_cash": int(club.cash), "ledger_movement": movement, "income": sponsor + commercial + gate + prize, "expenses": wages + operations, "financial_status": club.financial_status})
 	return {"season_year": season_year, "clubs": reports}
 
 func invest_in_facility(world: Dictionary, club_id: String, facility: String, season_year: int) -> Error:
@@ -139,9 +117,9 @@ func _apply_financial_safety(world: Dictionary, club: Dictionary, season_year: i
 	if int(club.cash) >= 0:
 		return
 	var deficit: int = -int(club.cash)
-	var bailout: int = deficit + 250_000
-	club.debt = int(club.debt) + bailout
-	_ledger.post(world, String(club.id), bailout, "credit_facility", "credit-%s-%d" % [String(club.id), season_year], season_year)
+	var credit: int = deficit + 250_000
+	club.debt = int(club.debt) + credit
+	_ledger.post(world, String(club.id), credit, "credit_facility", "credit-%s-%d" % [String(club.id), season_year], season_year)
 
 func _refresh_budgets(club: Dictionary) -> void:
 	var available: int = maxi(0, int(club.cash) - int(club.debt) / 4)
@@ -150,7 +128,7 @@ func _refresh_budgets(club: Dictionary) -> void:
 	var debt_ratio: float = float(club.debt) / maxf(float(club.cash + club.debt), 1.0)
 	club.financial_status = "insecure" if debt_ratio > 0.65 else ("stable" if debt_ratio > 0.30 else "secure")
 
-func _update_institutions(club: Dictionary, season_year: int) -> void:
+func _update_institutions(club: Dictionary) -> void:
 	var status_penalty := -5 if String(club.financial_status) == "insecure" else (0 if String(club.financial_status) == "stable" else 2)
 	club.board.confidence = clampi(int(club.board.confidence) + status_penalty, 0, 100)
 	club.supporters.mood = clampi(int(club.supporters.mood) + status_penalty, 0, 100)
