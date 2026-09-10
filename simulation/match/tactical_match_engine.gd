@@ -18,9 +18,6 @@ func simulate_with_tactics(home_club: Dictionary, away_club: Dictionary, players
 	var role_fits := {}
 	var home_id := String(home_club.id)
 	var away_id := String(away_club.id)
-	# Only materialize the two match squads. Passing the entire world through a
-	# deep duplicate here made long-season simulations scale unnecessarily with
-	# global player population.
 	for player in players:
 		var club_id := String(player.get("club_id", ""))
 		if club_id != home_id and club_id != away_id:
@@ -53,20 +50,20 @@ func _apply_team_style(players: Array, club_id: String, modifiers: Dictionary) -
 	for player in players:
 		if String(player.get("club_id", "")) != club_id:
 			continue
-		var pass_bonus: float = float(modifiers.pass) * 100.0
-		var possession_bonus: float = float(modifiers.possession) * 80.0
+		var pass_bonus: float = float(modifiers.get("pass", 0.0)) * 100.0
+		var possession_bonus: float = float(modifiers.get("possession", 0.0)) * 80.0
 		player.current_ability = clampi(int(float(player.current_ability) + pass_bonus + possession_bonus), 1, 100)
 
 func _apply_style_events(result: Dictionary, side: String, modifiers: Dictionary, seed: int, key_base: int) -> void:
-	var multiplier: float = float(modifiers.sequence_multiplier)
+	var multiplier: float = float(modifiers.get("sequence_multiplier", 1.0))
 	var extra_attempts: int = int(absf(multiplier - 1.0) * 35.0)
 	if multiplier > 1.0:
 		for i in range(extra_attempts):
-			if _unit(seed, key_base + i * 7) < 0.48 + float(modifiers.shot):
-				_append_extra_shot(result, side, seed, key_base + i * 7 + 1, float(modifiers.shot))
+			if _unit(seed, key_base + i * 7) < 0.48 + float(modifiers.get("shot", 0.0)):
+				_append_extra_shot(result, side, seed, key_base + i * 7 + 1, float(modifiers.get("shot", 0.0)))
 	elif multiplier < 1.0:
 		_remove_low_value_shots(result, side, extra_attempts)
-	var card_bias: float = float(modifiers.card)
+	var card_bias: float = float(modifiers.get("card", 0.0))
 	if card_bias > 0.0:
 		var chances: int = int(card_bias * 450.0)
 		for i in range(chances):
