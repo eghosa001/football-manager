@@ -2,6 +2,7 @@ class_name CareerSession
 extends RefCounted
 
 const WorldGeneratorClass = preload("res://simulation/world/world_generator.gd")
+const LaunchWorldBuilderClass = preload("res://data/launch_world_builder.gd")
 const CareerCycleClass = preload("res://application/career/career_cycle.gd")
 const SaveStoreClass = preload("res://persistence/save_store.gd")
 const PlayerLifecycleClass = preload("res://simulation/players/player_lifecycle.gd")
@@ -17,10 +18,13 @@ var managed_club_id := ""
 var save_path := ""
 var seed := 12345
 
-func new_career(manager_name: String, club_id: String = "", world_seed: int = 12345) -> Dictionary:
+func new_career(manager_name: String, club_id: String = "", world_seed: int = 12345, launch_countries: int = 0) -> Dictionary:
 	seed = world_seed
-	world = WorldGeneratorClass.new().create_world(seed)
+	world = LaunchWorldBuilderClass.new().build(seed, launch_countries, 25)
+	if world.is_empty():
+		world = WorldGeneratorClass.new().create_world(seed)
 	_initialize_world()
+	if world.get("clubs", []).is_empty(): return {}
 	managed_club_id = club_id if club_id != "" and _club_exists(club_id) else String(world.clubs[0].id)
 	manager = {"id":"human-manager","name":manager_name.strip_edges() if manager_name.strip_edges() != "" else "Manager","club_id":managed_club_id,"reputation":35,"created_year":int(world.get("season_year",2026)),"career_history":[]}
 	world["human_manager"] = manager.duplicate(true)
@@ -66,7 +70,7 @@ func choose_club(club_id: String) -> Error:
 	return OK
 
 func snapshot() -> Dictionary:
-	return {"manager":manager.duplicate(true),"club_id":managed_club_id,"season_year":int(world.get("season_year",2026)),"date":String(world.get("date","")),"history_count":history.size(),"seed":seed,"day_index":int(world.get("day_index",0))}
+	return {"manager":manager.duplicate(true),"club_id":managed_club_id,"season_year":int(world.get("season_year",2026)),"date":String(world.get("date","")),"history_count":history.size(),"seed":seed,"day_index":int(world.get("day_index",0)),"database_schema":int(world.get("launch_database_schema",0))}
 
 func _initialize_world() -> void:
 	var lifecycle = PlayerLifecycleClass.new()
