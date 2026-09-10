@@ -13,7 +13,9 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 	var file := FileAccess.open(temp_path, FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
-	file.store_string(JSON.stringify(payload))
+	# store_var preserves integer/float types and nested Variant structure exactly,
+	# which is important for deterministic save/reload continuation tests.
+	file.store_var(payload, false)
 	file.flush()
 	file.close()
 	if FileAccess.file_exists(path):
@@ -29,7 +31,7 @@ func load_save(path: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return {}
-	var parsed = JSON.parse_string(file.get_as_text())
+	var parsed = file.get_var(false)
 	file.close()
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return {}
