@@ -13,6 +13,7 @@ var _id_counter := 0
 func _init(seed: int) -> void:
 	seed_value = seed
 	_state = abs(seed) % MODULUS
+	_id_counter = 0
 	if _state == 0:
 		_state = 1
 
@@ -24,24 +25,30 @@ func randf() -> float:
 	return float(_next_int()) / float(MODULUS)
 
 func randf_range(min_value: float, max_value: float) -> float:
-	return min_value + (max_value - min_value) * randf()
+	var unit: float = randf()
+	return min_value + (max_value - min_value) * unit
 
 func randi_range(min_value: int, max_value: int) -> int:
 	assert(max_value >= min_value)
 	var span: int = max_value - min_value + 1
-	return min_value + (_next_int() % span)
+	var raw: int = _next_int()
+	return min_value + (raw % span)
 
 func chance(probability: float) -> bool:
-	return randf() < clampf(probability, 0.0, 1.0)
+	var roll: float = randf()
+	return roll < clampf(probability, 0.0, 1.0)
 
 func pick(values: Array) -> Variant:
 	assert(not values.is_empty(), "Cannot pick from an empty array")
-	return values[randi_range(0, values.size() - 1)]
+	# Keep the RNG draw and Array lookup as separate operations. This avoids
+	# expression-evaluation ambiguity and makes seeded picks reproducible.
+	var index: int = randi_range(0, values.size() - 1)
+	return values[index]
 
 func shuffled_copy(values: Array) -> Array:
 	var result := values.duplicate()
 	for i in range(result.size() - 1, 0, -1):
-		var j := randi_range(0, i)
+		var j: int = randi_range(0, i)
 		var temp = result[i]
 		result[i] = result[j]
 		result[j] = temp
