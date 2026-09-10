@@ -5,8 +5,8 @@ const TrainingSystemClass = preload("res://simulation/players/training_system.gd
 const MedicalSystemClass = preload("res://simulation/players/medical_system.gd")
 const ScoutingServiceClass = preload("res://simulation/scouting/scouting_service.gd")
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
-const SocialServiceClass = preload("res://application/career/social_service.gd")
 const DressingRoomClass = preload("res://simulation/players/dressing_room.gd")
+const PlayerPromisesClass = preload("res://simulation/players/player_promises.gd")
 
 func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 	world["day_index"] = int(world.get("day_index", 0)) + 1
@@ -17,10 +17,14 @@ func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 		training = _run_training_week(world, managed_club_id, seed + day_index * 101)
 	var scouting := _advance_scouting(world, managed_club_id, seed + day_index * 211)
 	_reconcile_training_injuries(world, managed_club_id, seed + day_index * 307)
-	var broken_promises: Array = SocialServiceClass.new().check_due_promises(world)
+	var promises: Array = PlayerPromisesClass.new().evaluate(world)
+	for outcome in promises:
+		var player := _player(world.get("players", []), String(outcome.player_id))
+		if not player.is_empty() and String(player.get("club_id", "")) == managed_club_id:
+			InboxServiceClass.new().add_message(world, "dressing_room", "Promise %s" % ("kept" if bool(outcome.fulfilled) else "broken"), "%s's promise has been %s." % [_player_name(player), "fulfilled" if bool(outcome.fulfilled) else "broken"])
 	if not managed_club_id.is_empty() and day_index % 7 == 0:
 		DressingRoomClass.new().rebuild(world, managed_club_id)
-	return {"day_index":day_index,"medical":medical,"training":training,"scouting":scouting,"broken_promises":broken_promises}
+	return {"day_index":day_index,"medical":medical,"training":training,"scouting":scouting,"promises":promises}
 
 func _advance_medical(world: Dictionary, managed_club_id: String) -> Array:
 	var medical_system = MedicalSystemClass.new()
@@ -83,6 +87,11 @@ func _physio_quality(staff: Array, club_id: String) -> int:
 func _staff(staff: Array, id: String) -> Dictionary:
 	for member in staff:
 		if String(member.get("id", "")) == id: return member
+	return {}
+
+func _player(players: Array, id: String) -> Dictionary:
+	for player in players:
+		if String(player.get("id", "")) == id: return player
 	return {}
 
 func _player_name(player: Dictionary) -> String:
