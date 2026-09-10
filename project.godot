@@ -1,11 +1,11 @@
 ; Engine configuration file.
-; Football Dynasty — release candidate
+; Football Dynasty — production career shell
 config_version=5
 
 [application]
 config/name="Football Dynasty"
-config/version="1.0.0-rc1"
-run/main_scene="res://game/scenes/main.tscn"
+config/version="1.0.0-rc2-dev"
+run/main_scene="res://game/scenes/career_app.tscn"
 config/features=PackedStringArray("4.7")
 
 [display]
