@@ -1,6 +1,7 @@
 extends SceneTree
 
 const DatabaseLoaderClass = preload("res://data/database_loader.gd")
+const LaunchWorldBuilderClass = preload("res://data/launch_world_builder.gd")
 const KnockoutClass = preload("res://simulation/competitions/knockout_competition.gd")
 const CatalogClass = preload("res://simulation/competitions/competition_catalog.gd")
 const GroupStageClass = preload("res://simulation/competitions/group_stage.gd")
@@ -15,6 +16,16 @@ func _init() -> void:
 	assert(loader.validate_seed(data).is_empty())
 	assert(data.countries.size() >= 8)
 	assert(not loader.league_system(data, "nga").is_empty())
+
+	var launch_a: Dictionary = LaunchWorldBuilderClass.new().build(11111, 2, 15)
+	var launch_b: Dictionary = LaunchWorldBuilderClass.new().build(11111, 2, 15)
+	assert(not launch_a.is_empty())
+	assert(var_to_bytes(launch_a) == var_to_bytes(launch_b))
+	assert(launch_a.countries.size() == 2)
+	assert(launch_a.competitions.size() >= 5)
+	assert(launch_a.clubs.size() >= 50)
+	assert(launch_a.players.size() >= launch_a.clubs.size() * 15)
+	assert(launch_a.fixtures.size() > 1000)
 
 	var clubs := []
 	for i in range(8): clubs.append("club-%d" % i)
