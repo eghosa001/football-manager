@@ -1,0 +1,25 @@
+name: Production Developer Tooling
+
+on:
+  pull_request:
+    paths:
+      - 'tools/**'
+      - 'tests/world_inspector_test.gd'
+      - '.github/workflows/prod-tooling.yml'
+  push:
+    branches: ['prod/dev-release-tooling']
+
+permissions:
+  contents: read
+
+jobs:
+  tooling:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - run: godot --headless --editor --path . --quit
+      - run: godot --headless --path . --script res://tests/world_inspector_test.gd
