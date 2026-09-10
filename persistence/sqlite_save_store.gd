@@ -2,9 +2,16 @@ class_name SqliteSaveStore
 extends "res://persistence/save_repository.gd"
 
 const CURRENT_SCHEMA_VERSION := 1
+const EXTENSION_PATH := "res://addons/godot-sqlite/gdsqlite.gdextension"
+var _extension_resource: Resource
 
 func is_available() -> bool:
-	return ClassDB.class_exists(&"SQLite")
+	if ClassDB.class_exists(&"SQLite"):
+		return true
+	if not ResourceLoader.exists(EXTENSION_PATH):
+		return false
+	_extension_resource = ResourceLoader.load(EXTENSION_PATH)
+	return _extension_resource != null and ClassDB.class_exists(&"SQLite")
 
 func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 	if not is_available():
