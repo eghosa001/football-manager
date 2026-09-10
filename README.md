@@ -39,7 +39,7 @@ Full Phase 2 statistical acceptance harness:
 godot --headless --path . --script res://tests/test_runner.gd -- --full-match-validation
 ```
 
-The normal test suite samples 2,000 matches to keep pull-request CI practical. The full flag runs 100,000 matches.
+The normal test suite samples 2,000 matches to keep pull-request CI practical. The full flag runs 100,000 matches. CI also imports the project headlessly first so parser/import failures are caught before the simulation tests run.
 
 ## Architecture
 
