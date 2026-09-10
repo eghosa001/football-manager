@@ -10,28 +10,54 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 		"history": history,
 	}
 	var temp_path := path + ".tmp"
+	var backup_path := path + ".bak"
+	var temp_global := ProjectSettings.globalize_path(temp_path)
+	var save_global := ProjectSettings.globalize_path(path)
+	var backup_global := ProjectSettings.globalize_path(backup_path)
 	var file := FileAccess.open(temp_path, FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
-	# store_var preserves integer/float types and nested Variant structure exactly,
-	# which is important for deterministic save/reload continuation tests.
-	file.store_var(payload, false)
+	file.store_string(JSON.stringify(payload))
 	file.flush()
 	file.close()
+
+	# Validate the fully written temporary file before replacing the live save.
+	if _load_path(temp_path).is_empty():
+		DirAccess.remove_absolute(temp_global)
+		return ERR_FILE_CORRUPT
+
+	if FileAccess.file_exists(backup_path):
+		DirAccess.remove_absolute(backup_global)
 	if FileAccess.file_exists(path):
-		var remove_error := DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-		if remove_error != OK:
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(temp_path))
-			return remove_error
-	return DirAccess.rename_absolute(ProjectSettings.globalize_path(temp_path), ProjectSettings.globalize_path(path))
+		var backup_error := DirAccess.rename_absolute(save_global, backup_global)
+		if backup_error != OK:
+			DirAccess.remove_absolute(temp_global)
+			return backup_error
+
+	var promote_error := DirAccess.rename_absolute(temp_global, save_global)
+	if promote_error != OK:
+		if FileAccess.file_exists(backup_path) and not FileAccess.file_exists(path):
+			DirAccess.rename_absolute(backup_global, save_global)
+		return promote_error
+	return OK
 
 func load_save(path: String) -> Dictionary:
+	var primary := _load_path(path)
+	if not primary.is_empty():
+		return primary
+	var backup_path := path + ".bak"
+	var backup := _load_path(backup_path)
+	if backup.is_empty():
+		return {}
+	return backup
+
+func _load_path(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return {}
-	var parsed = file.get_var(false)
+	var parsed = JSON.parse_string(file.get_as_text())
 	file.close()
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return {}
@@ -43,5 +69,6 @@ func _migrate(payload: Dictionary) -> Dictionary:
 		payload["history"] = payload.get("history", [])
 		payload["schema_version"] = 1
 		version = 1
-	assert(version == CURRENT_SCHEMA_VERSION, "Unsupported save schema version: %d" % version)
+	if version != CURRENT_SCHEMA_VERSION:
+		return {}
 	return payload
