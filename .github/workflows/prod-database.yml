@@ -6,6 +6,7 @@ on:
       - 'data/**'
       - 'simulation/competitions/**'
       - 'tests/database_competitions_test.gd'
+      - 'tools/test-headless.ps1'
       - '.github/workflows/prod-database.yml'
   push:
     branches: ['prod/database-competitions']
@@ -15,14 +16,16 @@ permissions:
 
 jobs:
   database:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: chickensoft-games/setup-godot@v2
         with:
-          version: 4.7.2
-          use-dotnet: false
-      - run: godot --headless --editor --path . --quit
+          fetch-depth: 1
+          clean: false
+      - name: Import project
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
       - name: Run database and competition acceptance
-        run: timeout 90s godot --headless --path . --script res://tests/database_competitions_test.gd
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/database_competitions_test.gd -TimeoutSeconds 90
