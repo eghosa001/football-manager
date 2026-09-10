@@ -5,6 +5,8 @@ const TrainingSystemClass = preload("res://simulation/players/training_system.gd
 const MedicalSystemClass = preload("res://simulation/players/medical_system.gd")
 const ScoutingServiceClass = preload("res://simulation/scouting/scouting_service.gd")
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
+const SocialServiceClass = preload("res://application/career/social_service.gd")
+const DressingRoomClass = preload("res://simulation/players/dressing_room.gd")
 
 func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 	world["day_index"] = int(world.get("day_index", 0)) + 1
@@ -15,14 +17,16 @@ func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 		training = _run_training_week(world, managed_club_id, seed + day_index * 101)
 	var scouting := _advance_scouting(world, managed_club_id, seed + day_index * 211)
 	_reconcile_training_injuries(world, managed_club_id, seed + day_index * 307)
-	return {"day_index":day_index,"medical":medical,"training":training,"scouting":scouting}
+	var broken_promises: Array = SocialServiceClass.new().check_due_promises(world)
+	if not managed_club_id.is_empty() and day_index % 7 == 0:
+		DressingRoomClass.new().rebuild(world, managed_club_id)
+	return {"day_index":day_index,"medical":medical,"training":training,"scouting":scouting,"broken_promises":broken_promises}
 
 func _advance_medical(world: Dictionary, managed_club_id: String) -> Array:
 	var medical_system = MedicalSystemClass.new()
 	var updates: Array = []
 	for player in world.get("players", []):
-		if bool(player.get("retired", false)):
-			continue
+		if bool(player.get("retired", false)): continue
 		var was_injured := int(player.get("injured_days", 0)) > 0
 		var physio_quality := _physio_quality(world.get("staff", []), String(player.get("club_id", "")))
 		var result: Dictionary = medical_system.advance_day(player, physio_quality, 0.65)
@@ -50,8 +54,7 @@ func _advance_scouting(world: Dictionary, managed_club_id: String, seed: int) ->
 	service.ensure_world(world)
 	var updates: Array = []
 	for assignment in world.get("scout_assignments", []):
-		if bool(assignment.get("complete", false)):
-			continue
+		if bool(assignment.get("complete", false)): continue
 		var scout: Dictionary = _staff(world.get("staff", []), String(assignment.get("scout_id", "")))
 		var ability := int(scout.get("ability", 50))
 		var before := bool(assignment.get("complete", false))
@@ -64,11 +67,9 @@ func _advance_scouting(world: Dictionary, managed_club_id: String, seed: int) ->
 func _reconcile_training_injuries(world: Dictionary, managed_club_id: String, seed: int) -> void:
 	var medical_system = MedicalSystemClass.new()
 	for player in world.get("players", []):
-		if int(player.get("injured_days", 0)) <= 0:
-			continue
+		if int(player.get("injured_days", 0)) <= 0: continue
 		medical_system.ensure_player(player)
-		if not Dictionary(player.medical.get("current", {})).is_empty():
-			continue
+		if not Dictionary(player.medical.get("current", {})).is_empty(): continue
 		var injury: Dictionary = medical_system.suffer_injury(player, seed + _stable_key(String(player.get("id", ""))), "training")
 		if String(player.get("club_id", "")) == managed_club_id:
 			InboxServiceClass.new().add_message(world, "medical", "%s injured" % _player_name(player), "%s suffered a %s and is expected to miss about %d days." % [_player_name(player), String(injury.get("name", "injury")), int(injury.get("days_total", 0))])
@@ -76,23 +77,19 @@ func _reconcile_training_injuries(world: Dictionary, managed_club_id: String, se
 func _physio_quality(staff: Array, club_id: String) -> int:
 	var best := 50
 	for member in staff:
-		if String(member.get("club_id", "")) == club_id and String(member.get("role", "")) == "physio":
-			best = maxi(best, int(member.get("ability", 50)))
+		if String(member.get("club_id", "")) == club_id and String(member.get("role", "")) == "physio": best = maxi(best, int(member.get("ability", 50)))
 	return best
 
 func _staff(staff: Array, id: String) -> Dictionary:
 	for member in staff:
-		if String(member.get("id", "")) == id:
-			return member
+		if String(member.get("id", "")) == id: return member
 	return {}
 
 func _player_name(player: Dictionary) -> String:
-	if player.has("name"):
-		return String(player.name)
+	if player.has("name"): return String(player.name)
 	return (String(player.get("first_name", "")) + " " + String(player.get("last_name", ""))).strip_edges()
 
 func _stable_key(text: String) -> int:
 	var value := 79
-	for character in text.to_utf8_buffer():
-		value = posmod(value * 181 + int(character), 2_147_483_647)
+	for character in text.to_utf8_buffer(): value = posmod(value * 181 + int(character), 2_147_483_647)
 	return value
