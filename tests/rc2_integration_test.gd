@@ -12,6 +12,10 @@ func _init() -> void:
 	var snap: Dictionary = session.new_career("RC2 Manager", "", 919191)
 	assert(not session.world.is_empty())
 	assert(String(snap.club_id) != "")
+	assert(int(snap.database_schema) == 1)
+	assert(session.world.get("countries", []).size() == 8)
+	assert(session.world.get("competitions", []).size() > 8)
+	assert(session.world.get("registrations", {}).size() > 0)
 	var command = CommandClass.new()
 	var club_id := String(session.managed_club_id)
 
@@ -32,19 +36,22 @@ func _init() -> void:
 
 	var competition := _competition_for_club(session.world, club_id)
 	assert(not competition.is_empty())
-	competition["registration_rules"] = {"max_squad":25,"min_homegrown":0,"max_foreign":25,"min_age":15}
+	var auto_key := "%s:%s:%d" % [club_id, String(competition.id), int(session.world.season_year)]
+	assert(session.world.registrations.has(auto_key))
+	assert(bool(session.world.registrations[auto_key].valid))
+	competition["registration_rules"] = {"max_squad":25,"min_homegrown":0,"max_foreign":25,"min_goalkeepers":2,"min_age":15}
 	var ids: Array = []
 	for player in session.world.players:
 		if String(player.get("club_id", "")) == club_id and ids.size() < 25: ids.append(String(player.id))
 	var registration: Dictionary = RegistrationClass.new().register_squad(session.world, club_id, competition, ids, int(session.world.season_year))
 	assert(bool(registration.valid))
 	assert(registration.registered.size() > 0)
+	assert(int(registration.goalkeepers) >= 2)
 	assert(RegistrationClass.new().is_registered(session.world, club_id, String(competition.id), int(session.world.season_year), String(registration.registered[0])))
 
 	var preview: Array = YouthAcademyClass.new().intake_preview(session.world, club_id, 99119, 6)
 	assert(preview.size() == 6)
-	for prospect in preview:
-		assert(int(prospect.potential) >= int(prospect.ability))
+	for prospect in preview: assert(int(prospect.potential) >= int(prospect.ability))
 
 	var target := _external_player(session.world, club_id)
 	assert(not target.is_empty())
@@ -79,9 +86,6 @@ func _init() -> void:
 	assert(InboxClass.new().unread(session.world).size() > 0)
 	assert(String(promise.status) in ["fulfilled","broken"])
 
-	# Force the next advance onto the first scheduled matchday and verify the
-	# human club is routed through the detailed causal engine while background
-	# fixtures remain lightweight.
 	session.world.date = "2026-07-31"
 	var matchday: Dictionary = DayRunnerClass.new().advance_day(session.world, session.history, 123456)
 	assert(not matchday.has("error"))
@@ -89,6 +93,11 @@ func _init() -> void:
 	var detailed_count := 0
 	var background_count := 0
 	for row in matchday.results:
+		var fixture: Dictionary = row.fixture
+		for side in ["home", "away"]:
+			var side_club := String(fixture.home_club_id) if side == "home" else String(fixture.away_club_id)
+			for player_id in row.result.get("lineups", {}).get(side, []):
+				assert(RegistrationClass.new().is_registered(session.world, side_club, String(fixture.competition_id), int(session.world.season_year), String(player_id)))
 		if bool(row.get("detailed", false)):
 			detailed_count += 1
 			assert(row.result.has("spatial"))
@@ -141,5 +150,5 @@ func _external_player(world: Dictionary, club_id: String) -> Dictionary:
 
 func _competition_for_club(world: Dictionary, club_id: String) -> Dictionary:
 	for competition in world.competitions:
-		if club_id in competition.get("club_ids", []): return competition
+		if String(competition.get("competition_type", "league")) == "league" and club_id in competition.get("club_ids", []): return competition
 	return {}
