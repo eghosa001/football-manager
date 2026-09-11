@@ -9,6 +9,7 @@ func _init() -> void:
 func _run() -> void:
 	_test_match_engine_boundary()
 	_test_career_navigation_boundary()
+	_test_career_scene_boundary()
 	print("[TEST] ARCHITECTURE CONVERGENCE PASS")
 	quit(0)
 
@@ -37,3 +38,13 @@ func _test_career_navigation_boundary() -> void:
 	assert(String(plan[9].get("owner", "")) == "app")
 	assert(String(plan[9].get("builder", "")) == "_add_inbox_tab")
 	assert(String(plan[13].get("builder", "")) == "add_match_analysis")
+
+func _test_career_scene_boundary() -> void:
+	var packed: PackedScene = load("res://game/scenes/career_app.tscn")
+	assert(packed != null)
+	var instance = packed.instantiate()
+	assert(instance != null)
+	var script: Script = instance.get_script()
+	assert(script != null)
+	assert(script.resource_path == "res://game/career/registry_career_app.gd")
+	instance.free()
