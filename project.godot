@@ -19,6 +19,7 @@ ManagementRuntime="*res://game/polish/management_runtime.gd"
 CareerControlsRuntime="*res://game/polish/career_controls_runtime.gd"
 GraphicsRuntime="*res://game/polish/graphics_runtime.gd"
 SquadRuntime="*res://game/polish/squad_runtime.gd"
+AutosaveRuntime="*res://game/polish/autosave_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
