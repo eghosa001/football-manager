@@ -37,6 +37,7 @@ func _test_audio()->void:
 	_assert(float(state.crowd_intensity)>0.4,"dynamic crowd intensity")
 	_assert(String(cue.cue)=="goal_roar","goal cue")
 	_assert(float(cue.gain)<=0.55,"reduced sudden sound accessibility")
+	audio.free()
 
 func _test_viewer()->void:
 	var quality=ViewerQualityClass.new()
