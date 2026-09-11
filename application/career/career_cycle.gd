@@ -3,6 +3,7 @@ extends RefCounted
 
 const SeasonRunnerClass = preload("res://application/season/season_runner.gd")
 const LifecycleClass = preload("res://simulation/players/player_lifecycle.gd")
+const YouthQualityClass = preload("res://simulation/players/youth_quality_service.gd")
 const MarketClass = preload("res://simulation/transfers/transfer_market.gd")
 const EconomyClass = preload("res://simulation/finance/club_economy.gd")
 const TacticsClass = preload("res://simulation/tactics/tactics_manager.gd")
@@ -17,6 +18,7 @@ const NamePoolServiceClass = preload("res://application/career/name_pool_service
 
 var _season_runner = SeasonRunnerClass.new()
 var _lifecycle = LifecycleClass.new()
+var _youth_quality = YouthQualityClass.new()
 var _market = MarketClass.new()
 var _economy = EconomyClass.new()
 var _tactics = TacticsClass.new()
@@ -45,6 +47,7 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	var loans_returned: int = _market.return_expired_loans(world, next_year)
 	var lifecycle_result: Dictionary = _lifecycle.advance_year(world, season_seed + 700_001, 2)
 	_names.rename_youth(world, lifecycle_result.get("youth", []), season_seed + 700_002)
+	var youth_quality_result: Dictionary = _youth_quality.apply_to_intake(world, lifecycle_result.get("youth", []), season_seed + 700_002)
 	var contract_result: Dictionary = _market.process_contracts(world, next_year, season_seed + 700_003)
 	var staff_contract_result: Dictionary = _staff_contracts.process_expiring(world, next_year)
 	var squad_result: Dictionary = _market.rebalance_ai_squads(world, next_year, season_seed + 700_007, 20, 30)
@@ -64,11 +67,8 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	world.international_history.append({"year":completed_year,"champion_country_id":String(international_result.get("champion", "")),"qualified":international_result.get("qualified", []).duplicate()})
 	var living_result: Dictionary = _living_world.advance_year(world, season_result.records, season_seed + 900_001)
 	var reputation_result: Dictionary = _reputation.advance_year(world, season_result.records)
-	# LivingWorld retains the compatibility happiness scalar. Re-derive it from
-	# the richer categories immediately after rollover so categories remain the
-	# single source of truth going into the next season.
 	var happiness_result: Dictionary = _happiness.update_week(world)
-	return {"season":season_result,"economy":economy_result,"lifecycle":lifecycle_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"squads":squad_result,"registrations":registration_result,"living_world":living_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
+	return {"season":season_result,"economy":economy_result,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"squads":squad_result,"registrations":registration_result,"living_world":living_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
 
 func _process_ai_manager_market(world: Dictionary, records: Array, year: int) -> Dictionary:
 	var human_club_id := String(world.get("human_manager", {}).get("club_id", ""))
