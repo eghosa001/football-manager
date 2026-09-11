@@ -1,7 +1,7 @@
 class_name ContinuousFullMatchEngine
 extends RefCounted
 
-const ContinuousClass = preload("res://simulation/match/continuous_spatial_engine_v3.gd")
+const ContinuousClass = preload("res://simulation/match/continuous_spatial_engine_v4.gd")
 const TacticsManagerClass = preload("res://simulation/tactics/tactics_manager.gd")
 const LineupResolverClass = preload("res://application/career/lineup_assignment_service.gd")
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
