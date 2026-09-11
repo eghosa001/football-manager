@@ -21,19 +21,19 @@ func play_next_fixture(world: Dictionary, competition_id: String, season_seed: i
 		return row
 	return {}
 
-func play_date(world: Dictionary, date_string: String, season_seed: int) -> Array:
+func play_date(world: Dictionary, date_string: String, season_seed: int, player_index: Dictionary = {}) -> Array:
 	assign_fixture_dates(world)
 	var results: Array = []
 	var touched := {}
 	for fixture in world.fixtures:
 		if bool(fixture.get("played", false)) or String(fixture.get("date", "")) != date_string: continue
-		results.append(_play_fixture(world, fixture, season_seed))
+		results.append(_play_fixture(world, fixture, season_seed, player_index))
 		touched[String(fixture.get("competition_id", ""))] = true
 	for competition_id in touched.keys(): _knockout.advance_ready(world, String(competition_id), date_string)
 	world["date"] = date_string
 	return results
 
-func advance_to_next_matchday(world: Dictionary, season_seed: int) -> Array:
+func advance_to_next_matchday(world: Dictionary, season_seed: int, player_index: Dictionary = {}) -> Array:
 	assign_fixture_dates(world)
 	var next_date := ""
 	for fixture in world.fixtures:
@@ -41,7 +41,7 @@ func advance_to_next_matchday(world: Dictionary, season_seed: int) -> Array:
 		var fixture_date := String(fixture.get("date", ""))
 		if next_date == "" or fixture_date < next_date: next_date = fixture_date
 	if next_date == "": return []
-	return play_date(world, next_date, season_seed)
+	return play_date(world, next_date, season_seed, player_index)
 
 func assign_fixture_dates(world: Dictionary, season_start_month: int = 8, season_start_day: int = 1) -> void:
 	var year: int = int(world.get("season_year", _year_from_date(String(world.get("date", "2026-07-01")))))
@@ -58,8 +58,9 @@ func complete_competition(world: Dictionary, competition_id: String, season_seed
 
 func complete_world_season(world: Dictionary, season_seed: int) -> Array:
 	assign_fixture_dates(world)
+	var player_index := _index_players_by_club(world.get("players", []))
 	while true:
-		var results: Array = advance_to_next_matchday(world, season_seed)
+		var results: Array = advance_to_next_matchday(world, season_seed, player_index)
 		if results.is_empty(): break
 	var records: Array = []
 	for competition in world.competitions: records.append(build_season_record(world, String(competition.id)))
@@ -88,13 +89,29 @@ func build_season_record(world: Dictionary, competition_id: String) -> Dictionar
 	var season_year: int = int(world.get("season_year", _year_from_date(String(world.get("date", "2026-07-01")))))
 	return {"competition_id":competition_id,"competition_name":competition.name,"season_start_year":season_year,"tier":int(competition.get("tier",1)),"complete":complete,"fixture_count":fixtures.size(),"table":table,"champion_club_id":table[0].club_id if complete and not table.is_empty() else "","competition_type":"league"}
 
-func _play_fixture(world: Dictionary, fixture: Dictionary, season_seed: int) -> Dictionary:
+func _play_fixture(world: Dictionary, fixture: Dictionary, season_seed: int, player_index: Dictionary = {}) -> Dictionary:
 	var match_seed: int = _fixture_seed(season_seed, fixture)
 	var home_club: Dictionary = _find_club(world.clubs, String(fixture.home_club_id)); var away_club: Dictionary = _find_club(world.clubs, String(fixture.away_club_id))
 	var engine = _tactical_match_engine if home_club.has("tactic") or away_club.has("tactic") else _abstract_match_engine
-	var result: Dictionary = engine.simulate_match(home_club, away_club, world.players, match_seed)
+	var match_players: Array = world.players
+	if not player_index.is_empty():
+		match_players = []
+		match_players.append_array(player_index.get(String(home_club.id), []))
+		match_players.append_array(player_index.get(String(away_club.id), []))
+	var result: Dictionary = engine.simulate_match(home_club, away_club, match_players, match_seed)
 	engine.apply_to_fixture(fixture, result)
 	return {"fixture":fixture,"result":result,"match_seed":match_seed}
+
+func _index_players_by_club(players: Array) -> Dictionary:
+	var index := {}
+	for player in players:
+		var club_id := String(player.get("club_id", ""))
+		if club_id == "":
+			continue
+		if not index.has(club_id):
+			index[club_id] = []
+		index[club_id].append(player)
+	return index
 
 func _fixture_seed(season_seed: int, fixture: Dictionary) -> int:
 	var hash_value: int = season_seed
