@@ -1,0 +1,68 @@
+name: Hosted Validation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: hosted-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  godot-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Godot 4.5
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.5.0
+          use-dotnet: false
+
+      - name: Verify Godot
+        run: godot --version
+
+      - name: Import project
+        run: bash tools/test-headless.sh import 600
+
+      - name: Phase 1/2
+        run: bash tools/test-headless.sh tests/test_runner.gd 1200
+
+      - name: Phase 3
+        run: bash tools/test-headless.sh tests/phase3_test_runner.gd 1200
+
+      - name: Phase 4/5
+        run: bash tools/test-headless.sh tests/phase45_test_runner.gd 1200
+
+      - name: Phase 6/7
+        run: bash tools/test-headless.sh tests/phase67_test_runner.gd 1200
+
+      - name: Phase 8/9
+        run: bash tools/test-headless.sh tests/phase89_test_runner.gd 1200
+
+      - name: Phase 10/11
+        run: bash tools/test-headless.sh tests/phase1011_test_runner.gd 1200
+
+      - name: 72-gap regressions
+        run: bash tools/test-headless.sh tests/remediation_72_test.gd 1200
+
+      - name: Remediation depth regressions
+        run: bash tools/test-headless.sh tests/remediation_depth_test.gd 1200
+
+      - name: Remediation completion regressions
+        run: bash tools/test-headless.sh tests/remediation_completion_test.gd 1200
+
+      - name: Release hardening regressions
+        run: bash tools/test-headless.sh tests/release_hardening_test.gd 1200
+
+      - name: Destructive fuzz regressions
+        run: bash tools/test-headless.sh tests/destructive_fuzz_test.gd 1200
+
+      - name: Mobile preset validation
+        run: bash tools/test-headless.sh tests/mobile_export_test.gd 1200
