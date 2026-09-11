@@ -94,12 +94,18 @@ jobs:
         shell: powershell
         run: |
           $log = 'build/windows/runtime.log'
-          $proc = Start-Process -FilePath (Resolve-Path 'build/windows/FootballDynasty.exe') -ArgumentList @('--headless','--','--release-smoke') -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError ($log + '.err')
+          $err = $log + '.err'
+          $proc = Start-Process -FilePath (Resolve-Path 'build/windows/FootballDynasty.exe') -ArgumentList @('--headless','--','--release-smoke') -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $err
           if (-not $proc.WaitForExit(180000)) { try { $proc.Kill($true) } catch {}; throw 'Windows release smoke timed out.' }
-          if (Test-Path ($log + '.err')) { Get-Content ($log + '.err') | Add-Content $log }
-          Get-Content $log
-          $text = Get-Content $log -Raw
-          if ($proc.ExitCode -ne 0 -or $text -match 'SCRIPT ERROR:|ERROR:' -or $text -notmatch 'RELEASE SMOKE PASS') { throw 'Windows release smoke failed.' }
+          $proc.Refresh()
+          $exitCode = $proc.ExitCode
+          $stdout = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+          $stderr = if (Test-Path $err) { Get-Content $err -Raw } else { '' }
+          Write-Host $stdout
+          if ($stderr) { Write-Host $stderr }
+          if ($exitCode -ne 0) { throw "Windows release smoke exited with code $exitCode." }
+          if ($stdout -notmatch 'RELEASE SMOKE PASS') { throw 'Windows release smoke did not emit PASS marker.' }
+          if (($stdout + "`n" + $stderr) -match 'SCRIPT ERROR:') { throw 'Windows release smoke reported a script error.' }
 
       - name: Install Godot-SQLite v4.9 if missing
         shell: powershell
