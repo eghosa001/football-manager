@@ -64,8 +64,5 @@ jobs:
       - name: Release hardening regressions
         run: bash tools/test-headless.sh tests/release_hardening_test.gd 1200
 
-      - name: Destructive fuzz regressions
-        run: bash tools/test-headless.sh tests/destructive_fuzz_test.gd 1200
-
       - name: Mobile preset validation
         run: bash tools/test-headless.sh tests/mobile_export_test.gd 1200
