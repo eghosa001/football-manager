@@ -1,17 +1,21 @@
-name: Phase 12 Targeted
+name: Simulation Targeted
 
 on:
   push:
     branches: [cross-platform-mobile-and-hardening]
     paths:
       - 'simulation/match/**'
+      - 'simulation/tactics/**'
       - 'tests/match_engine_v2_test.gd'
+      - 'tests/phase67_test_runner.gd'
       - 'tests/phase12_continuous_spatial_test.gd'
       - '.github/workflows/phase12-targeted.yml'
   pull_request:
     paths:
       - 'simulation/match/**'
+      - 'simulation/tactics/**'
       - 'tests/match_engine_v2_test.gd'
+      - 'tests/phase67_test_runner.gd'
       - 'tests/phase12_continuous_spatial_test.gd'
       - '.github/workflows/phase12-targeted.yml'
   workflow_dispatch:
@@ -20,13 +24,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: phase12-${{ github.ref }}
+  group: simulation-targeted-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,7 +42,10 @@ jobs:
       - name: Run Match Engine v2 regression
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/match_engine_v2_test.gd
-      - name: Run Phase 12 continuous spatial acceptance
+      - name: Run tactics and economy regression
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/phase67_test_runner.gd
+      - name: Run continuous spatial acceptance
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/phase12_continuous_spatial_test.gd
       - name: Verify tests did not modify tracked source
