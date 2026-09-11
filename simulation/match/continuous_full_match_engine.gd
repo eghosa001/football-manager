@@ -53,9 +53,13 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 			var processed := _laws.process_event(event, home, away, home_tactic, away_tactic, weather, seed+segment_index*919)
 			for p in processed:
 				events.append(p)
-				var affected_lineup := home if String(p.get("side","home")) == "home" else away
+				var victim_id := String(p.get("victim_id", p.get("player_id", "")))
+				var affected_lineup := _lineup_for_player(victim_id, home, away)
+				if affected_lineup.is_empty():
+					continue
 				var injury := _laws.injury_from_event(p, affected_lineup, weather, seed+segment_index*929)
 				if not injury.is_empty():
+					injury["side"] = _side_for_player(victim_id, home, away)
 					events.append(injury)
 					_apply_forced_injury_substitution(injury,home,away,benches,participants,substitutions,events)
 		previous_state = run.final.duplicate(true)
@@ -178,6 +182,24 @@ func _is_booked(events: Array, player_id: String) -> bool:
 		if String(event.get("type","")) == "card" and String(event.get("player_id","")) == player_id:
 			return true
 	return false
+
+func _lineup_for_player(player_id: String, home: Array, away: Array) -> Array:
+	for player in home:
+		if String(player.get("id","")) == player_id:
+			return home
+	for player in away:
+		if String(player.get("id","")) == player_id:
+			return away
+	return []
+
+func _side_for_player(player_id: String, home: Array, away: Array) -> String:
+	for player in home:
+		if String(player.get("id","")) == player_id:
+			return "home"
+	for player in away:
+		if String(player.get("id","")) == player_id:
+			return "away"
+	return "home"
 
 func _bench(players: Array, club_id: String, lineup: Array) -> Array:
 	var ids := {}
