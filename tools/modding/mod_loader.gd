@@ -25,6 +25,9 @@ func load_mod(path: String) -> Dictionary:
 func validate_mod(data: Dictionary) -> Dictionary:
 	var metadata = data.get("metadata", {})
 	if typeof(metadata) != TYPE_DICTIONARY: return {"ok":false,"error":"metadata_must_be_dictionary","patches":{}}
+	for key in ["id", "name", "version", "author"]:
+		if metadata.has(key) and not metadata[key] is String: return {"ok":false,"error":"metadata_text_required:" + key}
+	if metadata.has("api_version") and typeof(metadata.api_version) not in [TYPE_INT, TYPE_FLOAT]: return {"ok":false,"error":"invalid_api_version"}
 	if String(metadata.get("id", "")).strip_edges() == "": return {"ok":false,"error":"metadata_id_required","patches":{}}
 	if int(metadata.get("api_version", SUPPORTED_API_VERSION)) > SUPPORTED_API_VERSION: return {"ok":false,"error":"unsupported_api_version","patches":{}}
 	for key in ["dependencies","conflicts"]:
@@ -37,8 +40,10 @@ func validate_mod(data: Dictionary) -> Dictionary:
 		if typeof(rows) != TYPE_ARRAY: return {"ok":false,"error":"patch_list_required:%s" % String(root_key),"patches":{}}
 		for patch in rows:
 			if typeof(patch) != TYPE_DICTIONARY or not patch.has("id"): return {"ok":false,"error":"patch_id_required:%s" % String(root_key),"patches":{}}
+			if not patch.id is String or String(patch.id).is_empty(): return {"ok":false,"error":"invalid_entity_id"}
 			for field in patch.keys():
 				if String(field) != "id" and String(field) not in ALLOWED_PATCH_KEYS[root_key]: return {"ok":false,"error":"unsupported_field:%s.%s" % [String(root_key),String(field)],"patches":{}}
+				if not _valid_value(String(field), patch[field]): return {"ok":false,"error":"invalid_value:%s.%s" % [root_key, field]}
 	return {"ok":true,"error":"","patches":patches.duplicate(true)}
 
 func validate_load_order(mods: Array) -> Dictionary:
@@ -58,6 +63,10 @@ func validate_load_order(mods: Array) -> Dictionary:
 	return {"ok":true,"error":""}
 
 func apply_mods(world: Dictionary, mods: Array) -> Dictionary:
+	for mod in mods:
+		if not mod is Dictionary: return {"ok":false,"applied":0,"error":"invalid_mod"}
+		var validation := validate_mod(mod)
+		if not validation.ok: return {"ok":false,"applied":0,"error":validation.error}
 	var order := validate_load_order(mods)
 	if not order.ok: return {"ok":false,"applied":0,"error":order.error}
 	var total := 0
@@ -66,6 +75,21 @@ func apply_mods(world: Dictionary, mods: Array) -> Dictionary:
 		if not result.ok: return {"ok":false,"applied":total,"error":result.error}
 		total += int(result.applied)
 	return {"ok":true,"applied":total,"error":""}
+
+func _valid_value(key: String, value) -> bool:
+	if key in ["id", "name", "first_name", "last_name", "position", "country_id", "preferred_foot", "role", "code"]: return value is String
+	if key == "traits":
+		if not value is Array: return false
+		for item in value:
+			if not item is String: return false
+		return true
+	if key in ["attributes", "hidden_attributes", "position_familiarity", "staff_attributes"]:
+		if not value is Dictionary: return false
+		for item in value.values():
+			if typeof(item) not in [TYPE_INT, TYPE_FLOAT] or not is_finite(float(item)): return false
+		return true
+	if key in ["facilities", "board", "supporters", "manager_profile", "registration_rules", "rules"]: return value is Dictionary
+	return typeof(value) in [TYPE_INT, TYPE_FLOAT] and is_finite(float(value))
 
 func apply_mod(world: Dictionary, data: Dictionary) -> Dictionary:
 	var validation := validate_mod(data)

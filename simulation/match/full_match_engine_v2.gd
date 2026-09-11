@@ -11,8 +11,8 @@ var _tactics = TacticsManagerClass.new()
 func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int) -> Dictionary:
 	var home_tactic: Dictionary = home_club.get("tactic", _tactics.create_tactic("4-3-3"))
 	var away_tactic: Dictionary = away_club.get("tactic", _tactics.create_tactic("4-3-3"))
-	var home: Array = _tactics.select_lineup(players, String(home_club.id), home_tactic)
-	var away: Array = _tactics.select_lineup(players, String(away_club.id), away_tactic)
+	var home: Array = _tactics.select_lineup(players, String(home_club.id), home_tactic).duplicate(true)
+	var away: Array = _tactics.select_lineup(players, String(away_club.id), away_tactic).duplicate(true)
 	if home.size() < 11 or away.size() < 11:
 		return {"error":ERR_UNAVAILABLE,"home_goals":0,"away_goals":0,"events":[],"stats":{}}
 	var starters := {"home":_ids(home),"away":_ids(away)}
@@ -25,6 +25,7 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	var events: Array = []
 	var possession_counts := {"home":0,"away":0}
 	var frames: Array = []
+	var carry: Dictionary = {}
 	for possession_index in range(54):
 		var minute := mini(90, int(floor(float(possession_index) * 90.0 / 54.0)))
 		for substitution in planned:
@@ -35,7 +36,13 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 				if String(lineup[player_index].id) != String(substitution.player_out): continue
 				for player in players:
 					if String(player.id) != String(substitution.player_in): continue
-					lineup[player_index] = player
+					lineup[player_index] = player.duplicate(true)
+					if not carry.is_empty():
+						var positions: Dictionary = carry.home_positions if String(substitution.side) == "home" else carry.away_positions
+						if positions.has(String(substitution.player_out)):
+							positions[String(player.id)] = positions[String(substitution.player_out)]
+							positions.erase(String(substitution.player_out))
+						if String(carry.ball_owner_id) == String(substitution.player_out): carry.ball_owner_id = String(player.id)
 					var event: Dictionary = substitution.duplicate(true)
 					event.erase("applied")
 					event.minute = minute
@@ -46,10 +53,15 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 				break
 		var home_share := _possession_share(home, away, home_mod, away_mod)
 		var starting_side := "home" if SeededRngClass.unit_for(seed, 31_000 + possession_index) < home_share else "away"
+		if not carry.is_empty(): starting_side = String(carry.possession_side)
 		possession_counts[starting_side] += 1
 		var sequence_factor := float(home_mod.sequence_multiplier) if starting_side == "home" else float(away_mod.sequence_multiplier)
 		var max_actions := clampi(int(round(18.0 * sequence_factor)), 14, 22)
-		var possession: Dictionary = _possession.simulate_possession(home, away, seed + possession_index * 7919, max_actions, starting_side)
+		var possession: Dictionary = _possession.simulate_possession(home, away, seed + possession_index * 7919, max_actions, starting_side, carry)
+		for frame_index in range(possession.frames.size()):
+			var frame: Dictionary = possession.frames[frame_index]
+			frame["minute"] = float(possession_index) * 90.0 / 54.0 + float(frame_index) * 90.0 / 54.0 / maxf(1.0, float(possession.frames.size()))
+			frames.append(frame)
 		for event in possession.events:
 			var copy: Dictionary = event.duplicate(true)
 			copy["minute"] = minute
@@ -72,7 +84,14 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 					if String(lineup[player_index].id) == player_id: lineup.remove_at(player_index)
 				var positions: Dictionary = possession.state.home_positions if String(card.side) == "home" else possession.state.away_positions
 				positions.erase(player_id)
-		frames.append({"minute":minute,"ball":possession.state.ball.duplicate(true),"home":possession.state.home_positions.duplicate(true),"away":possession.state.away_positions.duplicate(true)})
+		carry = possession.state
+		if String(carry.ball_owner_id).is_empty():
+			var next_side := "away" if starting_side == "home" else "home"
+			carry = _possession._initial_state(home, away, next_side)
+		for team in [home, away]:
+			for player in team:
+				var stamina := float(player.get("attributes", {}).get("stamina", 50))
+				player.fitness = maxf(25.0, float(player.get("fitness", 100)) - (0.55 - stamina * 0.003))
 	# Preserve causal ordering within each minute: substitutions precede play,
 	# and cards follow the possession that caused them.
 	var stats := {"home":_blank_stats(),"away":_blank_stats()}
@@ -85,7 +104,7 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	return {
 		"home_goals":int(goals.home),"away_goals":int(goals.away),"events":events,"stats":stats,
 		"lineups":starters,"participants":participants,"final_lineups":{"home":_ids(home),"away":_ids(away)},"substitutions":substitutions,
-		"spatial":{"pitch_length":105.0,"pitch_width":68.0,"frames":frames,"model":"causal_2d_v2"},
+		"spatial":{"pitch_length":105.0,"pitch_width":68.0,"frames":frames,"model":"persistent_action_2d"},
 		"tactics":{"home":home_tactic.duplicate(true),"away":away_tactic.duplicate(true)},"seed":seed
 	}
 

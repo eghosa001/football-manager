@@ -10,9 +10,9 @@ const LAST_NAMES := ["Okoro","Mensah","Diallo","Banda","Mokoena","Abdullahi","Ad
 const POSITIONS := ["GK","GK","DR","DC","DC","DC","DL","DM","MC","MC","AMC","AMR","AML","ST","ST"]
 const STAFF_ROLES := ["manager","assistant","coach","scout","physio"]
 
-func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25) -> Dictionary:
+func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25, expanded: bool = false) -> Dictionary:
 	var loader = DatabaseLoaderClass.new()
-	var data: Dictionary = loader.load_seed()
+	var data: Dictionary = loader.load_seed("res://data/seed/launch_database.json", expanded)
 	if data.is_empty() or not loader.validate_seed(data).is_empty(): return {}
 	var world := {"seed":seed,"date":"2026-07-01","season_year":2026,"countries":[],"clubs":[],"players":[],"staff":[],"competitions":[],"contracts":[],"fixtures":[],"launch_database_schema":int(data.schema_version)}
 	var countries: Array = data.countries
@@ -29,9 +29,10 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 			var club_ids: Array = []
 			for club_index in range(team_count):
 				var club_id := "%s-t%d-c%02d" % [country_id, tier_index + 1, club_index + 1]
-				var club_name := "%s %s %d" % [String(raw_country.name), _club_word(club_index), club_index + 1]
+				var club_name := loader.club_name(raw_country, club_index, tier_index + 1)
 				var rep := _range(seed, _key(club_id), 28 + maxi(0, 3-tier_index)*4, 78 - tier_index*5)
 				var club: Dictionary = DomainModelsClass.club(club_id, country_id, club_name, rep)
+				if raw_country.has("cities"): club["city"] = raw_country.cities[club_index % raw_country.cities.size()]
 				club["tier"] = tier_index + 1
 				club["stadium_capacity"] = _range(seed, _key(club_id)+1, 5000, 55000)
 				club["training_facilities"] = _range(seed, _key(club_id)+2, 30, 80)

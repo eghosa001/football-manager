@@ -1,14 +1,26 @@
 class_name DatabaseLoader
 extends RefCounted
 
-func load_seed(path: String = "res://data/seed/launch_database.json") -> Dictionary:
+func load_seed(path: String = "res://data/seed/launch_database.json", expanded: bool = false) -> Dictionary:
 	if not FileAccess.file_exists(path): return {}
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null: return {}
 	var parsed = JSON.parse_string(file.get_as_text())
 	file.close()
 	if typeof(parsed) != TYPE_DICTIONARY or int(parsed.get("schema_version",0)) != 1: return {}
+	if expanded:
+		var extra = JSON.parse_string(FileAccess.get_file_as_string("res://data/seed/expanded_countries.json"))
+		if not extra is Array: return {}
+		for country in extra:
+			parsed.countries.append(country)
+			parsed.league_systems.append({"country_id":country.id,"tiers":[{"name":"Premier Division","template":"league-18","promotion":0,"relegation":3},{"name":"Second Division","template":"league-18","promotion":3,"relegation":0}],"cup":{"name":"National Cup","template":"cup-32"}})
 	return parsed
+
+func club_name(country: Dictionary, index: int, tier: int) -> String:
+	var words := ["United","City","Athletic","Rovers","Stars","Dynamos","Warriors","Sporting","Rangers","Lions"]
+	var cities: Array = country.get("cities", [])
+	if not cities.is_empty(): return "%s %s" % [cities[index % cities.size()], words[(index / cities.size() + (tier - 1) * 2) % words.size()]]
+	return "%s %s %d" % [String(country.name), words[index % words.size()], index + 1]
 
 func validate_seed(data: Dictionary) -> Array[String]:
 	var errors: Array[String] = []

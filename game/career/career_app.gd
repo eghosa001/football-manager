@@ -26,6 +26,8 @@ var _club_selector: OptionButton
 var _wizard_clubs: Array = []
 var _worker: Thread
 var _busy := false
+var custom_database: Dictionary = {}
+var expanded_world := false
 
 func _ready() -> void:
 	if "--release-smoke" in OS.get_cmdline_user_args():
@@ -69,6 +71,7 @@ func _show_main_menu() -> void:
 	_add_button(root, tr("Load Career"), _show_load_menu)
 	_add_button(root, tr("Settings"), _show_settings)
 	_add_button(root, tr("How to play"), _show_help)
+	_add_button(root, tr("Club database editor"), func(): preload("res://game/career/database_editor.gd").new(self, custom_database).show())
 	_add_button(root, tr("Quit"), func(): get_tree().quit())
 
 func _show_help() -> void:
@@ -122,11 +125,19 @@ func _show_settings() -> void:
 func _show_new_career() -> void:
 	var root := _clear()
 	_add_heading(root, tr("New Career"), 28)
+	var expanded := CheckBox.new()
+	expanded.text = tr("Expanded world: 20 countries (longer processing)")
+	expanded.button_pressed = expanded_world
+	root.add_child(expanded)
+	expanded.toggled.connect(func(enabled: bool): expanded_world = enabled; _show_new_career())
 	var name_label := Label.new(); name_label.text = tr("Manager name"); root.add_child(name_label)
 	_manager_name_input = LineEdit.new(); _manager_name_input.text = tr("Manager"); _manager_name_input.placeholder_text = "Enter manager name"; root.add_child(_manager_name_input)
 	var club_label := Label.new(); club_label.text = tr("Choose club — launch database"); root.add_child(club_label)
 	_club_selector = OptionButton.new()
-	var preview: Dictionary = LaunchCatalogClass.new().build(0)
+	var preview: Dictionary = LaunchCatalogClass.new().build(0, expanded_world)
+	if not custom_database.is_empty():
+		preload("res://tools/modding/mod_loader.gd").new().apply_mod(preview, custom_database)
+		_add_button(root, tr("Clear custom database"), func(): custom_database = {}; _show_new_career())
 	_wizard_clubs = preview.get("clubs", [])
 	for club in _wizard_clubs:
 		var country_name := _country_name(preview.get("countries", []), String(club.get("country_id", "")))
@@ -144,7 +155,8 @@ func _create_career_from_wizard() -> void:
 	if manager_name == "": manager_name = "Manager"
 	var selected := clampi(_club_selector.selected, 0, maxi(0, _wizard_clubs.size()-1))
 	var club_id := String(_wizard_clubs[selected].id) if not _wizard_clubs.is_empty() else ""
-	var snap: Dictionary = await _run_job(session.new_career.bind(manager_name, club_id, 12345, 0), "Creating your football world")
+	var mods: Array = [] if custom_database.is_empty() else [custom_database.duplicate(true)]
+	var snap: Dictionary = await _run_job(session.new_career.bind(manager_name, club_id, 12345, 0, mods, expanded_world), "Creating your football world")
 	if snap.is_empty() or snap.has("error"):
 		_show_main_menu()
 		_show_error("The career could not be created. Please try again.")
