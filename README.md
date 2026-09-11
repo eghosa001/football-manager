@@ -4,7 +4,7 @@ A deterministic, simulation-first football-management game built with Godot 4.7.
 
 ## Current implementation
 
-The project is a playable release-candidate prototype, not a completed implementation of the original phases 0–14. Core career and simulation services exist, with remaining work in continuous match simulation, content scale, graphical mod authoring, full localization and presentation. See docs/PRODUCTION_PROGRESS.md for verified changes and remaining gates.
+The project is a playable release-candidate prototype, not a completed implementation of the original phases 0–14. Core career and simulation services exist, with remaining work concentrated in continuous-match validation/convergence, content scale, graphical mod authoring, full localization, accessibility, presentation and target-device release acceptance. See `docs/PRODUCTION_PROGRESS.md` and `docs/REMEDIATION_72_MATRIX.md` for verified changes and remaining gates.
 
 The current build can:
 
@@ -22,17 +22,19 @@ The current build can:
 - evolve bounded morale, confidence and reputation; create relationships, title-race rivalries, manager career/trophy histories, awards, legends and causal news records;
 - load and author whitelisted JSON data mods without allowing arbitrary save/economy mutation;
 - persist accessibility/settings options and provide English, French and Portuguese top-level UI localization;
-- migrate schema-v1 saves to the Phase 10 schema-v2 living-world collections;
-- keep expensive spatial simulation as a detailed-match tier while unattended seasons use the cheaper tactical tier;
-- build Windows x86_64 and Linux x86_64 release candidates from committed export presets;
-- smoke-test the Linux release offline and expose an explicit offline release contract;
-- run a 100-season release soak and the 100,000-match statistical release gate.
+- migrate legacy saves through the current schema migration path;
+- keep expensive continuous/detailed simulation as a viewed-match tier while unattended seasons use cheaper event/abstract/aggregate tiers;
+- build Windows x86_64 and Linux/X11 x86_64 release candidates from committed export presets;
+- run release smoke, destructive-save, mobile-preset and regression validation in CI;
+- expose explicit 100-season, 100,000-match continuous and cross-tier release gates.
 
 ## Release candidate
 
-The project version is `1.0.0-rc2-dev`. `export_presets.cfg` defines Windows Desktop and Linux/X11 x86_64 release exports. `.github/workflows/release-candidate.yml` provides a manual packaging workflow that builds both platforms, smoke-tests Linux offline, generates SHA-256 integrity files and uploads build artifacts.
+The project version is `1.0.0-rc2-dev`. `export_presets.cfg` defines Windows Desktop and Linux/X11 x86_64 release exports.
 
-The normal Phase 10/11 branch validation also builds both release targets so export configuration regressions are caught before merge.
+`.github/workflows/ci.yml` is the authoritative self-hosted Windows validation workflow and builds both desktop release targets, smoke-tests the Windows package, validates SQLite and can run the heavy release gates through workflow-dispatch inputs. `.github/workflows/hosted-validation.yml` supplies GitHub-hosted Linux regression coverage using the same Godot 4.7.2 engine version. `.github/workflows/mobile.yml` validates the mobile export configuration.
+
+A successful export is not the same as target-platform acceptance. Linux runtime execution, clean-machine Windows installation, real mobile-device testing and platform signing remain explicit release gates in `docs/RELEASE_GATES.md`.
 
 ## Run
 
@@ -54,6 +56,8 @@ The main scene opens the career menu. Create a career to choose a club from the 
 
 ## Tests
 
+Fast/core regression suites:
+
 ```bash
 godot --headless --path . --script res://tests/test_runner.gd
 godot --headless --path . --script res://tests/phase3_test_runner.gd
@@ -69,16 +73,18 @@ SQLite integration, with the Godot-SQLite addon installed:
 godot --headless --path . --script res://tests/sqlite_integration_test.gd
 ```
 
-Full match validation:
+Heavy release validation:
 
 ```bash
-godot --headless --path . --script res://tests/test_runner.gd -- --full-match-validation
+godot --headless --path . --script res://tests/continuous_distribution_gate.gd
+godot --headless --path . --script res://tests/cross_tier_regression.gd
+godot --headless --path . --script res://tests/full_career_soak.gd
 ```
 
-The standard match suite samples 2,000 abstract matches and 250 detailed spatial matches. The full release gate runs 100,000 abstract matches. Phase 10/11 also runs a 100-season integrated career/save soak.
+The continuous distribution gate is the 100,000-match detailed-engine release calibration. Cross-tier regression compares the detailed/event/abstract/aggregate populations. The full career soak exercises 100 seasons through the canonical career lifecycle. These gates are intentionally separated from ordinary per-commit validation because they are expensive.
 
 ## Architecture
 
-Simulation code has no dependency on scenes, rendering or persistence adapters. Application services coordinate season/career progression and expose read-only queries to the UI. Living-world updates consume completed domain state and emit structured causal records; news is a consumer of those records rather than a simulation trigger. Background fixtures use the tactical engine while detailed viewed matches can use the spatial engine, both preserving the same logical event contract.
+Simulation code has no dependency on scenes, rendering or persistence adapters. Application services coordinate season/career progression and expose read-only queries to the UI. Living-world updates consume completed domain state and emit structured causal records; news is a consumer of those records rather than a simulation trigger. `MatchEngineRouter` is the stable tier boundary: detailed viewed matches use the continuous engine while background workloads use cheaper event/abstract/aggregate tiers and preserve the same logical result contract.
 
 See `docs/AUDIT_AND_ROADMAP.md` for the architecture audit and extended development roadmap.
