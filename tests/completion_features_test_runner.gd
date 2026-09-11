@@ -19,7 +19,7 @@ func _init() -> void:
 	_test_mod_v3()
 	_test_lineup_assignments()
 	_test_simulation_tiers()
-	_test_autosave_policy()
+	_test_autosave_policy_and_save_package()
 	_test_expanded_launch_scale()
 	if failures == 0:
 		print("[TEST] COMPLETION FEATURES PASS — %d checks" % checks)
@@ -117,7 +117,7 @@ func _test_simulation_tiers() -> void:
 	_expect(a == b, "Aggregate tier must be deterministic for identical seeds")
 	_expect(int(a.home_goals) >= 0 and int(a.away_goals) >= 0, "Aggregate tier must return legal non-negative score")
 
-func _test_autosave_policy() -> void:
+func _test_autosave_policy_and_save_package() -> void:
 	var store = SettingsStore.new()
 	for mode in SettingsStore.AUTOSAVE_MODES:
 		var value := store.sanitize({"autosave":true,"autosave_mode":mode,"autosave_rolling_count":5})
@@ -129,7 +129,19 @@ func _test_autosave_policy() -> void:
 	var slot := 20
 	slots.delete_slot(slot)
 	var world := WorldGenerator.new().create_world(74001, 1, 4, 20)
+	world["launch_database_schema"] = 1
+	world["playtime_seconds"] = 123
 	var manager := {"id":"human-manager","name":"Autosave Test","club_id":String(world.clubs[0].id)}
+	_expect(slots.save_slot(slot, world, [], manager) == OK, "Manual save must write compatibility save and career package")
+	_expect(FileAccess.file_exists(slots.slot_path(slot)), "Compatibility .fdn save must remain available")
+	_expect(FileAccess.file_exists(slots.package_world_path(slot)), "Career package must contain world.db")
+	_expect(FileAccess.file_exists(slots.package_metadata_path(slot)), "Career package must contain metadata.json")
+	_expect(FileAccess.file_exists(slots.package_thumbnail_path(slot)), "Career package must contain thumbnail.png")
+	var metadata_file := FileAccess.open(slots.package_metadata_path(slot), FileAccess.READ)
+	var package_metadata = JSON.parse_string(metadata_file.get_as_text()) if metadata_file != null else {}
+	if metadata_file != null:
+		metadata_file.close()
+	_expect(typeof(package_metadata) == TYPE_DICTIONARY and String(package_metadata.get("version", "")) == "1.0.0" and int(package_metadata.get("playtime", 0)) == 123, "Career package metadata must contain version and playtime")
 	for generation in range(4):
 		world["day_index"] = generation + 1
 		world["date"] = "2026-07-%02d" % (generation + 2)
