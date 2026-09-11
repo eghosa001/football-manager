@@ -10,6 +10,7 @@ const BoardEvaluationClass = preload("res://simulation/finance/board_evaluation.
 const TacticsClass = preload("res://simulation/tactics/tactics_manager.gd")
 const LivingWorldClass = preload("res://simulation/world/living_world.gd")
 const ReputationModelClass = preload("res://simulation/world/reputation_model.gd")
+const HistoryRecordServiceClass = preload("res://simulation/world/history_record_service.gd")
 const PlayerHappinessClass = preload("res://simulation/players/player_happiness.gd")
 const StaffMarketClass = preload("res://simulation/staff/staff_market.gd")
 const StaffContractsClass = preload("res://simulation/staff/staff_contracts.gd")
@@ -28,6 +29,7 @@ var _board = BoardEvaluationClass.new()
 var _tactics = TacticsClass.new()
 var _living_world = LivingWorldClass.new()
 var _reputation = ReputationModelClass.new()
+var _history_records = HistoryRecordServiceClass.new()
 var _happiness = PlayerHappinessClass.new()
 var _staff_market = StaffMarketClass.new()
 var _staff_contracts = StaffContractsClass.new()
@@ -42,12 +44,14 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	_tactics.ensure_world(world, season_seed + 600_001)
 	_living_world.ensure_world(world)
 	_reputation.ensure_world(world)
+	_history_records.ensure_world(world)
 	_staff_market.ensure_world(world)
 	_staff_contracts.ensure_world(world)
 	for club in world.clubs:
 		_tactics.train_tactic(club, 8)
 	var season_result: Dictionary = _season_runner.complete_and_rollover(world, history, season_seed, promotion_places)
 	var completed_year: int = int(season_result.next_season_year) - 1
+	var history_result: Dictionary = _history_records.record_season(world, season_result.records, completed_year)
 	var economy_result: Dictionary = _economy.run_season_finances(world, completed_year, season_result.records)
 	var board_result: Dictionary = _board.evaluate_world(world, season_result.records)
 	var manager_market_result: Dictionary = _process_ai_manager_market(world, season_result.records, completed_year)
@@ -80,7 +84,7 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	var reputation_result: Dictionary = _reputation.advance_year(world, season_result.records)
 	var happiness_result: Dictionary = _happiness.update_week(world)
 	_events.emit(world, "SEASON_ENDED", {"completed_year":completed_year,"next_year":next_year,"competition_records":season_result.records.duplicate(true),"promotion_movements":season_result.get("movements", []).duplicate(true),"international_champion":String(international_result.get("champion", ""))}, "career_cycle")
-	return {"season":season_result,"economy":economy_result,"board":board_result,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"staff_development":staff_development_result,"squads":squad_result,"registrations":registration_result,"living_world":living_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
+	return {"season":season_result,"history_archive":history_result,"economy":economy_result,"board":board_result,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"staff_development":staff_development_result,"squads":squad_result,"registrations":registration_result,"living_world":living_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
 
 func _process_ai_manager_market(world: Dictionary, records: Array, year: int) -> Dictionary:
 	var human_club_id := String(world.get("human_manager", {}).get("club_id", ""))
