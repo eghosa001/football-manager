@@ -8,8 +8,12 @@ const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const DressingRoomClass = preload("res://simulation/players/dressing_room.gd")
 const PlayerPromisesClass = preload("res://simulation/players/player_promises.gd")
 const PlayerHappinessClass = preload("res://simulation/players/player_happiness.gd")
+const DomainEventBusClass = preload("res://core/events/domain_event_bus.gd")
+
+var _events = DomainEventBusClass.new()
 
 func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
+	_events.ensure_world(world)
 	world["day_index"] = int(world.get("day_index", 0)) + 1
 	var day_index: int = int(world.day_index)
 	var medical := _advance_medical(world, managed_club_id)
@@ -22,10 +26,10 @@ func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 	var promises: Array = PlayerPromisesClass.new().evaluate(world)
 	for outcome in promises:
 		var player := _player(world.get("players", []), String(outcome.player_id))
+		_events.emit(world, "PROMISE_RESOLVED", {"promise_id":String(outcome.promise_id),"player_id":String(outcome.player_id),"fulfilled":bool(outcome.fulfilled),"club_id":String(player.get("club_id", ""))}, "player_promises")
 		if not player.is_empty() and String(player.get("club_id", "")) == managed_club_id:
 			InboxServiceClass.new().add_message(world, "dressing_room", "Promise %s" % ("kept" if bool(outcome.fulfilled) else "broken"), "%s's promise has been %s." % [_player_name(player), "fulfilled" if bool(outcome.fulfilled) else "broken"])
 	if day_index % 7 == 0:
-		# Build atmosphere first so squad-harmony happiness uses the latest room.
 		for club in world.get("clubs", []):
 			DressingRoomClass.new().rebuild(world, String(club.get("id", "")))
 		happiness = PlayerHappinessClass.new().update_week(world)
@@ -51,7 +55,9 @@ func _advance_medical(world: Dictionary, managed_club_id: String) -> Array:
 		var physio_quality := int(physios.get(String(player.get("club_id", "")), 50))
 		var result: Dictionary = medical_system.advance_day(player, physio_quality, 0.65)
 		if bool(result.get("recovered", false)):
-			updates.append({"player_id":String(player.get("id", "")),"type":"recovered"})
+			var recovery := {"player_id":String(player.get("id", "")),"club_id":String(player.get("club_id", "")),"type":"recovered"}
+			updates.append(recovery)
+			_events.emit(world, "PLAYER_RECOVERED", recovery, "medical")
 			if String(player.get("club_id", "")) == managed_club_id:
 				InboxServiceClass.new().add_message(world, "medical", "%s returns to training" % _player_name(player), "The medical team has cleared the player to return to training.")
 		elif was_injured and int(player.get("injured_days", 0)) > 0:
@@ -91,6 +97,7 @@ func _reconcile_training_injuries(world: Dictionary, managed_club_id: String, se
 		medical_system.ensure_player(player)
 		if not Dictionary(player.medical.get("current", {})).is_empty(): continue
 		var injury: Dictionary = medical_system.suffer_injury(player, seed + _stable_key(String(player.get("id", ""))), "training")
+		_events.emit(world, "PLAYER_INJURED", {"player_id":String(player.get("id", "")),"club_id":String(player.get("club_id", "")),"injury":String(injury.get("name", "injury")),"days_total":int(injury.get("days_total", 0)),"source":"training"}, "medical")
 		if String(player.get("club_id", "")) == managed_club_id:
 			InboxServiceClass.new().add_message(world, "medical", "%s injured" % _player_name(player), "%s suffered a %s and is expected to miss about %d days." % [_player_name(player), String(injury.get("name", "injury")), int(injury.get("days_total", 0))])
 
