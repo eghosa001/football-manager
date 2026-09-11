@@ -8,9 +8,11 @@ on:
       - 'application/settings/**'
       - 'application/release/**'
       - 'application/performance/**'
+      - 'core/events/**'
       - 'tests/staff_recruitment_safety_test.gd'
       - 'tests/release_smoke_test.gd'
       - 'tests/completion_features_test_runner.gd'
+      - 'tests/event_news_test.gd'
       - 'game/localization/**'
       - 'game/polish/**'
       - 'tools/test-headless.ps1'
@@ -58,6 +60,8 @@ jobs:
         run: .\tools\test-headless.ps1 -Script import
       - shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/completion_features_test_runner.gd -TimeoutSeconds 300
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/event_news_test.gd
       - shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/career_rollover_test.gd
       - shell: powershell
