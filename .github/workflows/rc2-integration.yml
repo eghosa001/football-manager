@@ -7,14 +7,18 @@ on:
       - 'application/season/**'
       - 'application/settings/**'
       - 'application/release/**'
+      - 'application/performance/**'
       - 'tests/staff_recruitment_safety_test.gd'
       - 'tests/release_smoke_test.gd'
+      - 'tests/completion_features_test_runner.gd'
       - 'game/localization/**'
+      - 'game/polish/**'
       - 'tools/test-headless.ps1'
       - 'tests/continental_competitions_test.gd'
       - 'tests/career_rollover_test.gd'
       - 'tests/match_participation_test.gd'
       - 'game/career/**'
+      - 'game/tactics/**'
       - 'data/**'
       - 'simulation/players/**'
       - 'simulation/staff/**'
@@ -24,6 +28,7 @@ on:
       - 'simulation/tactics/**'
       - 'simulation/competitions/**'
       - 'persistence/**'
+      - 'tools/modding/**'
       - 'tests/player_stats_test.gd'
       - 'tests/save_safety_test.gd'
       - 'tests/registration_safety_test.gd'
@@ -43,7 +48,7 @@ permissions:
 jobs:
   rc2-integration:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,6 +56,8 @@ jobs:
           clean: false
       - shell: powershell
         run: .\tools\test-headless.ps1 -Script import
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/completion_features_test_runner.gd -TimeoutSeconds 300
       - shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/career_rollover_test.gd
       - shell: powershell
