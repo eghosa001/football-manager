@@ -11,6 +11,7 @@ const SettingsStoreClass = preload("res://application/settings/settings_store.gd
 const LocalizationServiceClass = preload("res://game/localization/localization_service.gd")
 
 const SETTINGS_PATH := "user://settings.json"
+const MOBILE_BREAKPOINT := 900.0
 
 var session = CareerSessionClass.new()
 var slots = SaveSlotsClass.new()
@@ -46,16 +47,21 @@ func _clear() -> VBoxContainer:
 	add_child(background)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", int(28 * float(settings.get("ui_scale", 1.0))))
-	margin.add_theme_constant_override("margin_top", int(22 * float(settings.get("ui_scale", 1.0))))
-	margin.add_theme_constant_override("margin_right", int(28 * float(settings.get("ui_scale", 1.0))))
-	margin.add_theme_constant_override("margin_bottom", int(22 * float(settings.get("ui_scale", 1.0))))
+	var scale_factor := float(settings.get("ui_scale", 1.0))
+	var side_margin := 12 if _compact_layout() else 28
+	var vertical_margin := 12 if _compact_layout() else 22
+	margin.add_theme_constant_override("margin_left", int(side_margin * scale_factor))
+	margin.add_theme_constant_override("margin_top", int(vertical_margin * scale_factor))
+	margin.add_theme_constant_override("margin_right", int(side_margin * scale_factor))
+	margin.add_theme_constant_override("margin_bottom", int(vertical_margin * scale_factor))
 	add_child(margin)
 	content = VBoxContainer.new()
-	content.add_theme_constant_override("separation", int(10 * float(settings.get("ui_scale", 1.0))))
+	content.add_theme_constant_override("separation", int(10 * scale_factor))
 	var scroll := ScrollContainer.new()
 	scroll.follow_focus = true
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	margin.add_child(scroll)
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -65,7 +71,7 @@ func _clear() -> VBoxContainer:
 func _show_main_menu() -> void:
 	var root := _clear()
 	_add_heading(root, tr("FOOTBALL DYNASTY"), 36)
-	var subtitle := Label.new(); subtitle.text = tr("Build a dynasty. Shape a football world."); root.add_child(subtitle)
+	var subtitle := Label.new(); subtitle.text = tr("Build a dynasty. Shape a football world."); subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; root.add_child(subtitle)
 	if not session.world.is_empty(): _add_button(root, tr("Resume Career"), _show_career)
 	_add_button(root, tr("New Career"), _show_new_career)
 	_add_button(root, tr("Load Career"), _show_load_menu)
@@ -104,7 +110,7 @@ func _show_settings() -> void:
 	var reader := CheckBox.new(); reader.text = tr("Screen-reader labels"); reader.button_pressed = bool(settings.get("screen_reader_labels",true)); root.add_child(reader)
 	var autosave := CheckBox.new(); autosave.text = tr("Autosave"); autosave.button_pressed = bool(settings.get("autosave",true)); root.add_child(autosave)
 	var interval := SpinBox.new(); interval.min_value = 1; interval.max_value = 30; interval.value = int(settings.get("autosave_interval_days",7)); root.add_child(_labeled("Autosave interval (days)", interval))
-	var row := HBoxContainer.new(); root.add_child(row)
+	var row := HFlowContainer.new(); row.size_flags_horizontal = Control.SIZE_EXPAND_FILL; root.add_child(row)
 	_add_button(row, tr("Apply"), func():
 		settings.language = LocalizationServiceClass.SUPPORTED[language.selected]
 		settings.ui_scale = ui_scale.value
@@ -131,9 +137,9 @@ func _show_new_career() -> void:
 	root.add_child(expanded)
 	expanded.toggled.connect(func(enabled: bool): expanded_world = enabled; _show_new_career())
 	var name_label := Label.new(); name_label.text = tr("Manager name"); root.add_child(name_label)
-	_manager_name_input = LineEdit.new(); _manager_name_input.text = tr("Manager"); _manager_name_input.placeholder_text = "Enter manager name"; root.add_child(_manager_name_input)
+	_manager_name_input = LineEdit.new(); _manager_name_input.text = tr("Manager"); _manager_name_input.placeholder_text = tr("Enter manager name"); _manager_name_input.custom_minimum_size.y = _touch_height(); root.add_child(_manager_name_input)
 	var club_label := Label.new(); club_label.text = tr("Choose club — launch database"); root.add_child(club_label)
-	_club_selector = OptionButton.new()
+	_club_selector = OptionButton.new(); _club_selector.custom_minimum_size.y = _touch_height()
 	var preview: Dictionary = LaunchCatalogClass.new().build(0, expanded_world)
 	if not custom_database.is_empty():
 		preload("res://tools/modding/mod_loader.gd").new().apply_mod(preview, custom_database)
@@ -144,8 +150,8 @@ func _show_new_career() -> void:
 		var tier := int(club.get("tier", 1))
 		_club_selector.add_item("%s — %s T%d" % [String(club.get("name", "Club")), country_name, tier])
 	root.add_child(_club_selector)
-	var database_info := Label.new(); database_info.text = tr("%d countries • %d clubs • multi-tier leagues and domestic cups") % [preview.get("countries", []).size(), _wizard_clubs.size()]; root.add_child(database_info)
-	var buttons := HBoxContainer.new(); root.add_child(buttons)
+	var database_info := Label.new(); database_info.text = tr("%d countries • %d clubs • multi-tier leagues and domestic cups") % [preview.get("countries", []).size(), _wizard_clubs.size()]; database_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; root.add_child(database_info)
+	var buttons := HFlowContainer.new(); buttons.size_flags_horizontal = Control.SIZE_EXPAND_FILL; root.add_child(buttons)
 	_add_button(buttons, tr("Create Career"), _create_career_from_wizard)
 	_add_button(buttons, tr("Back"), _show_main_menu)
 
@@ -171,7 +177,7 @@ func _show_load_menu() -> void:
 	for meta in slots.list_slots(10):
 		if not bool(meta.get("exists", false)): continue
 		any = true
-		var line := HBoxContainer.new(); root.add_child(line)
+		var line := HFlowContainer.new(); line.size_flags_horizontal = Control.SIZE_EXPAND_FILL; root.add_child(line)
 		var label := "Slot %d — %s / %s / %s" % [int(meta.slot), String(meta.manager), String(meta.club), String(meta.date)]
 		_add_button(line, label, _load_slot.bind(int(meta.slot)))
 		_add_button(line, tr("Delete"), _delete_slot.bind(int(meta.slot)))
@@ -200,14 +206,14 @@ func _show_career() -> void:
 	var dashboard: Dictionary = query.dashboard(session.world, session.managed_club_id)
 	var club: Dictionary = dashboard.get("club", {})
 	_add_heading(root, tr("%s — %s") % [String(club.get("name", "Club")), String(snap.date)], 26)
-	var buttons := HBoxContainer.new(); root.add_child(buttons)
+	var buttons := HFlowContainer.new(); buttons.size_flags_horizontal = Control.SIZE_EXPAND_FILL; root.add_child(buttons)
 	_add_button(buttons, tr("Continue"), _advance_day)
 	_add_button(buttons, tr("Save Slot %d") % active_slot if active_slot > 0 else "Save Career", _save)
 	_add_button(buttons, tr("Save As"), _show_save_as)
 	_add_button(buttons, tr("Settings"), _show_settings)
 	_add_button(buttons, tr("Main Menu"), _show_main_menu)
-	status = Label.new(); status.text = tr("Manager: %s  •  Season %d  •  Inbox %d") % [String(session.manager.get("name", "Manager")), int(snap.season_year), int(dashboard.get("unread_messages",0))]; root.add_child(status)
-	var tabs := TabContainer.new(); tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL; root.add_child(tabs)
+	status = Label.new(); status.text = tr("Manager: %s  •  Season %d  •  Inbox %d") % [String(session.manager.get("name", "Manager")), int(snap.season_year), int(dashboard.get("unread_messages",0))]; status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; root.add_child(status)
+	var tabs := TabContainer.new(); tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL; tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL; root.add_child(tabs)
 	var views = CareerViewsClass.new(self, session)
 	views.add_dashboard(tabs)
 	views.add_squad(tabs)
@@ -248,20 +254,20 @@ func _request_save_to_slot(slot: int) -> void:
 
 func _confirm(message: String, action: Callable) -> void:
 	var dialog := ConfirmationDialog.new()
-	dialog.dialog_text = message
+	dialog.dialog_text = tr(message)
 	add_child(dialog)
 	dialog.confirmed.connect(func(): action.call(); dialog.queue_free())
 	dialog.canceled.connect(dialog.queue_free)
-	dialog.popup_centered(Vector2i(480, 180))
+	dialog.popup_centered(_dialog_size(520, 200))
 
 func _show_error(message: String) -> void:
 	var dialog := AcceptDialog.new()
-	dialog.title = "Career notice"
-	dialog.dialog_text = message
+	dialog.title = tr("Career notice")
+	dialog.dialog_text = tr(message)
 	add_child(dialog)
 	dialog.confirmed.connect(dialog.queue_free)
 	dialog.canceled.connect(dialog.queue_free)
-	dialog.popup_centered(Vector2i(520, 180))
+	dialog.popup_centered(_dialog_size(560, 220))
 
 func _run_job(job: Callable, message: String) -> Dictionary:
 	if _busy: return {"error":ERR_BUSY}
@@ -270,6 +276,7 @@ func _run_job(job: Callable, message: String) -> Dictionary:
 	_add_heading(box, message, 28)
 	var progress := Label.new()
 	progress.text = tr("Please wait. Your career is being processed.")
+	progress.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(progress)
 	_worker = Thread.new()
 	var err := _worker.start(job)
@@ -289,15 +296,15 @@ func _exit_tree() -> void:
 	if _worker != null and _worker.is_started(): _worker.wait_to_finish()
 
 func _add_inbox_tab(tabs: TabContainer) -> void:
-	var scroll := ScrollContainer.new(); scroll.name = "Inbox"
-	var box := VBoxContainer.new(); box.custom_minimum_size = Vector2(920, 480); scroll.add_child(box)
+	var scroll := ScrollContainer.new(); scroll.name = "Inbox"; scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL; scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var box := VBoxContainer.new(); box.custom_minimum_size = Vector2(0, 480); box.size_flags_horizontal = Control.SIZE_EXPAND_FILL; scroll.add_child(box)
 	var messages: Array = InboxServiceClass.new().unread(session.world)
 	if messages.is_empty():
 		var empty := Label.new(); empty.text = tr("Inbox clear."); box.add_child(empty)
 	for message in messages:
-		var title := Label.new(); title.text = tr("%s — %s") % [String(message.get("category", "info")).to_upper(), String(message.get("title", "Message"))]; box.add_child(title)
-		var body := Label.new(); body.text = String(message.get("body", "")); body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; box.add_child(body)
-		var row := HBoxContainer.new(); box.add_child(row)
+		var title := Label.new(); title.text = tr("%s — %s") % [String(message.get("category", "info")).to_upper(), String(message.get("title", "Message"))]; title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; box.add_child(title)
+		var body := Label.new(); body.text = tr(String(message.get("body", ""))); body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; box.add_child(body)
+		var row := HFlowContainer.new(); row.size_flags_horizontal = Control.SIZE_EXPAND_FILL; box.add_child(row)
 		if not bool(message.get("read",false)): _add_button(row, tr("Mark read"), _mark_message_read.bind(int(message.id)))
 		if bool(message.get("requires_action", false)) and not bool(message.get("resolved", false)):
 			for action in message.get("actions", []):
@@ -337,6 +344,8 @@ func _apply_runtime_settings() -> void:
 	self.scale = Vector2.ONE
 	var new_theme := Theme.new()
 	new_theme.default_font_size = int(16 * float(settings.get("font_scale", 1.0)) * float(settings.get("ui_scale", 1.0)))
+	for control_type in ["Button", "CheckBox", "LineEdit", "OptionButton", "SpinBox"]:
+		new_theme.set_constant("outline_size", control_type, 0)
 	if bool(settings.get("high_contrast", false)):
 		for control_type in ["Label", "Button", "CheckBox", "LineEdit", "OptionButton"]:
 			new_theme.set_color("font_color", control_type, Color.WHITE)
@@ -344,6 +353,8 @@ func _apply_runtime_settings() -> void:
 		normal.bg_color = Color.BLACK
 		normal.border_color = Color.WHITE
 		normal.set_border_width_all(2)
+		normal.content_margin_top = 8
+		normal.content_margin_bottom = 8
 		for state in ["normal", "hover", "pressed"]: new_theme.set_stylebox(state, "Button", normal)
 		var focus := StyleBoxFlat.new()
 		focus.bg_color = Color.TRANSPARENT
@@ -358,14 +369,41 @@ func _country_name(countries: Array, country_id: String) -> String:
 	return country_id
 
 func _labeled(text: String, control: Control) -> Control:
-	var row := HBoxContainer.new()
-	var label := Label.new(); label.text = tr(text); label.custom_minimum_size.x = 220; row.add_child(label)
+	var label := Label.new(); label.text = tr(text); label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	control.custom_minimum_size.y = _touch_height()
+	if _compact_layout():
+		var column := VBoxContainer.new()
+		column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		column.add_child(label)
+		column.add_child(control)
+		return column
+	var row := HBoxContainer.new()
+	label.custom_minimum_size.x = 220
+	row.add_child(label)
 	row.add_child(control)
 	return row
 
 func _add_heading(parent: Control, text: String, size: int) -> void:
-	var label := Label.new(); label.text = tr(text); label.add_theme_font_size_override("font_size", int(size * float(settings.get("font_scale", 1.0)))); parent.add_child(label)
+	var label := Label.new(); label.text = tr(text); label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; label.add_theme_font_size_override("font_size", int(size * float(settings.get("font_scale", 1.0)))); parent.add_child(label)
 
 func _add_button(parent: Control, text: String, callback: Callable) -> void:
-	var button := Button.new(); button.text = tr(text); button.pressed.connect(callback); parent.add_child(button)
+	var button := Button.new()
+	button.text = tr(text)
+	button.custom_minimum_size.y = _touch_height()
+	button.focus_mode = Control.FOCUS_ALL
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL if _compact_layout() and parent is VBoxContainer else Control.SIZE_SHRINK_BEGIN
+	button.pressed.connect(callback)
+	parent.add_child(button)
+
+func _compact_layout() -> bool:
+	return DisplayServer.is_touchscreen_available() or get_viewport_rect().size.x < MOBILE_BREAKPOINT
+
+func _touch_height() -> float:
+	return 48.0 * float(settings.get("ui_scale", 1.0))
+
+func _dialog_size(desktop_width: int, desktop_height: int) -> Vector2i:
+	var viewport := get_viewport_rect().size
+	var width := mini(desktop_width, maxi(280, int(viewport.x) - 32))
+	var height := mini(desktop_height, maxi(160, int(viewport.y) - 32))
+	return Vector2i(width, height)
