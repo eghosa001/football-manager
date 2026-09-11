@@ -2,6 +2,8 @@ extends SceneTree
 
 const RouterClass = preload("res://simulation/match/engine_router.gd")
 const CareerScreenRegistryClass = preload("res://game/career/career_screen_registry.gd")
+const CareerCycleServiceClass = preload("res://application/career/career_cycle_service.gd")
+const PlayerLifecycleServiceClass = preload("res://simulation/players/player_lifecycle_service.gd")
 
 func _init() -> void:
 	_run.call_deferred()
@@ -10,6 +12,7 @@ func _run() -> void:
 	_test_match_engine_boundary()
 	_test_career_navigation_boundary()
 	_test_career_scene_boundary()
+	_test_lifecycle_facades()
 	print("[TEST] ARCHITECTURE CONVERGENCE PASS")
 	quit(0)
 
@@ -48,3 +51,14 @@ func _test_career_scene_boundary() -> void:
 	assert(script != null)
 	assert(script.resource_path == "res://game/career/registry_career_app.gd")
 	instance.free()
+
+func _test_lifecycle_facades() -> void:
+	var cycle = CareerCycleServiceClass.new()
+	var lifecycle = PlayerLifecycleServiceClass.new()
+	assert(cycle.get_script().resource_path == "res://application/career/career_cycle_service.gd")
+	assert(lifecycle.get_script().resource_path == "res://simulation/players/player_lifecycle_service.gd")
+	var session_source := FileAccess.get_file_as_string("res://application/career/career_session.gd")
+	assert(session_source.find("career_cycle_v2.gd") == -1)
+	assert(session_source.find("player_lifecycle_v2.gd") == -1)
+	assert(session_source.find("career_cycle_service.gd") >= 0)
+	assert(session_source.find("player_lifecycle_service.gd") >= 0)
