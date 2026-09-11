@@ -16,6 +16,7 @@ TacticsRuntime="*res://game/polish/tactics_runtime.gd"
 SearchRuntime="*res://game/polish/search_runtime.gd"
 MatchHudRuntime="*res://game/polish/match_hud_runtime.gd"
 ManagementRuntime="*res://game/polish/management_runtime.gd"
+CareerControlsRuntime="*res://game/polish/career_controls_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
