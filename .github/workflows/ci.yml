@@ -63,9 +63,7 @@ jobs:
           godot --headless --path . --export-release "Linux/X11" build/linux/FootballDynasty.x86_64
           test -s build/linux/FootballDynasty.x86_64
           chmod +x build/linux/FootballDynasty.x86_64
-          timeout 180s build/linux/FootballDynasty.x86_64 --headless -- --release-smoke 2>&1 | tee build/linux/runtime.log
-          ! grep -Eq 'SCRIPT ERROR:|ERROR:' build/linux/runtime.log
-          grep -q 'RELEASE SMOKE PASS' build/linux/runtime.log
+          bash tools/release-smoke.sh build/linux/FootballDynasty.x86_64 build/linux/runtime.log
 
       - name: Build Windows release candidate
         run: |

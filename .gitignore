@@ -1,7 +1,16 @@
 .godot/
 .local-tests/
+build/
 *.tmp
 *.log
 .DS_Store
 Thumbs.db
 addons/godot-sqlite/
+*.keystore
+*.jks
+.godot/export_credentials.cfg
+build/android/*.apk
+build/android/*.aab
+build/ios/build/
+build/macos/*.dmg
+build/macos/*.zip

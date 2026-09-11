@@ -1,0 +1,58 @@
+name: Mobile Export Validation
+
+on:
+  push:
+    branches: [main, production/remaining-features, phase-10-11-living-world-release]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Verify engine
+        run: godot --version
+
+      - name: Import project
+        run: bash tools/test-headless.sh import
+
+      - name: Run mobile export validation
+        run: bash tools/test-headless.sh tests/mobile_export_test.gd
+
+      - name: Check preset paths (no SDK required)
+        run: |
+          test -f export_presets.cfg
+          grep -q 'platform="Android"' export_presets.cfg
+          grep -q 'platform="iOS"' export_presets.cfg
+          grep -q 'platform="macOS"' export_presets.cfg
+          grep -q 'build/android/FootballDynasty.aab' export_presets.cfg
+          grep -q 'build/ios/FootballDynasty.xcodeproj' export_presets.cfg
+          grep -q 'build/macos/FootballDynasty.app' export_presets.cfg
+
+      - name: Attempt Android debug export (best effort)
+        continue-on-error: true
+        run: |
+          mkdir -p build/android
+          if godot --headless --path . --export-debug "Android" build/android/FootballDynasty-debug.apk; then
+            test -s build/android/FootballDynasty-debug.apk
+            echo "Android debug export succeeded"
+          else
+            echo "Android debug export skipped: SDK/keystore not configured in CI image"
+          fi
