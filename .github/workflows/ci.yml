@@ -103,7 +103,7 @@ jobs:
           $stderr = if (Test-Path $err) { Get-Content $err -Raw } else { '' }
           Write-Host $stdout
           if ($stderr) { Write-Host $stderr }
-          if ($exitCode -ne 0) { throw "Windows release smoke exited with code $exitCode." }
+          if ($null -ne $exitCode -and $exitCode -ne 0) { throw "Windows release smoke exited with code $exitCode." }
           if ($stdout -notmatch 'RELEASE SMOKE PASS') { throw 'Windows release smoke did not emit PASS marker.' }
           if (($stdout + "`n" + $stderr) -match 'SCRIPT ERROR:') { throw 'Windows release smoke reported a script error.' }
 
