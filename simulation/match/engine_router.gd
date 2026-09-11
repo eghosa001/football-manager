@@ -18,9 +18,16 @@ var _engines := {
 	AGGREGATE: AggregateClass.new(),
 }
 
-func simulate(tier: String, home_club: Dictionary, away_club: Dictionary, players: Array, seed: int) -> Dictionary:
+func simulate(tier: String, home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, context: Dictionary = {}) -> Dictionary:
 	var canonical := tier if tier in _engines else ABSTRACT
-	var result: Dictionary = _engines[canonical].simulate_match(home_club,away_club,players,seed)
+	var engine = _engines[canonical]
+	# Context-aware engines accept (home, away, players, seed, context);
+	# legacy engines keep the 4-argument contract.
+	var result: Dictionary
+	if canonical == EVENT or canonical == ABSTRACT:
+		result = engine.simulate_match(home_club, away_club, players, seed, context)
+	else:
+		result = engine.simulate_match(home_club, away_club, players, seed)
 	if result.has("error"): return result
 	result["simulation_tier"] = canonical
 	result["engine_interface_version"] = 1
@@ -28,17 +35,17 @@ func simulate(tier: String, home_club: Dictionary, away_club: Dictionary, player
 	_normalize_result(result)
 	return result
 
-func detailed(home_club:Dictionary,away_club:Dictionary,players:Array,seed:int)->Dictionary:
-	return simulate(DETAILED,home_club,away_club,players,seed)
+func detailed(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, context: Dictionary = {}) -> Dictionary:
+	return simulate(DETAILED, home_club, away_club, players, seed, context)
 
-func event(home_club:Dictionary,away_club:Dictionary,players:Array,seed:int)->Dictionary:
-	return simulate(EVENT,home_club,away_club,players,seed)
+func event(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, context: Dictionary = {}) -> Dictionary:
+	return simulate(EVENT, home_club, away_club, players, seed, context)
 
-func abstract(home_club:Dictionary,away_club:Dictionary,players:Array,seed:int)->Dictionary:
-	return simulate(ABSTRACT,home_club,away_club,players,seed)
+func abstract(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, context: Dictionary = {}) -> Dictionary:
+	return simulate(ABSTRACT, home_club, away_club, players, seed, context)
 
-func aggregate(home_club:Dictionary,away_club:Dictionary,players:Array,seed:int)->Dictionary:
-	return simulate(AGGREGATE,home_club,away_club,players,seed)
+func aggregate(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, _context: Dictionary = {}) -> Dictionary:
+	return simulate(AGGREGATE, home_club, away_club, players, seed)
 
 func supported_tiers()->Array:
 	return [DETAILED,EVENT,ABSTRACT,AGGREGATE]

@@ -4,11 +4,12 @@ extends RefCounted
 const PossessionEngineClass = preload("res://simulation/match/spatial_match_engine_v2.gd")
 const TacticsManagerClass = preload("res://simulation/tactics/tactics_manager.gd")
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
+const MatchFactorsClass = preload("res://simulation/match/match_factors.gd")
 
 var _possession = PossessionEngineClass.new()
 var _tactics = TacticsManagerClass.new()
 
-func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int) -> Dictionary:
+func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, context: Dictionary = {}) -> Dictionary:
 	var home_tactic: Dictionary = home_club.get("tactic", _tactics.create_tactic("4-3-3"))
 	var away_tactic: Dictionary = away_club.get("tactic", _tactics.create_tactic("4-3-3"))
 	var home: Array = _tactics.select_lineup(players, String(home_club.id), home_tactic).duplicate(true)
@@ -22,6 +23,7 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	var cautions: Dictionary = {}
 	var home_mod: Dictionary = _tactics.style_modifiers(home_tactic)
 	var away_mod: Dictionary = _tactics.style_modifiers(away_tactic)
+	var factor_edge := float(MatchFactorsClass.new().breakdown(home_club, away_club, players, context).total_home_edge)
 	var events: Array = []
 	var possession_counts := {"home":0,"away":0}
 	var frames: Array = []
@@ -51,7 +53,7 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 					participants[String(event.side)].append(String(player.id))
 					break
 				break
-		var home_share := _possession_share(home, away, home_mod, away_mod)
+		var home_share := _possession_share(home, away, home_mod, away_mod, factor_edge)
 		var starting_side := "home" if SeededRngClass.unit_for(seed, 31_000 + possession_index) < home_share else "away"
 		if not carry.is_empty(): starting_side = String(carry.possession_side)
 		possession_counts[starting_side] += 1
@@ -101,21 +103,23 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	var total_possessions := maxi(1, int(possession_counts.home) + int(possession_counts.away))
 	stats.home.possession = snappedf(float(possession_counts.home) / total_possessions * 100.0, 0.1)
 	stats.away.possession = snappedf(100.0 - float(stats.home.possession), 0.1)
+	var factors := MatchFactorsClass.new().breakdown(home_club, away_club, players, context)
 	return {
 		"home_goals":int(goals.home),"away_goals":int(goals.away),"events":events,"stats":stats,
 		"lineups":starters,"participants":participants,"final_lineups":{"home":_ids(home),"away":_ids(away)},"substitutions":substitutions,
 		"spatial":{"pitch_length":105.0,"pitch_width":68.0,"frames":frames,"model":"persistent_action_2d"},
-		"tactics":{"home":home_tactic.duplicate(true),"away":away_tactic.duplicate(true)},"seed":seed
+		"tactics":{"home":home_tactic.duplicate(true),"away":away_tactic.duplicate(true)},"seed":seed,
+		"factors":factors,"match_context":context
 	}
 
 func apply_to_fixture(fixture: Dictionary, result: Dictionary) -> void:
 	if result.has("error"): return
 	fixture.played = true; fixture.home_goals = int(result.home_goals); fixture.away_goals = int(result.away_goals)
 
-func _possession_share(home: Array, away: Array, home_mod: Dictionary, away_mod: Dictionary) -> float:
+func _possession_share(home: Array, away: Array, home_mod: Dictionary, away_mod: Dictionary, factor_edge: float = 0.0) -> float:
 	var hs := _strength(home); var as_ := _strength(away)
-	var base := 0.5 + (hs-as_) / 240.0 + 0.025 + float(home_mod.get("possession",0.0)) - float(away_mod.get("possession",0.0))
-	return clampf(base,0.36,0.64)
+	var base := 0.5 + (hs - as_ + factor_edge) / 240.0 + 0.025 + float(home_mod.get("possession", 0.0)) - float(away_mod.get("possession", 0.0))
+	return clampf(base, 0.30, 0.70)
 
 func _maybe_set_piece(events: Array, home: Array, away: Array, state: Dictionary, attacking_side: String, minute: int, seed: int, index: int) -> void:
 	if SeededRngClass.unit_for(seed, 40_000 + index) >= 0.105: return

@@ -14,6 +14,7 @@ const MedicalSystemClass = preload("res://simulation/players/medical_system.gd")
 const DressingRoomClass = preload("res://simulation/players/dressing_room.gd")
 const KnockoutSeasonClass = preload("res://application/season/knockout_season.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
+const MatchFactorsClass = preload("res://simulation/match/match_factors.gd")
 
 const CONTINUOUS_ENGINE_PATH := "res://simulation/match/continuous_full_match_engine.gd"
 
@@ -48,6 +49,7 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 			continue
 		var match_seed := _fixture_seed(season_seed, String(fixture.get("id", "")))
 		var competition_id := String(fixture.get("competition_id", ""))
+		var match_context := _match_context(world, fixture, home, away)
 		var tier := _tier_policy.tier_for_fixture(world, home, away, managed_club_id, competition_id)
 		var is_managed := tier == SimulationTierPolicyClass.USER_LEAGUE
 		var eligible_players: Array = []
@@ -64,17 +66,17 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 					engine.apply_to_fixture(fixture, result)
 					detailed_model = "continuous"
 			if engine == null or result.has("error"):
-				result = _detailed.simulate_match(home, away, eligible_players, match_seed)
+				result = _detailed.simulate_match(home, away, eligible_players, match_seed, match_context)
 				_detailed.apply_to_fixture(fixture, result)
 				detailed_model = "persistent_action_v2"
 			if not result.has("error"):
-				world["last_managed_match"] = {"fixture":fixture.duplicate(true),"result":result.duplicate(true),"date":date_string,"model":detailed_model,"simulation_tier":tier}
+				world["last_managed_match"] = {"fixture": fixture.duplicate(true), "result": result.duplicate(true), "date": date_string, "model": detailed_model, "simulation_tier": tier}
 				_add_match_message(world, home, away, result, managed_club_id)
 		elif tier == SimulationTierPolicyClass.DETAILED_LEAGUE:
-			result = _tactical.simulate_match(home, away, eligible_players, match_seed)
+			result = _tactical.simulate_match(home, away, eligible_players, match_seed, match_context)
 			_tactical.apply_to_fixture(fixture, result)
 		elif tier == SimulationTierPolicyClass.BACKGROUND_LEAGUE:
-			result = _abstract.simulate_match(home, away, eligible_players, match_seed)
+			result = _abstract.simulate_match(home, away, eligible_players, match_seed, match_context)
 			_abstract.apply_to_fixture(fixture, result)
 		else:
 			result = _aggregate.simulate_match(home, away, [], match_seed)
@@ -82,6 +84,7 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 		if not result.has("error"):
 			_stats.record_match(world, fixture, result)
 			_apply_dressing_room_result(world, home, away, result)
+			_update_club_form(world, home, away, result)
 			if tier != SimulationTierPolicyClass.INACTIVE_WORLD:
 				result["injuries"] = _apply_match_injuries(world, fixture, result, tier, match_seed, managed_club_id)
 			_emit_match_events(world, fixture, result, tier, detailed_model, date_string)
@@ -195,6 +198,40 @@ func _add_match_message(world: Dictionary, home: Dictionary, away: Dictionary, r
 	elif gf < ga:
 		outcome = "defeat"
 	InboxServiceClass.new().add_message(world, "match", "Match result: %d-%d" % [gf, ga], "%s against %s. Review the match analysis for spatial frames, xG and events." % [outcome.capitalize(), String(opponent.get("name", "opponent"))])
+
+func _match_context(world: Dictionary, fixture: Dictionary, home: Dictionary, away: Dictionary) -> Dictionary:
+	var competition := _competition(world, String(fixture.get("competition_id", "")))
+	var importance := MatchFactorsClass.new().importance_for(competition, fixture)
+	var stage := ""
+	if bool(fixture.get("knockout", false)):
+		var round_number := int(fixture.get("round", 1))
+		stage = "knockout_r%d" % round_number
+	return {
+		"is_home": true,
+		"importance": float(importance.get("importance", 0.5)),
+		"competition_label": String(importance.get("label", "league")),
+		"stage": stage,
+		"derby": String(home.get("country_id", "")) != "" and String(home.get("country_id", "")) == String(away.get("country_id", "")),
+		"competition_id": String(fixture.get("competition_id", "")),
+	}
+
+func _update_club_form(world: Dictionary, home: Dictionary, away: Dictionary, result: Dictionary) -> void:
+	var hg := int(result.get("home_goals", 0))
+	var ag := int(result.get("away_goals", 0))
+	_push_form_result(home, "W" if hg > ag else ("D" if hg == ag else "L"))
+	_push_form_result(away, "W" if ag > hg else ("D" if ag == hg else "L"))
+
+func _push_form_result(club: Dictionary, outcome: String) -> void:
+	if not club.has("recent_results") or not club.get("recent_results") is Array:
+		club["recent_results"] = []
+	var recent: Array = club.recent_results
+	recent.append(outcome)
+	while recent.size() > 5: recent.pop_front()
+	var points := 0.0
+	for r in recent:
+		if String(r) == "W": points += 3.0
+		elif String(r) == "D": points += 1.0
+	club["form_points"] = snappedf(points * (5.0 / maxf(1.0, float(recent.size()))) * 1.5, 0.01)
 
 func _pitch_surface(club: Dictionary) -> String:
 	var quality := int(club.get("stadium",{}).get("pitch_quality",75))

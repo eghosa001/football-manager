@@ -1,7 +1,7 @@
 class_name SaveStore
 extends "res://persistence/save_repository.gd"
 
-const CURRENT_SCHEMA_VERSION := 3
+const CURRENT_SCHEMA_VERSION := 4
 const MAGIC := 1_179_016_753 # "FDN1"
 const LEGACY_HEADER_BYTES := 8
 const HEADER_BYTES := 12
@@ -124,6 +124,26 @@ func _migrate(payload: Dictionary) -> Dictionary:
 		payload["world"] = world_v2
 		payload["schema_version"] = 3
 		version = 3
+	if version == 3:
+		var world_v3: Dictionary = payload.get("world", {})
+		world_v3["default_country_id"] = world_v3.get("default_country_id", "eng")
+		world_v3["featured_country_ids"] = world_v3.get("featured_country_ids", ["eng", "esp"])
+		var manager_ability := {}
+		for staff_member in world_v3.get("staff", []):
+			if String(staff_member.get("role", "")) == "manager":
+				manager_ability[String(staff_member.get("club_id", ""))] = int(staff_member.get("ability", 50))
+		for club in world_v3.get("clubs", []):
+			club["recent_results"] = club.get("recent_results", [])
+			club["form_points"] = club.get("form_points", 7.5)
+			club["injured_count"] = club.get("injured_count", 0)
+			if not club.has("manager_ability"):
+				club["manager_ability"] = int(manager_ability.get(String(club.get("id", "")), 50))
+		for competition in world_v3.get("competitions", []):
+			if bool(competition.get("continental", false)) and not competition.has("continental_tier"):
+				competition["continental_tier"] = 1
+		payload["world"] = world_v3
+		payload["schema_version"] = 4
+		version = 4
 	if version != CURRENT_SCHEMA_VERSION:
 		return {}
 	return payload

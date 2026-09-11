@@ -19,21 +19,32 @@ func _init(owner_app: Control = null, career_session = null) -> void:
 func add_dashboard(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Dashboard")
 	var data: Dictionary = query.dashboard(session.world, session.managed_club_id)
-	_heading(box, String(data.get("club", {}).get("name", "Club")), 22)
-	_label(box, tr("Date: %s   Season: %d") % [String(data.date), int(data.season_year)])
-	_label(box, tr("Squad: %d   Cash: %d   Transfer budget: %d   Wage budget: %d") % [int(data.squad_size), int(data.cash), int(data.transfer_budget), int(data.wage_budget)])
-	_label(box, tr("Unread inbox: %d") % int(data.unread_messages))
+	var club: Dictionary = data.get("club", {})
+	_heading(box, String(club.get("name", "Club")), 22)
+	_label(box, tr("Date: %s   Season: %d") % [String(data.get("date", "")), int(data.get("season_year", 2026))])
+	_label(box, tr("Squad: %d   Cash: %d   Transfer budget: %d   Wage budget: %d") % [int(data.get("squad_size", 0)), int(data.get("cash", 0)), int(data.get("transfer_budget", 0)), int(data.get("wage_budget", 0))])
+	_label(box, tr("Unread inbox: %d") % int(data.get("unread_messages", 0)))
+	_label(box, tr("Form: %s   Nation: %s") % [_form_string(), _club_nation()])
 	var next: Dictionary = data.get("next_fixture", {})
-	if not next.is_empty(): _label(box, tr("Next fixture: %s — %s vs %s") % [String(next.get("date", "TBD")), _club_name(String(next.get("home_club_id", ""))), _club_name(String(next.get("away_club_id", "")))])
+	if next.is_empty():
+		_label(box, tr("No upcoming fixtures scheduled. Advance the calendar to generate the next round."))
+	else:
+		_label(box, tr("Next fixture: %s — %s vs %s") % [String(next.get("date", "TBD")), _club_name(String(next.get("home_club_id", ""))), _club_name(String(next.get("away_club_id", "")))])
 	if session.world.has("last_managed_match"):
 		_button(box, tr("Open last match analysis"), func(): _focus_tab(tabs, "Match Analysis"))
+	else:
+		_label(box, tr("No managed match played yet — match analysis will appear here after your first fixture."))
 
 func add_squad(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Squad")
-	for row in query.squad(session.world, session.managed_club_id):
+	var rows: Array = query.squad(session.world, session.managed_club_id)
+	if rows.is_empty():
+		_label(box, tr("No squad players found. Check registrations under Competitions."))
+		return
+	for row in rows:
 		var line := HBoxContainer.new(); box.add_child(line)
-		var text := "%s  %-4s  Age %d  CA %d  PA %d  Fit %d  Morale %d" % [String(row.name), String(row.position), int(row.age), int(row.ability), int(row.potential), int(row.fitness), int(row.morale)]
-		_button(line, text, _show_player.bind(String(row.id)))
+		var text := "%s  %-4s  Age %d  CA %d  PA %d  Fit %d  Morale %d" % [String(row.get("name", "?")), String(row.get("position", "?")), int(row.get("age", 0)), int(row.get("ability", 0)), int(row.get("potential", 0)), int(row.get("fitness", 0)), int(row.get("morale", 0))]
+		_button(line, text, _show_player.bind(String(row.get("id", ""))))
 
 func add_training(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Training")
@@ -137,14 +148,33 @@ func add_staff(tabs: TabContainer) -> void:
 
 func add_schedule(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Schedule")
-	for fixture in query.schedule(session.world, session.managed_club_id, 40):
-		var state := "%d-%d" % [int(fixture.get("home_goals",0)),int(fixture.get("away_goals",0))] if bool(fixture.get("played",false)) else "vs"
-		_label(box, tr("%s  %s  %s  %s") % [String(fixture.get("date","TBD")), _club_name(String(fixture.get("home_club_id",""))), state, _club_name(String(fixture.get("away_club_id","")))])
+	var fixtures: Array = query.schedule(session.world, session.managed_club_id, 40)
+	if fixtures.is_empty():
+		_label(box, tr("No fixtures found for your club this season."))
+		return
+	for fixture in fixtures:
+		var state := "%d-%d" % [int(fixture.get("home_goals", 0)), int(fixture.get("away_goals", 0))] if bool(fixture.get("played", false)) else "vs"
+		_label(box, tr("%s  %s  %s  %s") % [String(fixture.get("date", "TBD")), _club_name(String(fixture.get("home_club_id", ""))), state, _club_name(String(fixture.get("away_club_id", "")))])
 
 func add_competitions(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Competitions")
-	for competition in session.world.get("competitions", []):
-		_button(box, String(competition.get("name", "Competition")), _show_competition.bind(String(competition.id)))
+	var competitions: Array = session.world.get("competitions", [])
+	if competitions.is_empty():
+		_label(box, tr("No competitions available. Start a new career to generate leagues and cups."))
+		return
+	var relevant: Array = []
+	var others: Array = []
+	for competition in competitions:
+		if session.managed_club_id in competition.get("club_ids", []): relevant.append(competition)
+		else: others.append(competition)
+	_label(box, tr("Your competitions (%d)") % relevant.size())
+	if relevant.is_empty():
+		_label(box, tr("Your club is not entered in any competition. Check registration rules."))
+	for competition in relevant:
+		_button(box, "%s%s" % [String(competition.get("name", "Competition")), _competition_suffix(competition)], _show_competition.bind(String(competition.get("id", ""))))
+	_label(box, tr("Other competitions (%d) — continental tiers, Club World Cup and internationals included") % others.size())
+	for competition in others.slice(0, 40):
+		_button(box, "%s%s" % [String(competition.get("name", "Competition")), _competition_suffix(competition)], _show_competition.bind(String(competition.get("id", ""))))
 
 func _show_competition(competition_id: String) -> void:
 	var box: VBoxContainer = app.call("_clear")
@@ -291,7 +321,8 @@ func _complete_offer(offer_id: String, player_id: String) -> void:
 
 func _tab(tabs: TabContainer, name: String) -> VBoxContainer:
 	var scroll := ScrollContainer.new(); scroll.name = name; scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var box := VBoxContainer.new(); box.custom_minimum_size = Vector2(920, 480); box.add_theme_constant_override("separation",8); scroll.add_child(box); tabs.add_child(scroll); tabs.set_tab_title(tabs.get_tab_count()-1,tr(name)); return box
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var box := VBoxContainer.new(); box.custom_minimum_size = Vector2(600, 400); box.size_flags_horizontal = Control.SIZE_EXPAND_FILL; box.add_theme_constant_override("separation", 8); scroll.add_child(box); tabs.add_child(scroll); tabs.set_tab_title(tabs.get_tab_count() - 1, tr(name)); return box
 
 func _heading(parent: Control, text: String, size: int) -> void:
 	var label := Label.new(); label.text=tr(text); label.add_theme_font_size_override("font_size",size); parent.add_child(label)
@@ -304,7 +335,37 @@ func _button(parent: Control, text: String, callback: Callable) -> void:
 
 func _focus_tab(tabs: TabContainer, name: String) -> void:
 	for i in range(tabs.get_tab_count()):
-		if tabs.get_tab_title(i) == name: tabs.current_tab=i; return
+		if tabs.get_tab_title(i) == name or tabs.get_tab_title(i) == tr(name): tabs.current_tab = i; return
+
+func _form_string() -> String:
+	for club in session.world.get("clubs", []):
+		if String(club.get("id", "")) == session.managed_club_id:
+			var recent: Array = club.get("recent_results", [])
+			if recent.is_empty(): return "—"
+			return "".join(recent.slice(maxi(0, recent.size() - 5)))
+	return "—"
+
+func _club_nation() -> String:
+	for club in session.world.get("clubs", []):
+		if String(club.get("id", "")) == session.managed_club_id:
+			return _country_name(String(club.get("country_id", "")))
+	return ""
+
+func _country_name(country_id: String) -> String:
+	for country in session.world.get("countries", []):
+		if String(country.get("id", "")) == country_id: return String(country.get("name", country_id))
+	return country_id
+
+func _competition_suffix(competition: Dictionary) -> String:
+	var parts: Array = []
+	if bool(competition.get("continental", false)):
+		parts.append("Continental T%d" % int(competition.get("continental_tier", 1)))
+	if bool(competition.get("club_world_cup", false)):
+		parts.append("CWC")
+	if String(competition.get("competition_type", "")) == "knockout" and not bool(competition.get("continental", false)):
+		parts.append("Cup")
+	if parts.is_empty(): return ""
+	return " (%s)" % ", ".join(parts)
 
 func _player(player_id: String) -> Dictionary:
 	for player in session.world.get("players",[]):

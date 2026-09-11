@@ -2,20 +2,22 @@ class_name AbstractMatchEngine
 extends RefCounted
 
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
+const MatchFactorsClass = preload("res://simulation/match/match_factors.gd")
 
 const MATCH_MINUTES := 90
 const BASE_POSSESSIONS := 112
 
-func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int) -> Dictionary:
+func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, context: Dictionary = {}) -> Dictionary:
 	var home_players: Array = _players_for_club(players, home_club.id)
 	var away_players: Array = _players_for_club(players, away_club.id)
 	assert(home_players.size() >= 11 and away_players.size() >= 11)
 
 	var home_lineup: Array = _select_lineup(home_players)
 	var away_lineup: Array = _select_lineup(away_players)
-	var home_strength: float = _lineup_strength(home_lineup) + 2.0
+	var factors := MatchFactorsClass.new().breakdown(home_club, away_club, players, _match_context(context, home_club, away_club))
+	var home_strength: float = _lineup_strength(home_lineup) + 2.0 + float(factors.total_home_edge)
 	var away_strength: float = _lineup_strength(away_lineup)
-	var strength_share: float = clampf(home_strength / maxf(home_strength + away_strength, 1.0), 0.35, 0.65)
+	var strength_share: float = clampf(home_strength / maxf(home_strength + away_strength, 1.0), 0.30, 0.70)
 
 	var result := {
 		"seed": seed,
@@ -45,6 +47,8 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	_apply_planned_substitutions(result, home_players, away_players, home_lineup, away_lineup, seed)
 	_finalize_possession(result)
 	_finalize_ratings(result, home_lineup, away_lineup)
+	result["factors"] = factors
+	result["match_context"] = _match_context(context, home_club, away_club)
 	return result
 
 func apply_to_fixture(fixture: Dictionary, result: Dictionary) -> void:
@@ -234,6 +238,15 @@ func _rand_int(seed: int, key: int, min_value: int, max_value: int) -> int:
 
 func _unit(seed: int, key: int) -> float:
 	return SeededRngClass.unit_for(seed, key)
+
+func _match_context(context: Dictionary, home_club: Dictionary, away_club: Dictionary) -> Dictionary:
+	var merged := {"is_home": true, "importance": 0.5, "stage": "", "derby": false}
+	for key in context.keys(): merged[key] = context[key]
+	if home_club.has("match_context") and home_club.get("match_context") is Dictionary:
+		for key in home_club.get("match_context", {}).keys(): merged[key] = home_club.get("match_context", {})[key]
+	if String(home_club.get("country_id", "")) != "" and String(home_club.get("country_id", "")) == String(away_club.get("country_id", "")):
+		merged["derby"] = bool(merged.get("derby", false))
+	return merged
 
 func _ids(players: Array) -> Array:
 	var ids: Array = []

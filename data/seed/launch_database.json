@@ -1,14 +1,20 @@
 {
   "schema_version": 1,
+  "default_country_id": "eng",
+  "featured_country_ids": ["eng", "esp"],
   "countries": [
-    {"id":"nga","name":"Nigeria","code":"NGA","youth_rating":72},
-    {"id":"eng","name":"England","code":"ENG","youth_rating":86},
-    {"id":"esp","name":"Spain","code":"ESP","youth_rating":88},
-    {"id":"bra","name":"Brazil","code":"BRA","youth_rating":92},
-    {"id":"gha","name":"Ghana","code":"GHA","youth_rating":70},
-    {"id":"zaf","name":"South Africa","code":"RSA","youth_rating":75},
-    {"id":"deu","name":"Germany","code":"GER","youth_rating":87},
-    {"id":"fra","name":"France","code":"FRA","youth_rating":87}
+    {"id":"eng","name":"England","code":"ENG","youth_rating":86,"cities":["London","Manchester","Liverpool","Birmingham","Leeds","Newcastle","Sheffield","Bristol","Nottingham","Leicester","Southampton","Norwich"]},
+    {"id":"esp","name":"Spain","code":"ESP","youth_rating":88,"cities":["Madrid","Barcelona","Seville","Valencia","Bilbao","Zaragoza","Malaga","Vigo","Granada","La Coruna","Oviedo","Cadiz"]},
+    {"id":"deu","name":"Germany","code":"GER","youth_rating":87,"cities":["Berlin","Munich","Dortmund","Hamburg","Cologne","Frankfurt","Stuttgart","Leipzig","Bremen","Hanover"]},
+    {"id":"fra","name":"France","code":"FRA","youth_rating":87,"cities":["Paris","Marseille","Lyon","Lille","Bordeaux","Nantes","Nice","Toulouse","Rennes","Lens"]},
+    {"id":"ita","name":"Italy","code":"ITA","youth_rating":85,"cities":["Rome","Milan","Naples","Turin","Palermo","Genoa","Bologna","Florence","Bari","Verona"]},
+    {"id":"prt","name":"Portugal","code":"POR","youth_rating":83,"cities":["Lisbon","Porto","Braga","Coimbra","Faro","Aveiro","Viseu","Setubal","Guimaraes","Funchal"]},
+    {"id":"nld","name":"Netherlands","code":"NED","youth_rating":84,"cities":["Amsterdam","Rotterdam","Utrecht","Eindhoven","Groningen","Arnhem","Breda","Tilburg","Zwolle","Alkmaar"]},
+    {"id":"bra","name":"Brazil","code":"BRA","youth_rating":92,"cities":["Sao Paulo","Rio de Janeiro","Belo Horizonte","Porto Alegre","Salvador","Fortaleza","Curitiba","Recife","Goiania","Belem"]},
+    {"id":"arg","name":"Argentina","code":"ARG","youth_rating":89,"cities":["Buenos Aires","Cordoba","Rosario","Mendoza","La Plata","Salta","Santa Fe","Tucuman","Mar del Plata","Neuquen"]},
+    {"id":"nga","name":"Nigeria","code":"NGA","youth_rating":72,"cities":["Lagos","Abuja","Kano","Ibadan","Port Harcourt","Benin City","Enugu","Kaduna","Jos","Ilorin"]},
+    {"id":"gha","name":"Ghana","code":"GHA","youth_rating":70,"cities":["Accra","Kumasi","Tamale","Takoradi","Cape Coast","Ho","Sunyani","Koforidua","Obuasi","Tema"]},
+    {"id":"zaf","name":"South Africa","code":"RSA","youth_rating":75,"cities":["Johannesburg","Cape Town","Durban","Pretoria","Port Elizabeth","Bloemfontein","Polokwane","Nelspruit","Kimberley","Rustenburg"]}
   ],
   "competition_templates": [
     {"id":"league-20","type":"league","teams":20,"rounds":2,"points_win":3,"points_draw":1},
@@ -17,14 +23,18 @@
     {"id":"cup-64","type":"knockout","teams":64,"legs":1,"extra_time":true,"penalties":true}
   ],
   "league_systems": [
+    {"country_id":"eng","tiers":[{"name":"Premier League","template":"league-20","promotion":0,"relegation":3},{"name":"Championship","template":"league-20","promotion":3,"relegation":3},{"name":"League One","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"FA Cup","template":"cup-64"},"league_cup":{"name":"League Cup","template":"cup-32"}},
+    {"country_id":"esp","tiers":[{"name":"LaLiga","template":"league-20","promotion":0,"relegation":3},{"name":"Segunda Division","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"Copa del Rey","template":"cup-32"}},
+    {"country_id":"deu","tiers":[{"name":"Bundesliga","template":"league-18","promotion":0,"relegation":3},{"name":"2. Bundesliga","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"DFB-Pokal","template":"cup-32"}},
+    {"country_id":"fra","tiers":[{"name":"Ligue 1","template":"league-18","promotion":0,"relegation":3},{"name":"Ligue 2","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"Coupe de France","template":"cup-32"}},
+    {"country_id":"ita","tiers":[{"name":"Serie A","template":"league-20","promotion":0,"relegation":3},{"name":"Serie B","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"Coppa Italia","template":"cup-32"}},
+    {"country_id":"prt","tiers":[{"name":"Primeira Liga","template":"league-18","promotion":0,"relegation":3},{"name":"Segunda Liga","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"Taca de Portugal","template":"cup-32"}},
+    {"country_id":"nld","tiers":[{"name":"Eredivisie","template":"league-18","promotion":0,"relegation":3},{"name":"Eerste Divisie","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"KNVB Cup","template":"cup-32"}},
+    {"country_id":"bra","tiers":[{"name":"Serie A","template":"league-20","promotion":0,"relegation":4},{"name":"Serie B","template":"league-20","promotion":4,"relegation":4}],"cup":{"name":"Copa do Brasil","template":"cup-32"}},
+    {"country_id":"arg","tiers":[{"name":"Primera Division","template":"league-20","promotion":0,"relegation":4},{"name":"Primera Nacional","template":"league-20","promotion":4,"relegation":4}],"cup":{"name":"Copa Argentina","template":"cup-32"}},
     {"country_id":"nga","tiers":[{"name":"National Premier Division","template":"league-20","promotion":0,"relegation":3},{"name":"National League","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"Federation Cup","template":"cup-32"}},
-    {"country_id":"eng","tiers":[{"name":"Premier Division","template":"league-20","promotion":0,"relegation":3},{"name":"Championship Division","template":"league-20","promotion":3,"relegation":3},{"name":"League One","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"National Cup","template":"cup-64"}},
-    {"country_id":"esp","tiers":[{"name":"Primera Division","template":"league-20","promotion":0,"relegation":3},{"name":"Segunda Division","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"Royal Cup","template":"cup-32"}},
-    {"country_id":"bra","tiers":[{"name":"Serie A","template":"league-20","promotion":0,"relegation":4},{"name":"Serie B","template":"league-20","promotion":4,"relegation":4}],"cup":{"name":"National Cup","template":"cup-32"}},
-    {"country_id":"gha","tiers":[{"name":"Premier Division","template":"league-18","promotion":0,"relegation":3},{"name":"National Division","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"FA Cup","template":"cup-32"}},
-    {"country_id":"zaf","tiers":[{"name":"Premier Division","template":"league-18","promotion":0,"relegation":2},{"name":"First Division","template":"league-18","promotion":2,"relegation":2}],"cup":{"name":"National Cup","template":"cup-32"}},
-    {"country_id":"deu","tiers":[{"name":"Bundes Division","template":"league-18","promotion":0,"relegation":3},{"name":"Second Division","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"National Pokal","template":"cup-32"}},
-    {"country_id":"fra","tiers":[{"name":"Ligue One","template":"league-18","promotion":0,"relegation":3},{"name":"Ligue Two","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"National Cup","template":"cup-32"}}
+    {"country_id":"gha","tiers":[{"name":"Premier League","template":"league-18","promotion":0,"relegation":3},{"name":"Division One","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"FA Cup","template":"cup-32"}},
+    {"country_id":"zaf","tiers":[{"name":"Premiership","template":"league-18","promotion":0,"relegation":2},{"name":"First Division","template":"league-18","promotion":2,"relegation":2}],"cup":{"name":"Nedbank Cup","template":"cup-32"}}
   ],
   "registration_defaults": {"max_squad":25,"min_goalkeepers":2,"max_foreign":17,"homegrown_required":8,"transfer_windows":["summer","winter"]}
 }

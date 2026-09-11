@@ -8,12 +8,12 @@ const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
 var _base = BaseMatchEngineClass.new()
 var _tactics = TacticsClass.new()
 
-func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int) -> Dictionary:
+func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, context: Dictionary = {}) -> Dictionary:
 	var home_tactic: Dictionary = home_club.get("tactic", _tactics.create_tactic("4-3-3"))
 	var away_tactic: Dictionary = away_club.get("tactic", _tactics.create_tactic("4-3-3"))
-	return simulate_with_tactics(home_club, away_club, players, seed, home_tactic, away_tactic)
+	return simulate_with_tactics(home_club, away_club, players, seed, home_tactic, away_tactic, context)
 
-func simulate_with_tactics(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, home_tactic: Dictionary, away_tactic: Dictionary) -> Dictionary:
+func simulate_with_tactics(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, home_tactic: Dictionary, away_tactic: Dictionary, context: Dictionary = {}) -> Dictionary:
 	var adapted_players: Array = []
 	var role_fits := {}
 	var home_id := String(home_club.id)
@@ -34,7 +34,7 @@ func simulate_with_tactics(home_club: Dictionary, away_club: Dictionary, players
 	_apply_team_style(adapted_players, home_id, home_mod)
 	_apply_team_style(adapted_players, away_id, away_mod)
 
-	var result: Dictionary = _base.simulate_match(home_club, away_club, adapted_players, seed)
+	var result: Dictionary = _base.simulate_match(home_club, away_club, adapted_players, seed, context)
 	result["tactics"] = {"home": home_tactic.duplicate(true), "away": away_tactic.duplicate(true)}
 	result["style"] = {"home": home_mod, "away": away_mod}
 	_apply_style_events(result, "home", home_mod, seed, 610_000)

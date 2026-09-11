@@ -51,10 +51,13 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 			world.competitions.append(competition)
 			world.fixtures.append_array(_round_robin(competition_id, club_ids))
 		_add_domestic_cup(world, data, system, country_id)
+		_add_domestic_cup(world, data, {"cup": system.get("league_cup", {})}, country_id, "league-cup")
 	world["transfer_windows"] = _transfer_windows(data)
+	world["default_country_id"] = DatabaseLoaderClass.new().default_country_id(data)
+	world["featured_country_ids"] = DatabaseLoaderClass.new().featured_country_ids(data)
 	return world
 
-func _add_domestic_cup(world: Dictionary, data: Dictionary, system: Dictionary, country_id: String) -> void:
+func _add_domestic_cup(world: Dictionary, data: Dictionary, system: Dictionary, country_id: String, suffix: String = "cup") -> void:
 	var cup: Dictionary = system.get("cup", {})
 	if cup.is_empty(): return
 	var all_clubs: Array = []
@@ -64,7 +67,8 @@ func _add_domestic_cup(world: Dictionary, data: Dictionary, system: Dictionary, 
 	var template: Dictionary = DatabaseLoaderClass.new().template_by_id(data, String(cup.get("template", "")))
 	var max_teams := mini(int(template.get("teams", all_clubs.size())), all_clubs.size())
 	all_clubs.sort(); all_clubs.resize(max_teams)
-	world.competitions.append({"id":"%s-cup" % country_id,"country_id":country_id,"name":String(cup.get("name","National Cup")),"club_ids":all_clubs,"competition_type":"knockout","rules":template.duplicate(true),"registration_rules":_registration_rules(data),"points_win":3,"points_draw":1})
+	var cup_id := "%s-%s" % [country_id, suffix]
+	world.competitions.append({"id":cup_id,"country_id":country_id,"name":String(cup.get("name","National Cup")),"club_ids":all_clubs,"competition_type":"knockout","rules":template.duplicate(true),"registration_rules":_registration_rules(data),"points_win":3,"points_draw":1})
 
 func _registration_rules(data: Dictionary) -> Dictionary:
 	var defaults: Dictionary = data.get("registration_defaults", {})

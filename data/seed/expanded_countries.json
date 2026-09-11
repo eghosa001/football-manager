@@ -1,13 +1,13 @@
 [
-  {"id":"ita","name":"Italy","code":"ITA","youth_rating":85,"cities":["Rome","Milan","Naples","Turin","Palermo","Genoa","Bologna","Florence","Bari"]},
-  {"id":"prt","name":"Portugal","code":"POR","youth_rating":83,"cities":["Lisbon","Porto","Braga","Coimbra","Faro","Aveiro","Viseu","Setubal","Leiria"]},
-  {"id":"nld","name":"Netherlands","code":"NED","youth_rating":84,"cities":["Amsterdam","Rotterdam","Utrecht","Eindhoven","Groningen","Arnhem","Breda","Tilburg","Zwolle"]},
   {"id":"bel","name":"Belgium","code":"BEL","youth_rating":81,"cities":["Brussels","Antwerp","Ghent","Bruges","Liege","Namur","Mons","Leuven","Hasselt"]},
-  {"id":"arg","name":"Argentina","code":"ARG","youth_rating":89,"cities":["Buenos Aires","Cordoba","Rosario","Mendoza","La Plata","Salta","Santa Fe","Tucuman","Parana"]},
+  {"id":"tur","name":"Turkiye","code":"TUR","youth_rating":78,"cities":["Istanbul","Ankara","Izmir","Bursa","Antalya","Adana","Konya","Gaziantep","Kayseri"]},
   {"id":"uru","name":"Uruguay","code":"URU","youth_rating":80,"cities":["Montevideo","Salto","Paysandu","Rivera","Maldonado","Melo","Mercedes","Artigas","Rocha"]},
   {"id":"col","name":"Colombia","code":"COL","youth_rating":79,"cities":["Bogota","Medellin","Cali","Barranquilla","Cartagena","Pereira","Manizales","Pasto","Armenia"]},
+  {"id":"usa","name":"United States","code":"USA","youth_rating":74,"cities":["New York","Los Angeles","Chicago","Houston","Miami","Seattle","Atlanta","Boston","Denver"]},
+  {"id":"mex","name":"Mexico","code":"MEX","youth_rating":77,"cities":["Mexico City","Guadalajara","Monterrey","Puebla","Tijuana","Leon","Juarez","Toluca","Queretaro"]},
   {"id":"jpn","name":"Japan","code":"JPN","youth_rating":77,"cities":["Tokyo","Osaka","Yokohama","Nagoya","Sapporo","Kobe","Kyoto","Fukuoka","Sendai"]},
   {"id":"kor","name":"South Korea","code":"KOR","youth_rating":76,"cities":["Seoul","Busan","Incheon","Daegu","Daejeon","Gwangju","Ulsan","Suwon","Jeonju"]},
+  {"id":"aus","name":"Australia","code":"AUS","youth_rating":72,"cities":["Sydney","Melbourne","Brisbane","Perth","Adelaide","Gold Coast","Newcastle","Canberra","Wollongong"]},
   {"id":"egy","name":"Egypt","code":"EGY","youth_rating":75,"cities":["Cairo","Alexandria","Giza","Aswan","Luxor","Port Said","Suez","Mansoura","Ismailia"]},
   {"id":"mar","name":"Morocco","code":"MAR","youth_rating":78,"cities":["Casablanca","Rabat","Marrakesh","Fez","Tangier","Agadir","Meknes","Oujda","Tetouan"]},
   {"id":"sen","name":"Senegal","code":"SEN","youth_rating":76,"cities":["Dakar","Thies","Saint Louis","Kaolack","Ziguinchor","Louga","Diourbel","Tambacounda","Kolda"]}

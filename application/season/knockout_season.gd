@@ -10,6 +10,12 @@ func initialize_all(world: Dictionary, season_year: int) -> void:
 		initialize_competition(world, competition, season_year)
 
 func initialize_competition(world: Dictionary, competition: Dictionary, season_year: int) -> void:
+	var entrants: Array = competition.get("club_ids", [])
+	if entrants.size() < 2:
+		competition["knockout_bracket"] = {"round": 1, "entrants": entrants.duplicate(), "matches": [], "complete": true, "winner": String(entrants[0]) if entrants.size() == 1 else ""}
+		competition["season_year"] = season_year
+		competition["champion_club_id"] = String(competition.get("knockout_bracket", {}).get("winner", ""))
+		return
 	var bracket: Dictionary = KnockoutClass.new().create_bracket(competition.get("club_ids", []), _stable_seed(String(competition.get("id", "cup")), season_year))
 	competition["knockout_bracket"] = bracket
 	competition["season_year"] = season_year

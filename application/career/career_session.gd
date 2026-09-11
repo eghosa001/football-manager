@@ -90,18 +90,41 @@ func _initialize_world(is_new: bool) -> void:
 	ClubEconomyClass.new().ensure_world(world)
 	StaffContractsClass.new().ensure_world(world)
 	InternationalFootballClass.new().ensure_world(world)
-	var season_year := int(world.get("season_year",2026))
+	_ensure_match_factor_fields()
+	var season_year := int(world.get("season_year", 2026))
 	if is_new:
 		preload("res://application/season/continental_competitions.gd").new().prepare(world)
 		KnockoutSeasonClass.new().initialize_all(world, season_year)
 	else:
 		for competition in world.get("competitions", []):
-			if String(competition.get("competition_type","league")) == "knockout" and not competition.has("knockout_bracket"):
+			if String(competition.get("competition_type", "league")) == "knockout" and not competition.has("knockout_bracket"):
 				KnockoutSeasonClass.new().initialize_competition(world, competition, season_year)
+		# Refresh continental tiers + Club World Cup entrants on load so old
+		# saves gain the three-tier structure without a new career.
+		preload("res://application/season/continental_competitions.gd").new().prepare(world)
 	var registration = RegistrationServiceClass.new()
 	registration.ensure_world(world)
 	if is_new or world.get("registrations", {}).is_empty(): registration.auto_register_world(world, season_year)
 	world["seed"] = seed
+
+func _ensure_match_factor_fields() -> void:
+	var manager_ability := {}
+	for staff_member in world.get("staff", []):
+		if String(staff_member.get("role", "")) == "manager":
+			manager_ability[String(staff_member.get("club_id", ""))] = int(staff_member.get("ability", 50))
+	for club in world.get("clubs", []):
+		if not club.has("recent_results") or not club.get("recent_results") is Array:
+			club["recent_results"] = []
+		if not club.has("form_points"):
+			club["form_points"] = 7.5
+		if not club.has("manager_ability"):
+			club["manager_ability"] = int(manager_ability.get(String(club.get("id", "")), 50))
+		if not club.has("injured_count"):
+			club["injured_count"] = 0
+	if not world.has("default_country_id") or String(world.get("default_country_id", "")) == "":
+		world["default_country_id"] = "eng"
+	if not world.has("featured_country_ids") or not world.get("featured_country_ids") is Array:
+		world["featured_country_ids"] = ["eng", "esp"]
 
 func _club_exists(club_id: String) -> bool:
 	for club in world.get("clubs", []):

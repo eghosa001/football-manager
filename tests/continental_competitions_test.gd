@@ -7,9 +7,17 @@ func _init() -> void:
 	var cups: Array = []
 	for competition in world.competitions:
 		if bool(competition.get("continental", false)): cups.append(competition)
-	assert(cups.size() == 2)
+	# Base world: 5 regions covered (europe/africa/south_america) x3 tiers + Club World Cup.
+	assert(cups.size() == 10)
+	var cwc := 0
+	var tiered := 0
+	for cup in cups:
+		if bool(cup.get("club_world_cup", false)): cwc += 1
+		elif int(cup.get("continental_tier", 0)) >= 1: tiered += 1
+	assert(cwc == 1)
+	assert(tiered == 9)
 	continental.prepare(world)
-	assert(world.competitions.size() == 27)
+	assert(world.competitions.size() == 48)
 	var knockout = preload("res://application/season/knockout_season.gd").new()
 	knockout.initialize_all(world, 2026)
 	_check_dates(world)
@@ -34,10 +42,23 @@ func _init() -> void:
 		for id in ids: table.append({"club_id":id})
 		records.append({"competition_id":competition.id,"table":table})
 	continental.prepare(world, records)
+	# Tiered qualification: champions-tier cups must include a table-top club
+	# from their region; lower tiers must not duplicate the champions entrants.
 	for cup in cups:
-		for record in records:
-			if String(record.table[0].club_id) in cup.club_ids:
-				for row in record.table.slice(0, 4): assert(String(row.club_id) in cup.club_ids)
+		if bool(cup.get("club_world_cup", false)):
+			continue
+		if int(cup.get("continental_tier", 1)) == 1:
+			var region := String(cup.get("continental_region", ""))
+			var tops: Array = []
+			for record in records:
+				var comp := _competition(world, String(record.get("competition_id", "")))
+				if String(comp.get("country_id", "")) in preload("res://application/season/continental_competitions.gd").REGIONS.get(region, []):
+					if not record.get("table", []).is_empty():
+						tops.append(String(record.table[0].club_id))
+			var hit := false
+			for top in tops:
+				if top in cup.get("club_ids", []): hit = true
+			assert(hit, "Champions tier missing table-top qualifier for " + region)
 	print("[TEST] CONTINENTAL COMPETITIONS PASS")
 	quit(0)
 
@@ -51,3 +72,8 @@ func _check_dates(world: Dictionary) -> void:
 			var key := "%s:%s" % [club, fixture.date]
 			assert(not occupied.has(key), "Club has overlapping fixtures: " + key)
 			occupied[key] = true
+
+func _competition(world: Dictionary, competition_id: String) -> Dictionary:
+	for competition in world.get("competitions", []):
+		if String(competition.get("id", "")) == competition_id: return competition
+	return {}

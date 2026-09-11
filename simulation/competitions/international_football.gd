@@ -96,14 +96,95 @@ func add_calendar_window(world: Dictionary, start_date: String, end_date: String
 	world.international_calendar.append(window)
 	return window
 
+const INTERNATIONAL_REGIONS := {
+	"europe": ["eng", "esp", "deu", "fra", "ita", "prt", "nld", "bel", "tur"],
+	"africa": ["nga", "gha", "zaf", "egy", "mar", "sen"],
+	"south_america": ["bra", "arg", "uru", "col"],
+	"asia": ["jpn", "kor", "aus"],
+	"north_america": ["usa", "mex"],
+}
+
+const CONTINENTAL_CHAMPIONSHIPS := {
+	"europe": "European Championship",
+	"africa": "Africa Cup of Nations",
+	"south_america": "Copa America",
+	"asia": "Asian Cup",
+	"north_america": "Gold Cup",
+}
+
+func region_for_country(country_id: String) -> String:
+	for region in INTERNATIONAL_REGIONS:
+		if country_id in INTERNATIONAL_REGIONS[region]: return String(region)
+	return "world"
+
+func continental_championship_name(region: String) -> String:
+	return String(CONTINENTAL_CHAMPIONSHIPS.get(region, "Continental Championship"))
+
+func world_cup_id(year: int) -> String:
+	return "world-cup-%d" % year
+
+func continental_championship_id(region: String, year: int) -> String:
+	return "continental-%s-%d" % [region, year]
+
 func create_qualifying_cycle(world: Dictionary, competition_id: String, group_count: int = 4) -> Dictionary:
 	ensure_world(world)
 	var country_ids: Array = []
 	for country in world.get("countries", []): country_ids.append(String(country.get("id", "")))
 	var groups := GroupStageClass.new().seed_groups(country_ids, mini(group_count, maxi(1,country_ids.size())))
-	var cycle := {"id":competition_id,"season_year":int(world.get("season_year",2026)),"stage":"qualifying","groups":groups,"fixtures":GroupStageClass.new().fixtures_for_groups(groups,competition_id),"qualified":[],"winner":"","history":[]}
+	var cycle := {"id":competition_id,"season_year":int(world.get("season_year",2026)),"stage":"qualifying","groups":groups,"fixtures":GroupStageClass.new().fixtures_for_groups(groups,competition_id),"qualified":[],"winner":"","history":[],"kind":"qualifying"}
 	world.international_competitions.append(cycle)
 	return cycle
+
+func create_continental_qualifying(world: Dictionary, region: String, competition_id: String, slots: int = 8) -> Dictionary:
+	ensure_world(world)
+	var members: Array = []
+	for country in world.get("countries", []):
+		if region_for_country(String(country.get("id", ""))) == region: members.append(String(country.get("id", "")))
+	if members.size() < 2:
+		for country in world.get("countries", []):
+			if String(country.get("id", "")) not in members: members.append(String(country.get("id", "")))
+	var group_count := maxi(1, int(ceil(float(members.size()) / 4.0)))
+	var groups := GroupStageClass.new().seed_groups(members, mini(group_count, members.size()))
+	var cycle := {"id": competition_id, "season_year": int(world.get("season_year", 2026)), "stage": "qualifying", "kind": "continental_qualifying", "region": region, "name": continental_championship_name(region), "slots": slots, "groups": groups, "fixtures": GroupStageClass.new().fixtures_for_groups(groups, competition_id), "qualified": [], "winner": "", "history": []}
+	world.international_competitions.append(cycle)
+	return cycle
+
+func create_world_cup_qualifying(world: Dictionary, competition_id: String, slots: int = 8) -> Dictionary:
+	ensure_world(world)
+	var country_ids: Array = []
+	for country in world.get("countries", []): country_ids.append(String(country.get("id", "")))
+	# Regional pools keep qualification pathways realistic; small regions merge.
+	var pools := _world_cup_pools(world)
+	var cycle := {"id": competition_id, "season_year": int(world.get("season_year", 2026)), "stage": "qualifying", "kind": "world_cup_qualifying", "name": "World Cup", "slots": slots, "pools": pools, "groups": [], "fixtures": [], "qualified": [], "winner": "", "history": []}
+	for pool in pools:
+		var members: Array = pool.get("members", [])
+		if members.size() < 2: continue
+		var group_count := maxi(1, int(ceil(float(members.size()) / 4.0)))
+		var groups := GroupStageClass.new().seed_groups(members, mini(group_count, members.size()))
+		cycle.groups.append_array(groups)
+		cycle.fixtures.append_array(GroupStageClass.new().fixtures_for_groups(groups, competition_id))
+	world.international_competitions.append(cycle)
+	return cycle
+
+func qualify_from_groups(groups: Array, fixtures: Array, slots: int) -> Array:
+	var qualifiers := GroupStageClass.new().qualifiers(groups, fixtures, 2)
+	qualifiers.sort()
+	if qualifiers.size() > slots: qualifiers.resize(slots)
+	return qualifiers
+
+func _world_cup_pools(world: Dictionary) -> Array:
+	var pools: Array = []
+	for region in INTERNATIONAL_REGIONS:
+		var members: Array = []
+		for country in world.get("countries", []):
+			if String(country.get("id", "")) in INTERNATIONAL_REGIONS[region]: members.append(String(country.get("id", "")))
+		if members.size() >= 2:
+			pools.append({"region": region, "members": members})
+	if pools.is_empty():
+		var all: Array = []
+		for country in world.get("countries", []): all.append(String(country.get("id", "")))
+		pools.append({"region": "world", "members": all})
+	return pools
 
 func complete_qualifying(world: Dictionary, competition_id: String, qualified: Array) -> Dictionary:
 	ensure_world(world)

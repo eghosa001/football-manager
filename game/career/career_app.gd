@@ -23,7 +23,11 @@ var content: VBoxContainer
 var status: Label
 var _manager_name_input: LineEdit
 var _club_selector: OptionButton
+var _country_selector: OptionButton
 var _wizard_clubs: Array = []
+var _wizard_countries: Array = []
+var _wizard_preview: Dictionary = {}
+var _wizard_country_id := "eng"
 var _worker: Thread
 var _busy := false
 var custom_database: Dictionary = {}
@@ -126,35 +130,85 @@ func _show_new_career() -> void:
 	var root := _clear()
 	_add_heading(root, tr("New Career"), 28)
 	var expanded := CheckBox.new()
-	expanded.text = tr("Expanded world: 20 countries (longer processing)")
+	var expanded_count := 24 if expanded_world else 12
+	expanded.text = tr("Expanded world: %d countries (longer processing)") % expanded_count
 	expanded.button_pressed = expanded_world
 	root.add_child(expanded)
 	expanded.toggled.connect(func(enabled: bool): expanded_world = enabled; _show_new_career())
 	var name_label := Label.new(); name_label.text = tr("Manager name"); root.add_child(name_label)
-	_manager_name_input = LineEdit.new(); _manager_name_input.text = tr("Manager"); _manager_name_input.placeholder_text = "Enter manager name"; root.add_child(_manager_name_input)
-	var club_label := Label.new(); club_label.text = tr("Choose club — launch database"); root.add_child(club_label)
-	_club_selector = OptionButton.new()
+	_manager_name_input = LineEdit.new(); _manager_name_input.text = tr("Manager"); _manager_name_input.placeholder_text = "Enter manager name"; _manager_name_input.custom_minimum_size = Vector2(640, 0); root.add_child(_manager_name_input)
+	# Loading state while the launch database is assembled.
+	var loading := Label.new(); loading.text = tr("Loading database…"); root.add_child(loading)
+	await get_tree().process_frame
 	var preview: Dictionary = LaunchCatalogClass.new().build(0, expanded_world)
+	loading.queue_free()
+	if preview.get("clubs", []).is_empty():
+		var empty := Label.new(); empty.text = tr("No clubs available. The launch database failed to load."); empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; root.add_child(empty)
+		_add_button(root, tr("Back"), _show_main_menu)
+		return
 	if not custom_database.is_empty():
 		preload("res://tools/modding/mod_loader.gd").new().apply_mod(preview, custom_database)
 		_add_button(root, tr("Clear custom database"), func(): custom_database = {}; _show_new_career())
-	_wizard_clubs = preview.get("clubs", [])
-	for club in _wizard_clubs:
-		var country_name := _country_name(preview.get("countries", []), String(club.get("country_id", "")))
-		var tier := int(club.get("tier", 1))
-		_club_selector.add_item("%s — %s T%d" % [String(club.get("name", "Club")), country_name, tier])
+	_wizard_preview = preview
+	_wizard_countries = preview.get("countries", [])
+	var default_country := String(preview.get("default_country_id", "eng"))
+	if _wizard_country_id == "" or _country_name(_wizard_countries, _wizard_country_id) == _wizard_country_id:
+		# Keep the previous selection when possible; otherwise default to England.
+		var known := false
+		for country in _wizard_countries:
+			if String(country.get("id", "")) == _wizard_country_id: known = true
+		if not known: _wizard_country_id = default_country if default_country != "" else String(_wizard_countries[0].get("id", ""))
+	var country_label := Label.new(); country_label.text = tr("Nation (default: England, featured: Spain)"); root.add_child(country_label)
+	_country_selector = OptionButton.new(); _country_selector.custom_minimum_size = Vector2(640, 0)
+	var selected_country := 0
+	for i in range(_wizard_countries.size()):
+		var country: Dictionary = _wizard_countries[i]
+		var marker := ""
+		if String(country.get("id", "")) == default_country: marker = " ★"
+		elif String(country.get("id", "")) in preview.get("featured_country_ids", []): marker = " ◆"
+		_country_selector.add_item("%s%s" % [String(country.get("name", "")), marker])
+		if String(country.get("id", "")) == _wizard_country_id: selected_country = i
+	_country_selector.select(selected_country)
+	root.add_child(_country_selector)
+	_country_selector.item_selected.connect(func(index: int): _wizard_country_id = String(_wizard_countries[index].get("id", "")); _refresh_wizard_clubs())
+	var club_label := Label.new(); club_label.text = tr("Choose club — filtered by nation"); root.add_child(club_label)
+	_club_selector = OptionButton.new(); _club_selector.custom_minimum_size = Vector2(640, 0)
 	root.add_child(_club_selector)
-	var database_info := Label.new(); database_info.text = tr("%d countries • %d clubs • multi-tier leagues and domestic cups") % [preview.get("countries", []).size(), _wizard_clubs.size()]; root.add_child(database_info)
+	_refresh_wizard_clubs()
+	var database_info := Label.new()
+	database_info.text = tr("%d countries • %d clubs • multi-tier leagues, domestic cups, continental tiers, Club World Cup and international pathways") % [preview.get("countries", []).size(), preview.get("clubs", []).size()]
+	database_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	root.add_child(database_info)
+	var hint := Label.new()
+	hint.text = tr("Tip: England is the default nation; Spain is the featured alternative. Continental qualification follows league position after year one.")
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	root.add_child(hint)
 	var buttons := HBoxContainer.new(); root.add_child(buttons)
 	_add_button(buttons, tr("Create Career"), _create_career_from_wizard)
 	_add_button(buttons, tr("Back"), _show_main_menu)
 
+func _refresh_wizard_clubs() -> void:
+	if _club_selector == null: return
+	_club_selector.clear()
+	_wizard_clubs = LaunchCatalogClass.new().clubs_for_country(_wizard_preview, _wizard_country_id)
+	if _wizard_clubs.is_empty():
+		_club_selector.add_item(tr("No clubs in this nation"))
+		_club_selector.disabled = true
+		return
+	_club_selector.disabled = false
+	for club in _wizard_clubs:
+		_club_selector.add_item("%s — %s" % [String(club.get("name", "Club")), String(club.get("competition_name", "Division"))])
+	_club_selector.select(0)
+
 func _create_career_from_wizard() -> void:
+	if _wizard_clubs.is_empty() or (_club_selector != null and _club_selector.disabled):
+		_show_error("No club is selected. Choose a nation with clubs first.")
+		return
 	active_slot = slots.first_available_slot()
-	var manager_name := _manager_name_input.text.strip_edges()
+	var manager_name := _manager_name_input.text.strip_edges() if _manager_name_input != null else "Manager"
 	if manager_name == "": manager_name = "Manager"
-	var selected := clampi(_club_selector.selected, 0, maxi(0, _wizard_clubs.size()-1))
-	var club_id := String(_wizard_clubs[selected].id) if not _wizard_clubs.is_empty() else ""
+	var selected := clampi(_club_selector.selected, 0, maxi(0, _wizard_clubs.size() - 1))
+	var club_id := String(_wizard_clubs[selected].get("id", "")) if not _wizard_clubs.is_empty() else ""
 	var mods: Array = [] if custom_database.is_empty() else [custom_database.duplicate(true)]
 	var snap: Dictionary = await _run_job(session.new_career.bind(manager_name, club_id, 12345, 0, mods, expanded_world), "Creating your football world")
 	if snap.is_empty() or snap.has("error"):

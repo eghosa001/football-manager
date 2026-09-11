@@ -4,15 +4,15 @@ func _init() -> void:
 	var started := Time.get_ticks_msec()
 	var session = preload("res://application/career/career_session.gd").new()
 	session.new_career("Expanded", "jpn-t1-c01", 92828, 0, [], true)
-	assert(session.world.countries.size() == 20)
-	assert(session.world.clubs.size() == 756)
-	assert(session.world.players.size() == 21168)
+	assert(session.world.countries.size() == 24)
+	assert(session.world.clubs.size() == 908)
+	assert(session.world.players.size() == 25424)
 	var catalog: Dictionary = preload("res://data/launch_catalog.gd").new().build(0, true)
 	for i in range(catalog.clubs.size()): assert(catalog.clubs[i].name == session.world.clubs[i].name)
 	var cups := 0
 	for competition in session.world.competitions:
 		if bool(competition.get("continental", false)): cups += 1
-	assert(cups == 4)
+	assert(cups == 16)
 	var dates := {}
 	for fixture in session.world.fixtures:
 		for club in [fixture.home_club_id, fixture.away_club_id]:
