@@ -17,6 +17,7 @@ const StaffDevelopmentClass = preload("res://simulation/staff/staff_development.
 const InternationalSeasonClass = preload("res://application/season/international_season.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
 const NamePoolServiceClass = preload("res://application/career/name_pool_service.gd")
+const DomainEventBusClass = preload("res://core/events/domain_event_bus.gd")
 
 var _season_runner = SeasonRunnerClass.new()
 var _lifecycle = LifecycleClass.new()
@@ -34,8 +35,10 @@ var _staff_development = StaffDevelopmentClass.new()
 var _international = InternationalSeasonClass.new()
 var _registration = RegistrationServiceClass.new()
 var _names = NamePoolServiceClass.new()
+var _events = DomainEventBusClass.new()
 
 func complete_year(world: Dictionary, history: Array, season_seed: int, promotion_places: int = 3) -> Dictionary:
+	_events.ensure_world(world)
 	_tactics.ensure_world(world, season_seed + 600_001)
 	_living_world.ensure_world(world)
 	_reputation.ensure_world(world)
@@ -53,6 +56,8 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	var lifecycle_result: Dictionary = _lifecycle.advance_year(world, season_seed + 700_001, 2)
 	_names.rename_youth(world, lifecycle_result.get("youth", []), season_seed + 700_002)
 	var youth_quality_result: Dictionary = _youth_quality.apply_to_intake(world, lifecycle_result.get("youth", []), season_seed + 700_002)
+	if not lifecycle_result.get("youth", []).is_empty():
+		_events.emit(world, "YOUTH_INTAKE", {"season_year":next_year,"player_ids":lifecycle_result.get("youth", []).duplicate(),"count":lifecycle_result.get("youth", []).size(),"elite_prospects":int(youth_quality_result.get("elite_prospects", 0))}, "player_lifecycle")
 	var contract_result: Dictionary = _market.process_contracts(world, next_year, season_seed + 700_003)
 	var staff_contract_result: Dictionary = _staff_contracts.process_expiring(world, next_year)
 	var staff_development_result: Dictionary = _staff_development.advance_year(world, season_result.records, season_seed + 700_005)
@@ -74,6 +79,7 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	var living_result: Dictionary = _living_world.advance_year(world, season_result.records, season_seed + 900_001)
 	var reputation_result: Dictionary = _reputation.advance_year(world, season_result.records)
 	var happiness_result: Dictionary = _happiness.update_week(world)
+	_events.emit(world, "SEASON_ENDED", {"completed_year":completed_year,"next_year":next_year,"competition_records":season_result.records.duplicate(true),"promotion_movements":season_result.get("movements", []).duplicate(true),"international_champion":String(international_result.get("champion", ""))}, "career_cycle")
 	return {"season":season_result,"economy":economy_result,"board":board_result,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"staff_development":staff_development_result,"squads":squad_result,"registrations":registration_result,"living_world":living_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
 
 func _process_ai_manager_market(world: Dictionary, records: Array, year: int) -> Dictionary:
@@ -87,8 +93,11 @@ func _process_ai_manager_market(world: Dictionary, records: Array, year: int) ->
 		var ppg := _season_ppg(records, club_id)
 		var patience := int(club.get("board", {}).get("patience", 50))
 		var security: Dictionary = _staff_market.evaluate_manager_security(world, club_id, ppg, patience)
-		if String(security.get("status", "secure")) == "critical" and _staff_market.sack_manager(world, club_id, "poor_results", year) == OK:
-			sacked.append(club_id)
+		if String(security.get("status", "secure")) == "critical":
+			var manager_id := String(security.get("manager_id", ""))
+			if _staff_market.sack_manager(world, club_id, "poor_results", year) == OK:
+				sacked.append(club_id)
+				_events.emit(world, "MANAGER_FIRED", {"manager_id":manager_id,"club_id":club_id,"reason":"poor_results","year":year,"risk":float(security.get("risk", 1.0))}, "staff_market")
 	for club_id in sacked:
 		var options: Array = _staff_market.candidates(world, String(club_id), 8)
 		if options.is_empty():
