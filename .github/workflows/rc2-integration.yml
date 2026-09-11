@@ -13,6 +13,8 @@ on:
       - 'tests/release_smoke_test.gd'
       - 'tests/completion_features_test_runner.gd'
       - 'tests/event_news_test.gd'
+      - 'tests/continuous_attribute_test.gd'
+      - 'tests/history_archive_test.gd'
       - 'game/localization/**'
       - 'game/polish/**'
       - 'tools/test-headless.ps1'
@@ -22,6 +24,7 @@ on:
       - 'game/career/**'
       - 'game/tactics/**'
       - 'data/**'
+      - 'simulation/world/**'
       - 'simulation/players/**'
       - 'simulation/staff/**'
       - 'simulation/scouting/**'
@@ -50,7 +53,7 @@ permissions:
 jobs:
   rc2-integration:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,6 +65,10 @@ jobs:
         run: .\tools\test-headless.ps1 -Script tests/completion_features_test_runner.gd -TimeoutSeconds 300
       - shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/event_news_test.gd
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/continuous_attribute_test.gd -TimeoutSeconds 180
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/history_archive_test.gd
       - shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/career_rollover_test.gd
       - shell: powershell
