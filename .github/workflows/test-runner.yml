@@ -19,7 +19,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  test-selected-ref:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    name: test selected ref
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 120
     steps:
@@ -37,7 +39,7 @@ jobs:
       - name: Checkout selected ref
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+          ref: ${{ inputs.ref }}
           fetch-depth: 1
           clean: false
 
@@ -103,6 +105,116 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: self-hosted-test-logs-${{ github.run_id }}
+          path: test_artifacts/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  test-all-branches:
+    if: ${{ github.event_name == 'push' }}
+    name: test ${{ matrix.ref }}
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        ref:
+          - main
+          - phase-1-2-world-match-engine
+          - phase-3-season-persistence-core
+          - phase-4-5-lifecycle-transfers
+          - phase-6-7-economy-tactics
+          - phase-8-9-spatial-ui
+          - phase-10-11-living-world-release
+          - prod/database-competitions
+          - prod/dev-release-tooling
+          - prod/match-engine-v2
+          - prod/playable-career-ux
+          - prod/player-scouting-transfers
+          - prod/rc2-integration
+          - production/remaining-features
+    steps:
+      - name: Checkout current CI harness
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          clean: false
+
+      - name: Preserve self-hosted test helper
+        shell: powershell
+        run: Copy-Item .\tools\test-headless.ps1 (Join-Path $env:RUNNER_TEMP 'test-headless.ps1') -Force
+
+      - name: Checkout branch under test
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          fetch-depth: 1
+          clean: false
+
+      - name: Verify tested revision
+        shell: powershell
+        run: |
+          Write-Host "Branch: ${{ matrix.ref }}"
+          Write-Host "Testing revision: $(git rev-parse HEAD)"
+          git log -1 --oneline
+
+      - name: Import project
+        shell: powershell
+        run: '& (Join-Path $env:RUNNER_TEMP ''test-headless.ps1'') -Script import'
+
+      - name: Run full phase test suite
+        shell: powershell
+        run: |
+          $helper = Join-Path $env:RUNNER_TEMP 'test-headless.ps1'
+          $suites = @(
+            'tests/test_runner.gd',
+            'tests/phase3_test_runner.gd',
+            'tests/phase45_test_runner.gd',
+            'tests/phase67_test_runner.gd',
+            'tests/phase89_test_runner.gd',
+            'tests/phase1011_test_runner.gd'
+          )
+          New-Item -ItemType Directory -Force -Path test_artifacts | Out-Null
+          $failed = @()
+          foreach ($suite in $suites) {
+            if (-not (Test-Path $suite)) {
+              Write-Host "SKIP: $suite does not exist in this revision"
+              continue
+            }
+            try {
+              & $helper -Script $suite
+            } catch {
+              $failed += $suite
+              Write-Host "FAILED: $suite"
+              Write-Host $_
+            }
+          }
+          if ($failed.Count -gt 0) {
+            Write-Host "Self-hosted suite failures ($($failed.Count)):"
+            $failed | ForEach-Object { Write-Host " - $_" }
+            exit 1
+          }
+
+      - name: Run career performance test
+        if: ${{ hashFiles('tests/career_performance_test.gd') != '' }}
+        shell: powershell
+        run: '& (Join-Path $env:RUNNER_TEMP ''test-headless.ps1'') -Script tests/career_performance_test.gd'
+
+      - name: Verify tests did not modify tracked source
+        shell: powershell
+        run: |
+          git diff --quiet -- .
+          if ($LASTEXITCODE -ne 0) {
+            git diff -- .
+            throw 'Tests modified tracked repository files.'
+          }
+
+      - name: Upload logs only on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-hosted-test-logs-${{ matrix.ref }}-${{ github.run_id }}
           path: test_artifacts/**
           if-no-files-found: ignore
           retention-days: 7
