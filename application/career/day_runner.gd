@@ -7,6 +7,7 @@ const DailyServicesClass = preload("res://application/career/daily_services.gd")
 const RecruitmentDailyClass = preload("res://application/career/recruitment_daily.gd")
 const CareerMatchdayServiceClass = preload("res://application/career/career_matchday_service.gd")
 const CareerCycleClass = preload("res://application/career/career_cycle.gd")
+const NewsEventConsumerClass = preload("res://application/career/news_event_consumer.gd")
 
 func advance_day(world: Dictionary, history: Array, seed: int) -> Dictionary:
 	if world.is_empty(): return {"error":ERR_INVALID_DATA}
@@ -33,4 +34,5 @@ func advance_day(world: Dictionary, history: Array, seed: int) -> Dictionary:
 	var services: Dictionary = DailyServicesClass.new().run(world, managed_club_id, seed)
 	services["recruitment"] = RecruitmentDailyClass.new().run(world, managed_club_id, seed + 41_003)
 	var generated: Array = InboxServiceClass.new().generate_daily(world, results)
-	return {"date":target_date,"fixtures_played":results.size(),"results":results,"services":services,"messages":generated,"rollover":rollover}
+	var news: Dictionary = NewsEventConsumerClass.new().consume(world)
+	return {"date":target_date,"fixtures_played":results.size(),"results":results,"services":services,"messages":generated,"news":news,"rollover":rollover}
