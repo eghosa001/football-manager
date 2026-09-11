@@ -10,6 +10,7 @@ on:
       - 'application/**'
       - 'simulation/**'
       - 'tests/mobile_platform_contract_test.gd'
+      - 'tests/career_ui_test.gd'
       - '.github/workflows/mobile-platform.yml'
   pull_request:
     paths:
@@ -19,6 +20,7 @@ on:
       - 'application/**'
       - 'simulation/**'
       - 'tests/mobile_platform_contract_test.gd'
+      - 'tests/career_ui_test.gd'
       - '.github/workflows/mobile-platform.yml'
   workflow_dispatch:
     inputs:
@@ -42,7 +44,7 @@ concurrency:
 jobs:
   contract:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,6 +56,9 @@ jobs:
       - name: Validate mobile platform contract
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/mobile_platform_contract_test.gd
+      - name: Validate responsive career UI
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/career_ui_test.gd
 
   android:
     if: ${{ github.event_name == 'workflow_dispatch' && (inputs.platform == 'android' || inputs.platform == 'all') }}
@@ -80,18 +85,18 @@ jobs:
           if (-not $candidate) { throw 'Godot executable not found.' }
           "GODOT_EXE=$candidate" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           & $candidate --version
-      - name: Build Android ARM64 APK
+      - name: Build Android ARM64 test APK
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path build/android | Out-Null
-          & $env:GODOT_EXE --headless --path . --export-release Android build/android/FootballDynasty.apk
+          & $env:GODOT_EXE --headless --path . --export-debug Android build/android/FootballDynasty-debug.apk
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (-not (Test-Path build/android/FootballDynasty.apk)) { throw 'Android APK missing.' }
-      - name: Upload Android build
+          if (-not (Test-Path build/android/FootballDynasty-debug.apk)) { throw 'Android APK missing.' }
+      - name: Upload Android test build
         uses: actions/upload-artifact@v4
         with:
-          name: FootballDynasty-android-arm64
-          path: build/android/FootballDynasty.apk
+          name: FootballDynasty-android-arm64-debug
+          path: build/android/FootballDynasty-debug.apk
 
   ios:
     if: ${{ github.event_name == 'workflow_dispatch' && (inputs.platform == 'ios' || inputs.platform == 'all') }}
