@@ -1,6 +1,7 @@
 class_name SettingsStore
 extends RefCounted
 
+const AUTOSAVE_MODES := ["weekly", "monthly", "after_match", "manual"]
 const DEFAULTS := {
 	"language": "en",
 	"ui_scale": 1.0,
@@ -10,6 +11,8 @@ const DEFAULTS := {
 	"screen_reader_labels": true,
 	"autosave": true,
 	"autosave_interval_days": 7,
+	"autosave_mode": "weekly",
+	"autosave_rolling_count": 3,
 }
 
 func defaults() -> Dictionary:
@@ -25,6 +28,12 @@ func sanitize(input: Dictionary) -> Dictionary:
 	value.screen_reader_labels = bool(input.get("screen_reader_labels", value.screen_reader_labels))
 	value.autosave = bool(input.get("autosave", value.autosave))
 	value.autosave_interval_days = clampi(int(input.get("autosave_interval_days", value.autosave_interval_days)), 1, 30)
+	value.autosave_mode = String(input.get("autosave_mode", value.autosave_mode))
+	if value.autosave_mode not in AUTOSAVE_MODES:
+		value.autosave_mode = "weekly"
+	value.autosave_rolling_count = 5 if int(input.get("autosave_rolling_count", value.autosave_rolling_count)) >= 5 else 3
+	if not value.autosave:
+		value.autosave_mode = "manual"
 	return value
 
 func save(path: String, settings: Dictionary) -> Error:
