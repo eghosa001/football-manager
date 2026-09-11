@@ -1,0 +1,55 @@
+class_name MatchEngineRouter
+extends RefCounted
+
+const ContinuousClass = preload("res://simulation/match/continuous_full_match_engine.gd")
+const EventClass = preload("res://simulation/match/full_match_engine_v2.gd")
+const AbstractClass = preload("res://simulation/match/abstract_match_engine.gd")
+const AggregateClass = preload("res://simulation/match/background_aggregate_engine.gd")
+
+const DETAILED := "detailed"
+const EVENT := "event"
+const ABSTRACT := "abstract"
+const AGGREGATE := "aggregate"
+
+var _engines := {
+	DETAILED: ContinuousClass.new(),
+	EVENT: EventClass.new(),
+	ABSTRACT: AbstractClass.new(),
+	AGGREGATE: AggregateClass.new(),
+}
+
+func simulate(tier: String, home_club: Dictionary, away_club: Dictionary, players: Array, seed: int) -> Dictionary:
+	var canonical := tier if tier in _engines else ABSTRACT
+	var result: Dictionary = _engines[canonical].simulate_match(home_club,away_club,players,seed)
+	if result.has("error"): return result
+	result["simulation_tier"] = canonical
+	result["engine_interface_version"] = 1
+	result["legacy_engine"] = canonical != DETAILED
+	_normalize_result(result)
+	return result
+
+func detailed(home_club:Dictionary,away_club:Dictionary,players:Array,seed:int)->Dictionary:
+	return simulate(DETAILED,home_club,away_club,players,seed)
+
+func event(home_club:Dictionary,away_club:Dictionary,players:Array,seed:int)->Dictionary:
+	return simulate(EVENT,home_club,away_club,players,seed)
+
+func abstract(home_club:Dictionary,away_club:Dictionary,players:Array,seed:int)->Dictionary:
+	return simulate(ABSTRACT,home_club,away_club,players,seed)
+
+func aggregate(home_club:Dictionary,away_club:Dictionary,players:Array,seed:int)->Dictionary:
+	return simulate(AGGREGATE,home_club,away_club,players,seed)
+
+func supported_tiers()->Array:
+	return [DETAILED,EVENT,ABSTRACT,AGGREGATE]
+
+func authoritative_engine()->String:
+	return DETAILED
+
+func _normalize_result(result:Dictionary)->void:
+	result["home_goals"] = int(result.get("home_goals",0))
+	result["away_goals"] = int(result.get("away_goals",0))
+	result["events"] = result.get("events",[])
+	result["stats"] = result.get("stats",{"home":{},"away":{}})
+	result["lineups"] = result.get("lineups",{"home":[],"away":[]})
+	result["participants"] = result.get("participants",result.lineups.duplicate(true))
