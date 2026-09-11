@@ -6,7 +6,7 @@ const DomainEventBusClass = preload("res://core/events/domain_event_bus.gd")
 const NEWSWORTHY := [
 	"MATCH_FINISHED","GOAL_SCORED","PLAYER_INJURED","PLAYER_RECOVERED","PLAYER_SIGNED","CONTRACT_SIGNED",
 	"MANAGER_FIRED","MANAGER_HIRED","PLAYER_RETIRED","YOUTH_INTAKE","CLUB_PROMOTED","CLUB_RELEGATED",
-	"COMPETITION_WON","RECORD_BROKEN","SEASON_ENDED","PROMISE_RESOLVED"
+	"COMPETITION_WON","RECORD_BROKEN","SEASON_ENDED","PROMISE_RESOLVED","AWARD_WON","WORLD_UPDATE"
 ]
 
 var _events = DomainEventBusClass.new()
@@ -48,5 +48,11 @@ func _article(event: Dictionary) -> Dictionary:
 		"RECORD_BROKEN": title="Record broken"; summary="A new %s record has been set."%String(payload.get("record","football"))
 		"SEASON_ENDED": title="Season completed"; summary="The %d season has concluded."%int(payload.get("completed_year",payload.get("season_year",event.get("season_year",0))))
 		"PROMISE_RESOLVED": title="Player promise resolved"; summary="A player promise was %s."%("kept" if bool(payload.get("fulfilled",false)) else "broken")
+		"AWARD_WON":
+			title="Season award"; summary="%s won %s."%[String(payload.get("player_name",payload.get("player_id","A player"))),String(payload.get("type","an award")).replace("_"," ")]
+		"WORLD_UPDATE":
+			var reason:Dictionary=payload.get("reason",{})
+			var reason_type:=String(reason.get("type","world_update"))
+			title="World update"; summary="%s: %s"%[reason_type.replace("_"," ").capitalize(),String(reason.get("cause","season progression")).replace("_"," ")]
 		_: return {}
 	return {"id":"news-event-%09d"%int(event.get("sequence",0)),"year":int(event.get("season_year",0)),"date":String(event.get("date","")),"type":event_type.to_lower(),"title":title,"summary":summary,"event_id":String(event.get("id","")),"reason":event.duplicate(true)}
