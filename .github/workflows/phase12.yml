@@ -1,0 +1,41 @@
+name: Phase 12 Continuous Spatial
+
+on:
+  push:
+    branches: [phase-12-continuous-spatial-simulation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase12-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: false
+      - name: Import project
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
+      - name: Run existing Match Engine v2 regression
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/match_engine_v2_test.gd
+      - name: Run Phase 12 continuous spatial acceptance
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/phase12_continuous_spatial_test.gd
+      - name: Verify tests did not modify tracked source
+        shell: powershell
+        run: |
+          git diff --quiet -- .
+          if ($LASTEXITCODE -ne 0) {
+            git diff -- .
+            throw 'Tests modified tracked repository files.'
+          }
