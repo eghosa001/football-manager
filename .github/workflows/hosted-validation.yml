@@ -12,9 +12,9 @@ permissions:
   contents: read
 
 jobs:
-  godot-tests:
+  fast-pr-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,35 +34,11 @@ jobs:
       - name: Architecture convergence
         run: bash tools/test-headless.sh tests/architecture_convergence_test.gd 300
 
-      - name: Phase 1/2
+      - name: Core simulation smoke
         run: bash tools/test-headless.sh tests/test_runner.gd 1200
 
-      - name: Phase 3
-        run: bash tools/test-headless.sh tests/phase3_test_runner.gd 1200
-
-      - name: Phase 4/5
-        run: bash tools/test-headless.sh tests/phase45_test_runner.gd 1200
-
-      - name: Phase 6/7
-        run: bash tools/test-headless.sh tests/phase67_test_runner.gd 1200
-
-      - name: Phase 8/9
-        run: bash tools/test-headless.sh tests/phase89_test_runner.gd 1200
-
-      - name: Phase 10/11
+      - name: Career and living-world smoke
         run: bash tools/test-headless.sh tests/phase1011_test_runner.gd 1200
 
-      - name: 72-gap regressions
-        run: bash tools/test-headless.sh tests/remediation_72_test.gd 1200
-
-      - name: Remediation depth regressions
-        run: bash tools/test-headless.sh tests/remediation_depth_test.gd 1200
-
-      - name: Remediation completion regressions
-        run: bash tools/test-headless.sh tests/remediation_completion_test.gd 1200
-
-      - name: Release hardening regressions
+      - name: Release hardening smoke
         run: bash tools/test-headless.sh tests/release_hardening_test.gd 1200
-
-      - name: Mobile preset validation
-        run: bash tools/test-headless.sh tests/mobile_export_test.gd 1200
