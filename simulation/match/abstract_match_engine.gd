@@ -16,6 +16,7 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	var home_strength: float = _lineup_strength(home_lineup) + 2.0
 	var away_strength: float = _lineup_strength(away_lineup)
 	var strength_share: float = clampf(home_strength / maxf(home_strength + away_strength, 1.0), 0.35, 0.65)
+	strength_share = clampf(strength_share + _team_match_modifier(home_lineup, "_match_possession_modifier") - _team_match_modifier(away_lineup, "_match_possession_modifier"), 0.30, 0.70)
 
 	var result := {
 		"seed": seed,
@@ -54,11 +55,12 @@ func apply_to_fixture(fixture: Dictionary, result: Dictionary) -> void:
 
 func _simulate_possession(result: Dictionary, side: String, lineup: Array, opponent: Array, minute: int, seed: int, base_key: int) -> void:
 	var stats: Dictionary = result.stats[side]
-	var pass_attempts: int = _rand_int(seed, base_key + 2, 1, 4)
+	var sequence_modifier := _team_match_modifier(lineup, "_match_sequence_modifier")
+	var pass_attempts: int = clampi(_rand_int(seed, base_key + 2, 1, 4) + int(round(sequence_modifier * 4.0)), 1, 5)
 	var passer: Dictionary = _pick_indexed(lineup, seed, base_key + 3)
 	for i in range(pass_attempts):
 		stats.passes += 1
-		var pass_probability: float = clampf(0.72 + (_player_quality(passer) - 50.0) * 0.0025, 0.60, 0.90)
+		var pass_probability: float = clampf(0.72 + (_player_quality(passer) - 50.0) * 0.0025 + float(passer.get("_match_pass_modifier", 0.0)), 0.52, 0.95)
 		if _unit(seed, base_key + 10 + i * 2) < pass_probability:
 			stats.completed_passes += 1
 			result.events.append({"minute": minute, "type": "pass", "side": side, "player_id": passer.id, "outcome": "complete"})
@@ -69,7 +71,7 @@ func _simulate_possession(result: Dictionary, side: String, lineup: Array, oppon
 
 	var team_quality: float = _lineup_strength(lineup)
 	var opponent_quality: float = _lineup_strength(opponent)
-	var shot_probability: float = clampf(0.38 + (team_quality - opponent_quality) * 0.004, 0.24, 0.52)
+	var shot_probability: float = clampf(0.38 + (team_quality - opponent_quality) * 0.004 + _team_match_modifier(lineup, "_match_shot_modifier"), 0.16, 0.62)
 	if _unit(seed, base_key + 30) >= shot_probability:
 		return
 
@@ -99,7 +101,8 @@ func _simulate_possession(result: Dictionary, side: String, lineup: Array, oppon
 	})
 
 func _maybe_card(result: Dictionary, possession_side: String, defenders: Array, minute: int, seed: int, base_key: int) -> void:
-	if _unit(seed, base_key + 40) >= 0.021:
+	var card_probability := clampf(0.021 + _team_match_modifier(defenders, "_match_card_modifier"), 0.006, 0.06)
+	if _unit(seed, base_key + 40) >= card_probability:
 		return
 	var defending_side: String = "away" if possession_side == "home" else "home"
 	var player: Dictionary = _pick_indexed(defenders, seed, base_key + 41)
@@ -208,6 +211,14 @@ func _lineup_strength(lineup: Array) -> float:
 
 func _player_quality(player: Dictionary) -> float:
 	return float(player.current_ability) * (0.85 + float(player.fitness) / 1000.0) * (0.96 + float(player.morale) / 1750.0)
+
+func _team_match_modifier(lineup: Array, key: String) -> float:
+	if lineup.is_empty():
+		return 0.0
+	var total := 0.0
+	for player in lineup:
+		total += float(player.get(key, 0.0))
+	return total / float(lineup.size())
 
 func _pick_shooter(lineup: Array, seed: int, key: int) -> Dictionary:
 	var attacking: Array = []
