@@ -12,6 +12,7 @@ const StaffContractsClass = preload("res://simulation/staff/staff_contracts.gd")
 const InternationalFootballClass = preload("res://simulation/competitions/international_football.gd")
 const KnockoutSeasonClass = preload("res://application/season/knockout_season.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
+const ModIntegrationClass = preload("res://application/career/mod_integration.gd")
 
 var world: Dictionary = {}
 var history: Array = []
@@ -26,6 +27,7 @@ func new_career(manager_name: String, club_id: String = "", world_seed: int = 12
 	if not mods.is_empty():
 		var applied: Dictionary = preload("res://tools/modding/mod_loader.gd").new().apply_mods(candidate, mods)
 		if not bool(applied.ok): return {"error":ERR_INVALID_DATA,"message":String(applied.error)}
+		ModIntegrationClass.new().finalize(candidate)
 	save_path = ""
 	seed = world_seed
 	world = candidate
