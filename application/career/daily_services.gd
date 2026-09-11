@@ -7,12 +7,14 @@ const ScoutingServiceClass = preload("res://simulation/scouting/scouting_service
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const DressingRoomClass = preload("res://simulation/players/dressing_room.gd")
 const PlayerPromisesClass = preload("res://simulation/players/player_promises.gd")
+const PlayerHappinessClass = preload("res://simulation/players/player_happiness.gd")
 
 func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 	world["day_index"] = int(world.get("day_index", 0)) + 1
 	var day_index: int = int(world.day_index)
 	var medical := _advance_medical(world, managed_club_id)
 	var training := []
+	var happiness := {}
 	if day_index % 7 == 0:
 		training = _run_training_week(world, managed_club_id, seed + day_index * 101)
 	var scouting := _advance_scouting(world, managed_club_id, seed + day_index * 211)
@@ -22,9 +24,18 @@ func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 		var player := _player(world.get("players", []), String(outcome.player_id))
 		if not player.is_empty() and String(player.get("club_id", "")) == managed_club_id:
 			InboxServiceClass.new().add_message(world, "dressing_room", "Promise %s" % ("kept" if bool(outcome.fulfilled) else "broken"), "%s's promise has been %s." % [_player_name(player), "fulfilled" if bool(outcome.fulfilled) else "broken"])
-	if not managed_club_id.is_empty() and day_index % 7 == 0:
-		DressingRoomClass.new().rebuild(world, managed_club_id)
-	return {"day_index":day_index,"medical":medical,"training":training,"scouting":scouting,"promises":promises}
+	if day_index % 7 == 0:
+		# Build atmosphere first so squad-harmony happiness uses the latest room.
+		for club in world.get("clubs", []):
+			DressingRoomClass.new().rebuild(world, String(club.get("id", "")))
+		happiness = PlayerHappinessClass.new().update_week(world)
+		var managed_concerns := 0
+		for player in world.get("players", []):
+			if String(player.get("club_id", "")) == managed_club_id and float(player.get("happiness", 65.0)) < 40.0:
+				managed_concerns += 1
+		if managed_concerns > 0:
+			InboxServiceClass.new().add_message(world, "dressing_room", "Player happiness concerns", "%d first-team players have significant happiness concerns. Review Dynamics for the causes." % managed_concerns)
+	return {"day_index":day_index,"medical":medical,"training":training,"scouting":scouting,"promises":promises,"happiness":happiness}
 
 func _advance_medical(world: Dictionary, managed_club_id: String) -> Array:
 	var medical_system = MedicalSystemClass.new()
@@ -55,7 +66,7 @@ func _run_training_week(world: Dictionary, managed_club_id: String, seed: int) -
 		var report: Dictionary = system.run_week(world, club_id, seed + _stable_key(club_id))
 		reports.append({"club_id":club_id,"report":report})
 		if club_id == managed_club_id:
-			InboxServiceClass.new().add_message(world, "training", "Weekly training report", "Players improved: %d. Training injuries: %d." % [int(report.get("players_improved", 0)), int(report.get("training_injuries", 0))])
+			InboxServiceClass.new().add_message(world, "training", "Weekly training report", "Players improved: %d. Individual focus gains: %d. Training injuries: %d." % [int(report.get("players_improved", 0)), int(report.get("individual_focus_gains", 0)), int(report.get("training_injuries", 0))])
 	return reports
 
 func _advance_scouting(world: Dictionary, managed_club_id: String, seed: int) -> Array:
