@@ -71,6 +71,10 @@ jobs:
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/phase1011_test_runner.gd
 
+      - name: Run Phase 12-14 completion tests
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/phase1214_completion_test.gd
+
       - name: Run 72-gap remediation regressions
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/remediation_72_test.gd
