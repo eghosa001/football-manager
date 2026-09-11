@@ -29,9 +29,13 @@ var _continuous_attempted := false
 var _stats = PlayerStatsServiceClass.new()
 var _knockout = KnockoutSeasonClass.new()
 var _registration = RegistrationServiceClass.new()
+var _club_index: Dictionary = {}
+var _player_index: Dictionary = {}
+var _competition_index: Dictionary = {}
 
 func play_date(world: Dictionary, date_string: String, managed_club_id: String, season_seed: int) -> Array:
 	SeasonRunnerClass.new().assign_fixture_dates(world)
+	_build_indexes(world)
 	_events.ensure_world(world)
 	var results: Array = []
 	var touched_competitions := {}
@@ -200,9 +204,29 @@ func _pitch_surface(club: Dictionary) -> String:
 		return "hard"
 	return "good"
 
+func _build_indexes(world: Dictionary) -> void:
+	_club_index.clear()
+	_player_index.clear()
+	_competition_index.clear()
+	for club in world.get("clubs", []):
+		var id := String(club.get("id", ""))
+		if id != "":
+			_club_index[id] = club
+	for player in world.get("players", []):
+		var id := String(player.get("id", ""))
+		if id != "":
+			_player_index[id] = player
+	for competition in world.get("competitions", []):
+		var id := String(competition.get("id", ""))
+		if id != "":
+			_competition_index[id] = competition
+
 func _player(world: Dictionary, player_id: String) -> Dictionary:
+	if _player_index.has(player_id):
+		return _player_index[player_id]
 	for player in world.get("players", []):
 		if String(player.get("id", "")) == player_id:
+			_player_index[player_id] = player
 			return player
 	return {}
 
@@ -211,14 +235,20 @@ func _player_name(player: Dictionary) -> String:
 	return value if value != "" else (String(player.get("first_name", "")) + " " + String(player.get("last_name", ""))).strip_edges()
 
 func _club(world: Dictionary, club_id: String) -> Dictionary:
+	if _club_index.has(club_id):
+		return _club_index[club_id]
 	for club in world.get("clubs", []):
 		if String(club.get("id", "")) == club_id:
+			_club_index[club_id] = club
 			return club
 	return {}
 
 func _competition(world: Dictionary, competition_id: String) -> Dictionary:
+	if _competition_index.has(competition_id):
+		return _competition_index[competition_id]
 	for competition in world.get("competitions", []):
 		if String(competition.get("id", "")) == competition_id:
+			_competition_index[competition_id] = competition
 			return competition
 	return {}
 
