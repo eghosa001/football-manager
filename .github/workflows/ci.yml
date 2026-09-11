@@ -62,6 +62,10 @@ jobs:
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/remediation_72_test.gd
 
+      - name: Run remediation depth regressions
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/remediation_depth_test.gd
+
       - name: Run release hardening regressions
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/release_hardening_test.gd
