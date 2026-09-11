@@ -11,7 +11,7 @@ const PITCH_WIDTH := 68.0
 
 var _base = SpatialMatchEngineClass.new()
 
-func simulate_segment(home_lineup: Array, away_lineup: Array, seed: int, max_actions: int = 24, starting_side: String = "home", previous_state: Dictionary = {}, substeps: int = DEFAULT_SUBSTEPS) -> Dictionary:
+func simulate_segment(home_lineup: Array, away_lineup: Array, seed: int, max_actions: int = 24, starting_side: String = "home", previous_state: Dictionary = {}, substeps: int = DEFAULT_SUBSTEPS, home_tactic: Dictionary = {}, away_tactic: Dictionary = {}) -> Dictionary:
 	var base_result: Dictionary = _base.simulate_possession(home_lineup, away_lineup, seed, max_actions, starting_side, previous_state)
 	var dense_frames: Array = []
 	var energy := _initial_energy(home_lineup, away_lineup, previous_state)
@@ -20,8 +20,8 @@ func simulate_segment(home_lineup: Array, away_lineup: Array, seed: int, max_act
 	for target_frame in base_result.frames:
 		var steps := maxi(1, substeps)
 		for step in range(1, steps + 1):
-			var t := float(step) / float(steps)
-			var frame := _interpolate_frame(previous_frame, target_frame, t)
+			var remaining_steps := maxi(1, steps - step + 1)
+			var frame := _advance_frame(previous_frame, target_frame, energy, home_lineup, away_lineup, home_tactic, away_tactic, String(base_result.state.get("possession_side", starting_side)), remaining_steps)
 			_update_energy(energy, previous_frame, frame, home_lineup, away_lineup)
 			frame["energy"] = energy.duplicate(true)
 			frame["action_index"] = action_index
@@ -31,6 +31,10 @@ func simulate_segment(home_lineup: Array, away_lineup: Array, seed: int, max_act
 		action_index += 1
 	var final_state: Dictionary = base_result.state.duplicate(true)
 	final_state["energy"] = energy.duplicate(true)
+	if not dense_frames.is_empty():
+		final_state["home_positions"] = dense_frames[-1].home.duplicate(true)
+		final_state["away_positions"] = dense_frames[-1].away.duplicate(true)
+		final_state["ball"] = dense_frames[-1].ball.duplicate(true)
 	return {
 		"state": final_state,
 		"events": base_result.events,
@@ -38,7 +42,8 @@ func simulate_segment(home_lineup: Array, away_lineup: Array, seed: int, max_act
 		"action_frames": base_result.frames,
 		"initial_state": base_result.initial_state,
 		"model": "continuous_spatial_2d",
-		"substeps": maxi(1, substeps)
+		"substeps": maxi(1, substeps),
+		"tactical_motion": not home_tactic.is_empty() or not away_tactic.is_empty()
 	}
 
 func _snapshot_from_state(state: Dictionary) -> Dictionary:
@@ -58,26 +63,88 @@ func _initial_energy(home: Array, away: Array, previous_state: Dictionary) -> Di
 		energy.away[String(player.id)] = 1.0
 	return energy
 
-func _interpolate_frame(previous: Dictionary, target: Dictionary, t: float) -> Dictionary:
+func _advance_frame(previous: Dictionary, target: Dictionary, energy: Dictionary, home: Array, away: Array, home_tactic: Dictionary, away_tactic: Dictionary, possession_side: String, remaining_steps: int) -> Dictionary:
+	var ball_target: Dictionary = target.get("ball", previous.get("ball", {"x": PITCH_LENGTH * 0.5, "y": PITCH_WIDTH * 0.5}))
 	return {
-		"ball": _lerp_position(previous.get("ball", target.ball), target.ball, t),
-		"home": _interpolate_positions(previous.get("home", {}), target.home, t),
-		"away": _interpolate_positions(previous.get("away", {}), target.away, t)
+		"ball": _step_towards(previous.get("ball", ball_target), ball_target, 1000.0 / float(remaining_steps)),
+		"home": _advance_positions(previous.get("home", {}), target.get("home", {}), energy.get("home", {}), home, home_tactic, true, possession_side == "home", ball_target, remaining_steps),
+		"away": _advance_positions(previous.get("away", {}), target.get("away", {}), energy.get("away", {}), away, away_tactic, false, possession_side == "away", ball_target, remaining_steps)
 	}
 
-func _interpolate_positions(previous: Dictionary, target: Dictionary, t: float) -> Dictionary:
+func _advance_positions(previous: Dictionary, target: Dictionary, side_energy: Dictionary, lineup: Array, tactic: Dictionary, is_home: bool, in_possession: bool, ball: Dictionary, remaining_steps: int) -> Dictionary:
+	var players := {}
+	for player in lineup:
+		players[String(player.id)] = player
 	var result := {}
 	for id in target.keys():
-		var end_pos: Dictionary = target[id]
+		var end_pos: Dictionary = _tactical_target(target[id], ball, tactic, is_home, in_possession)
 		var start_pos: Dictionary = previous.get(id, end_pos)
-		result[id] = _lerp_position(start_pos, end_pos, t)
+		var player: Dictionary = players.get(id, {})
+		var attrs: Dictionary = player.get("attributes", {})
+		var pace := float(attrs.get("pace", player.get("current_ability", 50)))
+		var energy_factor := clampf(float(side_energy.get(id, 1.0)), MIN_ENERGY, 1.0)
+		var max_step := (0.8 + pace / 70.0) * energy_factor
+		max_step = maxf(max_step, SpatialStateClass.distance(start_pos, end_pos) / float(maxi(1, remaining_steps)))
+		result[id] = _step_towards(start_pos, end_pos, max_step)
 	return result
 
-func _lerp_position(a: Dictionary, b: Dictionary, t: float) -> Dictionary:
-	return SpatialStateClass.clamp_position({
-		"x": lerpf(float(a.get("x", 0.0)), float(b.get("x", 0.0)), t),
-		"y": lerpf(float(a.get("y", 0.0)), float(b.get("y", 0.0)), t)
-	})
+func _tactical_target(position: Dictionary, ball: Dictionary, tactic: Dictionary, is_home: bool, in_possession: bool) -> Dictionary:
+	if tactic.is_empty():
+		return position.duplicate(true)
+	var result: Dictionary = position.duplicate(true)
+	var attack_direction := 1.0 if is_home else -1.0
+	var mentality := String(tactic.get("mentality", "balanced"))
+	var mentality_shift := 0.0
+	match mentality:
+		"very_cautious": mentality_shift = -3.0
+		"cautious": mentality_shift = -1.5
+		"positive": mentality_shift = 2.0
+		"attacking": mentality_shift = 4.0
+	if in_possession:
+		result.x = float(result.x) + attack_direction * mentality_shift
+	else:
+		result.x = float(result.x) + attack_direction * mentality_shift * 0.35
+
+	var instructions: Dictionary = tactic.get("instructions", {})
+	var in_possession_instructions: Dictionary = instructions.get("in_possession", {})
+	var out_of_possession: Dictionary = instructions.get("out_of_possession", {})
+	var width_key := String(in_possession_instructions.get("width", "standard")) if in_possession else String(out_of_possession.get("defensive_width", "standard"))
+	var width_factor := 1.0
+	match width_key:
+		"very_wide": width_factor = 1.22
+		"wide": width_factor = 1.12
+		"narrow": width_factor = 0.86
+		"very_narrow": width_factor = 0.76
+	result.y = PITCH_WIDTH * 0.5 + (float(result.y) - PITCH_WIDTH * 0.5) * width_factor
+
+	if not in_possession:
+		var line := String(out_of_possession.get("defensive_line", "standard"))
+		var line_shift := 0.0
+		match line:
+			"much_higher": line_shift = 6.0
+			"higher": line_shift = 3.0
+			"lower": line_shift = -3.0
+			"much_lower": line_shift = -6.0
+		result.x = float(result.x) + attack_direction * line_shift
+		var pressing := String(tactic.get("pressing", out_of_possession.get("pressing_triggers", "standard")))
+		var press_blend := 0.0
+		match pressing:
+			"high": press_blend = 0.08
+			"very_high": press_blend = 0.14
+			"low": press_blend = -0.03
+		if press_blend > 0.0:
+			result.x = lerpf(float(result.x), float(ball.get("x", result.x)), press_blend)
+			result.y = lerpf(float(result.y), float(ball.get("y", result.y)), press_blend)
+	return SpatialStateClass.clamp_position(result)
+
+func _step_towards(a: Dictionary, b: Dictionary, max_distance: float) -> Dictionary:
+	var dx := float(b.get("x", 0.0)) - float(a.get("x", 0.0))
+	var dy := float(b.get("y", 0.0)) - float(a.get("y", 0.0))
+	var distance := sqrt(dx * dx + dy * dy)
+	if distance <= max_distance or distance <= 0.000001:
+		return SpatialStateClass.clamp_position(b.duplicate(true))
+	var scale := max_distance / distance
+	return SpatialStateClass.clamp_position({"x": float(a.get("x", 0.0)) + dx * scale, "y": float(a.get("y", 0.0)) + dy * scale})
 
 func _update_energy(energy: Dictionary, previous: Dictionary, frame: Dictionary, home: Array, away: Array) -> void:
 	_update_side_energy(energy.home, previous.get("home", {}), frame.home, home)
