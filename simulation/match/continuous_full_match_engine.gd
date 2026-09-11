@@ -5,18 +5,21 @@ const ContinuousClass = preload("res://simulation/match/continuous_spatial_engin
 const TacticsManagerClass = preload("res://simulation/tactics/tactics_manager.gd")
 const LineupResolverClass = preload("res://application/career/lineup_assignment_service.gd")
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
+const LawsClass = preload("res://simulation/match/football_laws_engine.gd")
 
 var _continuous = ContinuousClass.new()
 var _tactics = TacticsManagerClass.new()
 var _lineup_resolver = LineupResolverClass.new()
+var _laws = LawsClass.new()
 
 func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int) -> Dictionary:
-	var home_tactic: Dictionary = home_club.get("tactic", _tactics.create_tactic("4-3-3"))
-	var away_tactic: Dictionary = away_club.get("tactic", _tactics.create_tactic("4-3-3"))
+	var home_tactic: Dictionary = home_club.get("tactic", _tactics.create_tactic("4-3-3")).duplicate(true)
+	var away_tactic: Dictionary = away_club.get("tactic", _tactics.create_tactic("4-3-3")).duplicate(true)
 	var home: Array = _lineup_resolver.resolve(players, String(home_club.id), home_tactic).duplicate(true)
 	var away: Array = _lineup_resolver.resolve(players, String(away_club.id), away_tactic).duplicate(true)
 	if home.size() < 11 or away.size() < 11:
 		return {"error":ERR_UNAVAILABLE,"home_goals":0,"away_goals":0,"events":[],"stats":{}}
+	var weather := _laws.weather_profile(seed)
 	var starters := {"home":_ids(home),"away":_ids(away)}
 	var participants := {"home":starters.home.duplicate(),"away":starters.away.duplicate()}
 	var benches := {"home":_bench(players,String(home_club.id),home),"away":_bench(players,String(away_club.id),away)}
@@ -25,16 +28,20 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	var substitutions: Array = []
 	var previous_state: Dictionary = {}
 	var segments := [
-		{"start":0.0,"end":60.0,"ticks":36000},
-		{"start":60.0,"end":70.0,"ticks":6000},
-		{"start":70.0,"end":80.0,"ticks":6000},
-		{"start":80.0,"end":90.0,"ticks":6000},
+		{"start":0.0,"end":15.0,"ticks":9000},
+		{"start":15.0,"end":30.0,"ticks":9000},
+		{"start":30.0,"end":45.0,"ticks":9000},
+		{"start":45.0,"end":60.0,"ticks":9000},
+		{"start":60.0,"end":75.0,"ticks":9000},
+		{"start":75.0,"end":90.0,"ticks":9000},
 	]
 	for segment_index in range(segments.size()):
-		if segment_index > 0:
-			_apply_substitution("home",segment_index-1,home,benches.home,participants,substitutions,events,int(segments[segment_index].start))
-			_apply_substitution("away",segment_index-1,away,benches.away,participants,substitutions,events,int(segments[segment_index].start))
 		var segment: Dictionary = segments[segment_index]
+		if segment_index > 0:
+			_adapt_tactic("home", home_tactic, events, int(segment.start))
+			_adapt_tactic("away", away_tactic, events, int(segment.start))
+			_maybe_state_substitution("home",home,benches.home,participants,substitutions,events,int(segment.start),previous_state,seed+segment_index*7001)
+			_maybe_state_substitution("away",away,benches.away,participants,substitutions,events,int(segment.start),previous_state,seed+segment_index*7003)
 		var run := _continuous.simulate_continuous(home,away,seed+segment_index*100003,home_tactic,away_tactic,int(segment.ticks),previous_state,15)
 		var duration := float(segment.end)-float(segment.start)
 		for frame in run.frames:
@@ -43,8 +50,14 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 			frames.append(copy)
 		for raw_event in run.events:
 			var event := _canonical_event(raw_event,float(segment.start),duration,int(segment.ticks),seed+segment_index*907)
-			events.append(event)
-			_maybe_card_from_event(events,event,home,away,seed+segment_index*919)
+			var processed := _laws.process_event(event, home, away, home_tactic, away_tactic, weather, seed+segment_index*919)
+			for p in processed:
+				events.append(p)
+				var affected_lineup := home if String(p.get("side","home")) == "home" else away
+				var injury := _laws.injury_from_event(p, affected_lineup, weather, seed+segment_index*929)
+				if not injury.is_empty():
+					events.append(injury)
+					_apply_forced_injury_substitution(injury,home,away,benches,participants,substitutions,events)
 		previous_state = run.final.duplicate(true)
 		previous_state["loads"] = run.loads.duplicate(true)
 	var stats := {"home":_blank_stats(),"away":_blank_stats()}
@@ -56,11 +69,13 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	var possession := _frame_possession(frames)
 	stats.home.possession = possession.home
 	stats.away.possession = possession.away
+	var discipline := _laws.suspension_state(events, {"yellow_limit":5,"red_games":1})
 	return {
 		"home_goals":int(goals.home),"away_goals":int(goals.away),"events":events,"stats":stats,
 		"lineups":starters,"participants":participants,"final_lineups":{"home":_ids(home),"away":_ids(away)},"substitutions":substitutions,
 		"spatial":{"pitch_length":105.0,"pitch_width":68.0,"frames":frames,"model":"continuous_10hz_sampled","physics_hz":10,"frame_stride":15},
-		"tactics":{"home":home_tactic.duplicate(true),"away":away_tactic.duplicate(true)},"seed":seed,"model":"continuous_full_match_v1"
+		"tactics":{"home":home_tactic.duplicate(true),"away":away_tactic.duplicate(true)},"seed":seed,"model":"continuous_full_match_v2",
+		"weather":weather,"discipline":discipline
 	}
 
 func apply_to_fixture(fixture: Dictionary, result: Dictionary) -> void:
@@ -68,6 +83,8 @@ func apply_to_fixture(fixture: Dictionary, result: Dictionary) -> void:
 	fixture.played = true
 	fixture.home_goals = int(result.home_goals)
 	fixture.away_goals = int(result.away_goals)
+	fixture["discipline"] = result.get("discipline", {}).duplicate(true)
+	fixture["weather"] = result.get("weather", {}).duplicate(true)
 
 func _canonical_event(raw: Dictionary, start: float, duration: float, ticks: int, seed: int) -> Dictionary:
 	var event := raw.duplicate(true)
@@ -84,28 +101,83 @@ func _canonical_event(raw: Dictionary, start: float, duration: float, ticks: int
 		event["success"] = false
 	return event
 
-func _maybe_card_from_event(events: Array, event: Dictionary, home: Array, away: Array, seed: int) -> void:
-	if String(event.get("type","")) != "interception": return
-	var tick := int(event.get("tick",0))
-	if SeededRngClass.unit_for(seed,41000+tick) >= 0.006: return
-	var side := String(event.get("side","home"))
-	var defenders := home if side=="home" else away
-	if defenders.is_empty(): return
-	var player: Dictionary = defenders[int(SeededRngClass.value_for(seed,42000+tick)%defenders.size())]
-	var red := SeededRngClass.unit_for(seed,43000+tick) < 0.035
-	events.append({"minute":int(event.get("minute",0)),"type":"card","side":side,"player_id":String(player.id),"card":"red" if red else "yellow"})
+func _adapt_tactic(side: String, tactic: Dictionary, events: Array, minute: int) -> void:
+	var own_goals := 0
+	var opp_goals := 0
+	var own_cards := 0
+	for event in events:
+		if int(event.get("minute",0)) > minute: continue
+		if String(event.get("type","")) == "shot" and String(event.get("outcome","")) == "goal":
+			if String(event.get("side","")) == side: own_goals += 1
+			else: opp_goals += 1
+		elif String(event.get("type","")) == "card" and String(event.get("side","")) == side:
+			own_cards += 1
+	if own_goals < opp_goals and minute >= 55:
+		tactic["mentality"] = "attacking"
+		tactic["tempo"] = "higher"
+		tactic["pressing"] = "more_urgent"
+	elif own_goals > opp_goals and minute >= 70:
+		tactic["mentality"] = "cautious"
+		tactic["time_wasting"] = true
+		tactic["regroup"] = true
+	if own_cards >= 3:
+		tactic["tackling"] = "stay_on_feet"
 
-func _apply_substitution(side: String, bench_index: int, lineup: Array, bench: Array, participants: Dictionary, substitutions: Array, events: Array, minute: int) -> void:
-	if bench_index >= bench.size() or lineup.is_empty(): return
-	var out_index := maxi(1,lineup.size()-1-bench_index)
-	if out_index >= lineup.size(): return
-	var outgoing := String(lineup[out_index].id)
-	var incoming: Dictionary = bench[bench_index]
-	lineup[out_index] = incoming.duplicate(true)
-	var event := {"minute":minute,"type":"substitution","side":side,"player_out":outgoing,"player_in":String(incoming.id),"success":true}
+func _maybe_state_substitution(side: String, lineup: Array, bench: Array, participants: Dictionary, substitutions: Array, events: Array, minute: int, state: Dictionary, seed: int) -> void:
+	if bench.is_empty() or substitutions.filter(func(s): return String(s.get("side","")) == side).size() >= 5:
+		return
+	var loads: Dictionary = state.get("loads", {}).get(side, {}) if state.has("loads") else {}
+	var candidate_index := -1
+	var worst_energy := 1.0
+	for i in range(1,lineup.size()):
+		var id := String(lineup[i].get("id",""))
+		var energy := float(loads.get(id, {}).get("energy", 1.0))
+		var booked := _is_booked(events, id)
+		var threshold := 0.48 if minute >= 60 else 0.36
+		if booked: threshold += 0.10
+		if energy < threshold and energy < worst_energy:
+			worst_energy = energy
+			candidate_index = i
+	if candidate_index < 0 and minute >= 75 and SeededRngClass.unit_for(seed, 81001 + minute) < 0.45:
+		candidate_index = maxi(1, lineup.size()-1)
+	if candidate_index < 0:
+		return
+	var incoming: Dictionary = bench.pop_front()
+	var outgoing := String(lineup[candidate_index].id)
+	lineup[candidate_index] = incoming.duplicate(true)
+	var event := {"minute":minute,"type":"substitution","side":side,"player_out":outgoing,"player_in":String(incoming.id),"reason":"fitness_or_match_state","success":true}
 	events.append(event)
 	substitutions.append(event.duplicate(true))
 	if String(incoming.id) not in participants[side]: participants[side].append(String(incoming.id))
+
+func _apply_forced_injury_substitution(injury: Dictionary, home: Array, away: Array, benches: Dictionary, participants: Dictionary, substitutions: Array, events: Array) -> void:
+	var side := String(injury.get("side","home"))
+	var lineup := home if side == "home" else away
+	var bench: Array = benches.get(side, [])
+	var injured_id := String(injury.get("player_id",""))
+	var index := -1
+	for i in range(lineup.size()):
+		if String(lineup[i].get("id","")) == injured_id:
+			index = i
+			break
+	if index < 0:
+		return
+	if bench.is_empty() or substitutions.filter(func(s): return String(s.get("side","")) == side).size() >= 5:
+		lineup.remove_at(index)
+		events.append({"minute":int(injury.get("minute",0)),"type":"forced_short_handed","side":side,"player_id":injured_id,"success":false})
+		return
+	var incoming: Dictionary = bench.pop_front()
+	lineup[index] = incoming.duplicate(true)
+	var sub := {"minute":int(injury.get("minute",0)),"type":"substitution","side":side,"player_out":injured_id,"player_in":String(incoming.id),"reason":"injury","success":true}
+	events.append(sub)
+	substitutions.append(sub.duplicate(true))
+	if String(incoming.id) not in participants[side]: participants[side].append(String(incoming.id))
+
+func _is_booked(events: Array, player_id: String) -> bool:
+	for event in events:
+		if String(event.get("type","")) == "card" and String(event.get("player_id","")) == player_id:
+			return true
+	return false
 
 func _bench(players: Array, club_id: String, lineup: Array) -> Array:
 	var ids := {}
@@ -125,7 +197,7 @@ func _ids(values: Array) -> Array:
 	return ids
 
 func _blank_stats() -> Dictionary:
-	return {"goals":0,"shots":0,"shots_on_target":0,"xg":0.0,"passes":0,"passes_completed":0,"dribbles":0,"dribbles_completed":0,"interceptions":0,"corners":0,"free_kicks":0,"cards":0,"red_cards":0,"saves":0,"possession":50.0}
+	return {"goals":0,"shots":0,"shots_on_target":0,"xg":0.0,"passes":0,"passes_completed":0,"dribbles":0,"dribbles_completed":0,"interceptions":0,"corners":0,"free_kicks":0,"offsides":0,"fouls":0,"penalties":0,"cards":0,"red_cards":0,"saves":0,"turnovers":0,"injuries":0,"possession":50.0}
 
 func _accumulate(stats: Dictionary, goals: Dictionary, event: Dictionary) -> void:
 	var side := String(event.get("side","home"))
@@ -138,6 +210,12 @@ func _accumulate(stats: Dictionary, goals: Dictionary, event: Dictionary) -> voi
 			stats[side].dribbles += 1
 			if bool(event.get("success",false)): stats[side].dribbles_completed += 1
 		"interception": stats[side].interceptions += 1
+		"corner": stats[side].corners += 1
+		"offside": stats[side].offsides += 1
+		"foul": stats[side].fouls += 1; stats[side].free_kicks += 1
+		"penalty_awarded": stats[side].penalties += 1
+		"turnover": stats[side].turnovers += 1
+		"injury": stats[side].injuries += 1
 		"card":
 			stats[side].cards += 1
 			if String(event.get("card",""))=="red": stats[side].red_cards += 1
