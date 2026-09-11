@@ -7,7 +7,17 @@ on:
   workflow_dispatch:
     inputs:
       full_match_validation:
-        description: Run 100,000-match validation
+        description: Run 100,000 continuous-match distribution validation
+        required: false
+        default: false
+        type: boolean
+      cross_tier_validation:
+        description: Run seeded cross-tier statistical equivalence validation
+        required: false
+        default: false
+        type: boolean
+      full_career_soak:
+        description: Run launch-scale 100-season career/economy soak
         required: false
         default: false
         type: boolean
@@ -65,6 +75,10 @@ jobs:
       - name: Run remediation depth regressions
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/remediation_depth_test.gd
+
+      - name: Run remediation completion regressions
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/remediation_completion_test.gd
 
       - name: Run release hardening regressions
         shell: powershell
@@ -124,7 +138,17 @@ jobs:
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/mobile_export_test.gd
 
-      - name: Run 100k match validation
-        if: ${{ github.ref == 'refs/heads/phase-10-11-living-world-release' || (github.event_name == 'workflow_dispatch' && inputs.full_match_validation) }}
+      - name: Run continuous 100k distribution gate
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_match_validation }}
         shell: powershell
-        run: .\tools\test-headless.ps1 -Script tests/test_runner.gd -TimeoutSeconds 3600 -ExtraArgs @('--','--full-match-validation')
+        run: .\tools\test-headless.ps1 -Script tests/continuous_distribution_gate.gd -TimeoutSeconds 14400
+
+      - name: Run cross-tier equivalence gate
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.cross_tier_validation }}
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/cross_tier_regression.gd -TimeoutSeconds 7200
+
+      - name: Run 100-season career/economy soak
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_career_soak }}
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/full_career_soak.gd -TimeoutSeconds 21600
