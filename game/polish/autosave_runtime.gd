@@ -25,20 +25,29 @@ func _scan() -> void:
 	var app = _career_app()
 	if app == null:
 		return
+	var desired := _settings_store.load(SETTINGS_PATH)
 	var session = app.get("session")
+	var tabs := _career_tabs(app)
+	# career_app.gd predates save policies and performs its own interval save when
+	# settings.autosave is true. Disable only that in-memory legacy switch while
+	# a career screen is active; the persisted preference remains the authority
+	# for this runtime. Outside the career screen restore the persisted value so
+	# the standard Settings page reflects the user's actual preference.
+	var live_settings: Dictionary = app.get("settings").duplicate(true)
+	if tabs != null:
+		live_settings["autosave"] = false
+	else:
+		live_settings["autosave"] = bool(desired.get("autosave", true))
+	app.set("settings", live_settings)
 	if session == null or session.world.is_empty():
 		return
-	var tabs := _career_tabs(app)
 	if tabs != null and not tabs.has_meta("save_policy_added"):
-		_add_save_policy_tab(tabs, app, session)
-	_maybe_autosave(app, session)
+		_add_save_policy_tab(tabs, app, session, desired)
+	_maybe_autosave(app, session, desired)
 
-func _maybe_autosave(app: Node, session) -> void:
+func _maybe_autosave(app: Node, session, settings: Dictionary) -> void:
 	var active_slot := int(app.get("active_slot"))
-	if active_slot <= 0:
-		return
-	var settings: Dictionary = app.get("settings")
-	if not bool(settings.get("autosave", true)):
+	if active_slot <= 0 or not bool(settings.get("autosave", true)):
 		return
 	var mode := String(settings.get("autosave_mode", "weekly"))
 	if mode == "manual":
@@ -77,7 +86,7 @@ func _trigger_key(world: Dictionary, mode: String) -> String:
 		_:
 			return ""
 
-func _add_save_policy_tab(tabs: TabContainer, app: Node, session) -> void:
+func _add_save_policy_tab(tabs: TabContainer, app: Node, session, current: Dictionary) -> void:
 	tabs.set_meta("save_policy_added", true)
 	var scroll := ScrollContainer.new()
 	scroll.name = "Save Policy"
@@ -94,7 +103,6 @@ func _add_save_policy_tab(tabs: TabContainer, app: Node, session) -> void:
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(help)
 
-	var current: Dictionary = app.get("settings")
 	var enabled := CheckBox.new()
 	enabled.text = tr("Enable autosave")
 	enabled.button_pressed = bool(current.get("autosave", true))
@@ -115,13 +123,16 @@ func _add_save_policy_tab(tabs: TabContainer, app: Node, session) -> void:
 	var apply := Button.new()
 	apply.text = tr("Apply save policy")
 	apply.pressed.connect(func():
-		var value: Dictionary = app.get("settings").duplicate(true)
+		var value := _settings_store.load(SETTINGS_PATH)
 		value["autosave"] = enabled.button_pressed
 		value["autosave_mode"] = String(SettingsStore.AUTOSAVE_MODES[mode.selected]) if enabled.button_pressed else "manual"
 		value["autosave_rolling_count"] = 5 if rolling.selected == 1 else 3
 		value = _settings_store.sanitize(value)
-		app.set("settings", value)
 		_settings_store.save(SETTINGS_PATH, value)
+		var memory: Dictionary = app.get("settings").duplicate(true)
+		memory.merge(value, true)
+		memory["autosave"] = false
+		app.set("settings", memory)
 		_refresh_recovery(box, app, session)
 	)
 	box.add_child(apply)
@@ -132,8 +143,8 @@ func _add_save_policy_tab(tabs: TabContainer, app: Node, session) -> void:
 		var slot := int(app.get("active_slot"))
 		if slot <= 0:
 			return
-		var settings: Dictionary = app.get("settings")
-		_slots.autosave_slot(slot, session.world, session.history, session.manager, int(settings.get("autosave_rolling_count", 3)))
+		var saved := _settings_store.load(SETTINGS_PATH)
+		_slots.autosave_slot(slot, session.world, session.history, session.manager, int(saved.get("autosave_rolling_count", 3)))
 		_refresh_recovery(box, app, session)
 	)
 	box.add_child(manual)
