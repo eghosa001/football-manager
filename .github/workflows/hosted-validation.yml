@@ -31,6 +31,9 @@ jobs:
       - name: Import project
         run: bash tools/test-headless.sh import 600
 
+      - name: Architecture convergence
+        run: bash tools/test-headless.sh tests/architecture_convergence_test.gd 300
+
       - name: Phase 1/2
         run: bash tools/test-headless.sh tests/test_runner.gd 1200
 
