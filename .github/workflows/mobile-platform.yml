@@ -1,0 +1,139 @@
+name: Mobile Platforms
+
+on:
+  push:
+    branches: [cross-platform-mobile-and-hardening]
+    paths:
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - 'game/**'
+      - 'application/**'
+      - 'simulation/**'
+      - 'tests/mobile_platform_contract_test.gd'
+      - '.github/workflows/mobile-platform.yml'
+  pull_request:
+    paths:
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - 'game/**'
+      - 'application/**'
+      - 'simulation/**'
+      - 'tests/mobile_platform_contract_test.gd'
+      - '.github/workflows/mobile-platform.yml'
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Mobile target to build
+        required: true
+        default: android
+        type: choice
+        options:
+          - android
+          - ios
+          - all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: false
+      - name: Import project
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
+      - name: Validate mobile platform contract
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/mobile_platform_contract_test.gd
+
+  android:
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.platform == 'android' || inputs.platform == 'all') }}
+    needs: contract
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: false
+      - name: Resolve Godot
+        shell: powershell
+        run: |
+          $candidate = $null
+          if ($env:GODOT_EXE -and (Test-Path $env:GODOT_EXE)) { $candidate = $env:GODOT_EXE }
+          elseif ($env:GODOT_PATH -and (Test-Path $env:GODOT_PATH)) { $candidate = $env:GODOT_PATH }
+          else {
+            foreach ($name in @('godot','godot4')) {
+              $cmd = Get-Command $name -ErrorAction SilentlyContinue
+              if ($cmd) { $candidate = $cmd.Source; break }
+            }
+          }
+          if (-not $candidate) { throw 'Godot executable not found.' }
+          "GODOT_EXE=$candidate" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $candidate --version
+      - name: Build Android ARM64 APK
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path build/android | Out-Null
+          & $env:GODOT_EXE --headless --path . --export-release Android build/android/FootballDynasty.apk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path build/android/FootballDynasty.apk)) { throw 'Android APK missing.' }
+      - name: Upload Android build
+        uses: actions/upload-artifact@v4
+        with:
+          name: FootballDynasty-android-arm64
+          path: build/android/FootballDynasty.apk
+
+  ios:
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.platform == 'ios' || inputs.platform == 'all') }}
+    needs: contract
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 30
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Validate Apple build prerequisites
+        shell: bash
+        run: |
+          test -n "$APPLE_TEAM_ID" || { echo 'APPLE_TEAM_ID secret is required for iOS export.'; exit 1; }
+          test ${#APPLE_TEAM_ID} -eq 10 || { echo 'APPLE_TEAM_ID must be 10 characters.'; exit 1; }
+          command -v xcodebuild >/dev/null
+          command -v godot >/dev/null || command -v godot4 >/dev/null
+      - name: Inject Apple Team ID
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p = Path('export_presets.cfg')
+          text = p.read_text()
+          text = text.replace('application/app_store_team_id=""', f'application/app_store_team_id="{os.environ["APPLE_TEAM_ID"]}"')
+          p.write_text(text)
+          PY
+      - name: Export iOS Xcode project
+        shell: bash
+        run: |
+          GODOT_BIN="$(command -v godot || command -v godot4)"
+          mkdir -p build/ios
+          "$GODOT_BIN" --headless --path . --export-release iOS build/ios/FootballDynasty
+      - name: Verify iOS project export
+        shell: bash
+        run: |
+          find build/ios -maxdepth 2 \( -name '*.xcodeproj' -o -name '*.xcworkspace' \) -print -quit | grep -q .
+      - name: Upload iOS Xcode project
+        uses: actions/upload-artifact@v4
+        with:
+          name: FootballDynasty-ios-xcode
+          path: build/ios/
