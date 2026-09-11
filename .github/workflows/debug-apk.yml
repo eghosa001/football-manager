@@ -1,0 +1,79 @@
+name: Build Debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/debug-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Verify Godot and Android SDK
+        run: |
+          godot --version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -d "$ANDROID_HOME"
+          java -version
+
+      - name: Import project
+        run: bash tools/test-headless.sh import 600
+
+      - name: Validate Android preset
+        run: bash tools/test-headless.sh tests/mobile_export_test.gd 600
+
+      - name: Install Android build template
+        run: |
+          godot --headless --editor --path . --install-android-build-template --quit
+          test -d android/build
+
+      - name: Configure debug APK export
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('export_presets.cfg')
+          s = p.read_text()
+          start = s.index('[preset.2]')
+          end = s.index('[preset.3]')
+          block = s[start:end]
+          block = block.replace('export_path="build/android/FootballDynasty.aab"', 'export_path="build/android/FootballDynasty-debug.apk"')
+          block = block.replace('gradle_build/export_format=1', 'gradle_build/export_format=0')
+          s = s[:start] + block + s[end:]
+          p.write_text(s)
+          PY
+          mkdir -p build/android
+
+      - name: Build debug APK
+        run: godot --headless --path . --export-debug "Android" build/android/FootballDynasty-debug.apk
+
+      - name: Verify APK
+        run: |
+          test -s build/android/FootballDynasty-debug.apk
+          ls -lh build/android/FootballDynasty-debug.apk
+          sha256sum build/android/FootballDynasty-debug.apk | tee build/android/FootballDynasty-debug.apk.sha256
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FootballDynasty-debug-apk
+          path: |
+            build/android/FootballDynasty-debug.apk
+            build/android/FootballDynasty-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
