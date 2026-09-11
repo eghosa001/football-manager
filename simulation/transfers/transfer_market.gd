@@ -65,26 +65,49 @@ func execute_transfer(world: Dictionary, player_id: String, buyer_id: String, fe
 	if seller_id != "":
 		_ledger.post(world, seller_id, fee, "transfer_fee", reference, season_year)
 	player.club_id = buyer_id
-	player.erase("loan_parent_club_id")
-	player.erase("loan_end_year")
+	_clear_loan_state(player)
 	_upsert_contract(world, player_id, buyer_id, season_year, season_year + years, wage)
 	return OK
 
-func execute_loan(world: Dictionary, player_id: String, borrower_id: String, fee: int, season_year: int) -> Error:
+func execute_loan(world: Dictionary, player_id: String, borrower_id: String, fee: int, season_year: int, wage_contribution_percent: int = 100, option_fee: int = 0, duration_years: int = 1) -> Error:
 	_ledger.ensure(world)
 	var player: Dictionary = _find_player(world.players, player_id)
 	var borrower: Dictionary = _find_club(world.clubs, borrower_id)
 	if player.is_empty() or borrower.is_empty() or String(player.get("club_id", "")) == "":
 		return ERR_INVALID_PARAMETER
+	var parent_id: String = String(player.club_id)
+	if parent_id == borrower_id or fee < 0 or option_fee < 0 or duration_years < 1 or duration_years > 2:
+		return ERR_INVALID_PARAMETER
 	if int(borrower.transfer_budget) < fee:
 		return ERR_UNAVAILABLE
-	var parent_id: String = String(player.club_id)
+	var wage_share := clampi(wage_contribution_percent, 0, 100)
 	var reference := "loan-%s-%d" % [player_id, season_year]
 	_ledger.post(world, borrower_id, -fee, "loan_fee", reference, season_year)
 	_ledger.post(world, parent_id, fee, "loan_fee", reference, season_year)
 	player.loan_parent_club_id = parent_id
-	player.loan_end_year = season_year + 1
+	player.loan_end_year = season_year + duration_years
+	player.loan_fee = fee
+	player.loan_wage_contribution = wage_share
+	player.loan_option_fee = option_fee
 	player.club_id = borrower_id
+	return OK
+
+func activate_loan_option(world: Dictionary, player_id: String, borrower_id: String, wage: int, years: int, season_year: int, seed: int) -> Error:
+	_ledger.ensure(world)
+	var player := _find_player(world.get("players", []), player_id)
+	var borrower := _find_club(world.get("clubs", []), borrower_id)
+	if player.is_empty() or borrower.is_empty(): return ERR_DOES_NOT_EXIST
+	if String(player.get("club_id", "")) != borrower_id or String(player.get("loan_parent_club_id", "")) == "": return ERR_INVALID_PARAMETER
+	var option_fee := int(player.get("loan_option_fee", 0))
+	if option_fee <= 0 or int(borrower.get("transfer_budget", 0)) < option_fee: return ERR_UNAVAILABLE
+	var parent_id := String(player.loan_parent_club_id)
+	if not negotiate_contract(player, borrower, wage, years, seed): return ERR_UNAUTHORIZED
+	var reference := "loan-option-%s-%d" % [player_id, season_year]
+	_ledger.post(world, borrower_id, -option_fee, "transfer_fee", reference, season_year)
+	_ledger.post(world, parent_id, option_fee, "transfer_fee", reference, season_year)
+	_clear_loan_state(player)
+	player.club_id = borrower_id
+	_upsert_contract(world, player_id, borrower_id, season_year, season_year + years, wage)
 	return OK
 
 func return_expired_loans(world: Dictionary, season_year: int) -> int:
@@ -92,8 +115,7 @@ func return_expired_loans(world: Dictionary, season_year: int) -> int:
 	for player in world.players:
 		if int(player.get("loan_end_year", 9999)) <= season_year and String(player.get("loan_parent_club_id", "")) != "":
 			player.club_id = String(player.loan_parent_club_id)
-			player.erase("loan_parent_club_id")
-			player.erase("loan_end_year")
+			_clear_loan_state(player)
 			count += 1
 	return count
 
@@ -111,20 +133,14 @@ func rebalance_ai_squads(world: Dictionary, season_year: int, seed: int, min_squ
 			squad.erase(weakest)
 			releases += 1
 		for required_position in ["GK", "DC", "ST"]:
-			if _has_position(squad, required_position):
-				continue
+			if _has_position(squad, required_position): continue
 			var specialist: Dictionary = _best_available_position(free_agents, required_position)
-			if specialist.is_empty():
-				continue
+			if specialist.is_empty(): continue
 			if _sign_free_agent(world, specialist, club, season_year):
-				squad.append(specialist)
-				free_agents.erase(specialist)
-				signings += 1
+				squad.append(specialist); free_agents.erase(specialist); signings += 1
 		while squad.size() < min_squad and not free_agents.is_empty():
 			var target: Dictionary = _best_fit(free_agents, squad)
-			if _sign_free_agent(world, target, club, season_year):
-				squad.append(target)
-				signings += 1
+			if _sign_free_agent(world, target, club, season_year): squad.append(target); signings += 1
 			free_agents.erase(target)
 	return {"signings": signings, "releases": releases, "free_agents": free_agents.size()}
 
@@ -134,8 +150,7 @@ func squad_is_viable(world: Dictionary, club_id: String, min_squad: int = 18) ->
 
 func _sign_free_agent(world: Dictionary, player: Dictionary, club: Dictionary, season_year: int) -> bool:
 	var wage: int = recommended_wage(player)
-	if wage > int(club.wage_budget):
-		return false
+	if wage > int(club.wage_budget): return false
 	player.club_id = String(club.id)
 	_upsert_contract(world, String(player.id), String(club.id), season_year, season_year + 2, wage)
 	return true
@@ -143,23 +158,19 @@ func _sign_free_agent(world: Dictionary, player: Dictionary, club: Dictionary, s
 func _free_agents(players: Array) -> Array:
 	var result: Array = []
 	for player in players:
-		if not bool(player.get("retired", false)) and String(player.get("club_id", "")) == "":
-			result.append(player)
+		if not bool(player.get("retired", false)) and String(player.get("club_id", "")) == "": result.append(player)
 	return result
 
 func _has_position(squad: Array, position: String) -> bool:
 	for player in squad:
-		if String(player.position) == position:
-			return true
+		if String(player.position) == position: return true
 	return false
 
 func _best_available_position(free_agents: Array, position: String) -> Dictionary:
 	var best: Dictionary = {}
 	for player in free_agents:
-		if String(player.position) != position:
-			continue
-		if best.is_empty() or int(player.current_ability) > int(best.current_ability):
-			best = player
+		if String(player.position) != position: continue
+		if best.is_empty() or int(player.current_ability) > int(best.current_ability): best = player
 	return best
 
 func _best_fit(free_agents: Array, squad: Array) -> Dictionary:
@@ -167,11 +178,8 @@ func _best_fit(free_agents: Array, squad: Array) -> Dictionary:
 	var best_score := -99999
 	for player in free_agents:
 		var score: int = int(player.current_ability)
-		if not _has_position(squad, String(player.position)):
-			score += 25
-		if score > best_score:
-			best = player
-			best_score = score
+		if not _has_position(squad, String(player.position)): score += 25
+		if score > best_score: best = player; best_score = score
 	return best
 
 func _weakest_noncritical(squad: Array) -> Dictionary:
@@ -180,47 +188,40 @@ func _weakest_noncritical(squad: Array) -> Dictionary:
 		var position: String = String(player.position)
 		var count := 0
 		for teammate in squad:
-			if String(teammate.position) == position:
-				count += 1
-		if position in ["GK", "DC", "ST"] and count <= 1:
-			continue
-		if int(player.current_ability) < int(weakest.current_ability):
-			weakest = player
+			if String(teammate.position) == position: count += 1
+		if position in ["GK", "DC", "ST"] and count <= 1: continue
+		if int(player.current_ability) < int(weakest.current_ability): weakest = player
 	return weakest
 
 func _squad(players: Array, club_id: String) -> Array:
 	var result: Array = []
 	for player in players:
-		if String(player.get("club_id", "")) == club_id and not bool(player.get("retired", false)):
-			result.append(player)
+		if String(player.get("club_id", "")) == club_id and not bool(player.get("retired", false)): result.append(player)
 	return result
+
+func _clear_loan_state(player: Dictionary) -> void:
+	for key in ["loan_parent_club_id", "loan_end_year", "loan_fee", "loan_wage_contribution", "loan_option_fee"]:
+		player.erase(key)
 
 func _upsert_contract(world: Dictionary, player_id: String, club_id: String, start_year: int, end_year: int, wage: int) -> void:
 	for contract in world.contracts:
 		if String(contract.player_id) == player_id:
-			contract.club_id = club_id
-			contract.start_year = start_year
-			contract.end_year = end_year
-			contract.weekly_wage = wage
-			return
-	world.contracts.append({"id": "contract-" + player_id, "player_id": player_id, "club_id": club_id, "start_year": start_year, "end_year": end_year, "weekly_wage": wage})
+			contract.club_id = club_id; contract.start_year = start_year; contract.end_year = end_year; contract.weekly_wage = wage; return
+	world.contracts.append({"id":"contract-"+player_id,"player_id":player_id,"club_id":club_id,"start_year":start_year,"end_year":end_year,"weekly_wage":wage})
 
 func _find_player(players: Array, player_id: String) -> Dictionary:
 	for player in players:
-		if String(player.id) == player_id:
-			return player
+		if String(player.id) == player_id: return player
 	return {}
 
 func _find_club(clubs: Array, club_id: String) -> Dictionary:
 	for club in clubs:
-		if String(club.id) == club_id:
-			return club
+		if String(club.id) == club_id: return club
 	return {}
 
 func _stable_key(text: String) -> int:
 	var value := 23
-	for character in text.to_utf8_buffer():
-		value = posmod(value * 137 + int(character), 2_147_483_647)
+	for character in text.to_utf8_buffer(): value = posmod(value * 137 + int(character), 2_147_483_647)
 	return value
 
 func _rand_int(seed: int, key: int, min_value: int, max_value: int) -> int:
