@@ -125,11 +125,24 @@ func add_scouting(tabs: TabContainer) -> void:
 func add_transfers(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Transfers")
 	var data: Dictionary = query.transfer_market(session.world, session.managed_club_id)
-	_label(box, tr("Transfer window: %s") % ("OPEN" if bool(data.window_open) else "CLOSED"))
-	for offer in data.offers:
-		var line := HBoxContainer.new(); box.add_child(line)
-		_label(line, tr("%s — fee %d — %s") % [String(offer.player_id), int(offer.fee), String(offer.status)])
-		if String(offer.status) == "accepted": _button(line, tr("Accept agent demand & complete"), _complete_offer.bind(String(offer.id), String(offer.player_id)))
+	_label(box, tr("Transfer window: %s") % ("OPEN" if bool(data.get("window_open", false)) else "CLOSED"))
+	_label(box, tr("Budgets — transfer %d • wage %d • cash %d") % [int(data.get("transfer_budget", 0)), int(data.get("wage_budget", 0)), int(data.get("cash", 0))])
+	var offers: Array = data.get("offers", [])
+	if offers.is_empty():
+		_label(box, tr("No offers submitted yet. Use Scouting to find targets, then Bid."))
+	for offer in offers:
+		var line := VBoxContainer.new(); box.add_child(line)
+		var player_name := _player_name(_player(String(offer.get("player_id", ""))))
+		_label(line, tr("%s — fee %d — %s") % [player_name, int(offer.get("fee", 0)), String(offer.get("status", "submitted"))])
+		_label(line, tr("Clauses: %s") % _clauses_text(offer.get("clauses", {})))
+		if String(offer.get("status", "")) == "rejected":
+			_label(line, tr("Seller wants ~%d. Reasons: %s") % [int(offer.get("counter_fee", offer.get("fee", 0))), ", ".join(offer.get("reason_codes", []))])
+		var row := HBoxContainer.new(); line.add_child(row)
+		_button(row, tr("View player"), _show_player.bind(String(offer.get("player_id", ""))))
+		if String(offer.get("status", "")) == "accepted":
+			_button(row, tr("Accept agent demand & complete"), _complete_offer.bind(String(offer.get("id", "")), String(offer.get("player_id", ""))))
+	_heading(box, tr("Boardroom"), 18)
+	_label(box, tr("Request funds, review objectives and check job security from the Board tab."))
 
 func add_staff(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Staff")
@@ -180,21 +193,29 @@ func _show_competition(competition_id: String) -> void:
 	var box: VBoxContainer = app.call("_clear")
 	for competition in session.world.competitions:
 		if String(competition.id) != competition_id: continue
-		_heading(box, String(competition.name), 26)
+		_heading(box, "%s%s" % [String(competition.name), _competition_suffix(competition)], 26)
+		_label(box, _competition_qualification_text(competition))
 		if session.managed_club_id in competition.get("club_ids", []):
 			_button(box, tr("Register best eligible squad"), func():
 				var result: Dictionary = command.auto_register_competition_squad(session.world, session.managed_club_id, competition_id)
 				app.call("_show_error", "Registration result: %s" % str(result))
 			)
 		if String(competition.get("competition_type", "league")) == "league":
+			_label(box, tr("Pos  Club  P  W  D  L  GF  GA  GD  Pts  Form"))
+			var pos := 0
 			for row in query.competition_table(session.world, competition_id):
-				_label(box, tr("%s   P %d   W %d   D %d   L %d   Pts %d") % [_club_name(String(row.club_id)),int(row.get("played",0)),int(row.get("won",0)),int(row.get("drawn",0)),int(row.get("lost",0)),int(row.get("points",0))])
+				pos += 1
+				var form := _club_form(String(row.get("club_id", "")), competition_id)
+				_label(box, "%2d  %s  %d  %d  %d  %d  %d  %d  %+d  %d  %s" % [pos, _club_name(String(row.get("club_id", ""))), int(row.get("played", 0)), int(row.get("won", 0)), int(row.get("drawn", 0)), int(row.get("lost", 0)), int(row.get("goals_for", 0)), int(row.get("goals_against", 0)), int(row.get("goal_difference", 0)), int(row.get("points", 0)), form])
 		else:
 			var champion := String(competition.get("champion_club_id", ""))
-			_label(box, tr("Winner: %s") % _club_name(champion) if champion != "" else "Cup in progress")
+			_label(box, tr("Winner: %s") % _club_name(champion) if champion != "" else tr("Cup in progress — %d clubs entered") % competition.get("club_ids", []).size())
+			var bracket: Dictionary = competition.get("knockout_bracket", {})
+			if not bracket.is_empty() and not bool(bracket.get("complete", true)):
+				_label(box, tr("Current round: %d • ties remaining: %d") % [int(bracket.get("round", 1)), bracket.get("matches", []).size()])
 			for fixture in session.world.fixtures:
 				if String(fixture.get("competition_id", "")) == competition_id:
-					_label(box, tr("%s vs %s: %s") % [_club_name(String(fixture.home_club_id)),_club_name(String(fixture.away_club_id)),"%d-%d" % [int(fixture.home_goals),int(fixture.away_goals)] if bool(fixture.played) else "Scheduled"])
+					_label(box, tr("%s vs %s: %s") % [_club_name(String(fixture.home_club_id)), _club_name(String(fixture.away_club_id)), "%d-%d" % [int(fixture.home_goals), int(fixture.away_goals)] if bool(fixture.played) else "Scheduled %s" % String(fixture.get("date", ""))])
 	_button(box, tr("Back to career"), app.call.bind("_show_career"))
 
 func add_finances(tabs: TabContainer) -> void:
@@ -249,15 +270,39 @@ func add_match_analysis(tabs: TabContainer) -> void:
 func _show_player(player_id: String) -> void:
 	var root := app.call("_clear") as VBoxContainer
 	_heading(root, tr("Player Profile"), 28)
+	preload("res://simulation/players/player_attributes.gd").new().ensure(_player(player_id), session.seed)
 	var profile: Dictionary = query.player_profile(session.world, player_id, session.managed_club_id)
-	_label(root, tr("%s — %s — Age %d") % [String(profile.get("name","Player")), String(profile.get("position","")), int(profile.get("age",0))])
-	_label(root, tr("Ability: %s   Potential: %s   Foot: %s   Weak foot: %d") % [str(profile.get("ability","?")),str(profile.get("potential","?")),String(profile.get("preferred_foot","")),int(profile.get("weak_foot",0))])
-	_label(root, tr("Fitness %d   Morale %d   Medical: %s") % [int(profile.get("fitness",0)),int(profile.get("morale",0)),str(profile.get("medical",{}))])
-	_label(root, tr("Contract: %s") % str(profile.get("contract",{})))
-	if String(_player(player_id).get("club_id", "")) == session.managed_club_id:
+	var raw := _player(player_id)
+	_label(root, tr("%s — %s — Age %d — %s") % [String(profile.get("name", "Player")), String(profile.get("position", "")), int(profile.get("age", 0)), String(raw.get("personality", "Balanced"))])
+	_label(root, tr("Ability %d • Potential %d • Foot %s (weak %d) • Value %d") % [int(raw.get("current_ability", 0)), int(raw.get("potential", 0)), String(raw.get("preferred_foot", "")), int(raw.get("weak_foot", 0)), int(raw.get("market_value", 0))])
+	_label(root, tr("Fitness %d • Morale %d • Happiness %d • Medical: %s") % [int(profile.get("fitness", 0)), int(profile.get("morale", 0)), int(raw.get("happiness", raw.get("morale", 0))), str(profile.get("medical", {}))])
+	_label(root, tr("Traits: %s") % (", ".join(raw.get("traits", [])) if not raw.get("traits", []).is_empty() else "None"))
+	_label(root, tr("Contract: %s") % str(profile.get("contract", {})))
+	_label(root, tr("Season: %d apps • %d goals • avg rating %.1f") % [int(raw.get("season_appearances", 0)), int(raw.get("season_goals", 0)), float(raw.get("average_rating", 0.0))])
+	if String(raw.get("club_id", "")) == session.managed_club_id:
 		_button(root, tr("Renew contract"), _show_contract_offer.bind(player_id))
-	var attrs: Dictionary = profile.get("attributes",{})
-	for name in attrs.keys(): _label(root, tr("%s: %s") % [String(name).replace("_"," ").capitalize(), str(attrs[name])])
+	_heading(root, tr("Attributes (1–20)"), 20)
+	for block in ["technical", "mental", "physical", "goalkeeping"]:
+		var rows: Array = _attribute_block(raw, String(block))
+		if rows.is_empty():
+			continue
+		_label(root, tr(block.capitalize()))
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		root.add_child(grid)
+		for row in rows:
+			var name_label := Label.new()
+			name_label.text = String(row.get("name", "")).replace("_", " ").capitalize()
+			name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			grid.add_child(name_label)
+			var bar := ProgressBar.new()
+			bar.min_value = 0
+			bar.max_value = 20
+			bar.value = int(row.get("display", 10))
+			bar.show_percentage = true
+			bar.custom_minimum_size = Vector2(220, 0)
+			grid.add_child(bar)
 	_button(root, tr("Back to career"), app.call.bind("_show_career"))
 
 func _show_staff(staff_id: String) -> void:
@@ -379,3 +424,95 @@ func _club_name(club_id: String) -> String:
 	for club in session.world.get("clubs",[]):
 		if String(club.get("id","")) == club_id: return String(club.get("name",club_id))
 	return club_id
+
+func add_board(tabs: TabContainer) -> void:
+	var box := _tab(tabs, "Board")
+	var security: Dictionary = command.job_security_report(session.world, session.managed_club_id)
+	var fans: Dictionary = command.supporter_report(session.world, session.managed_club_id)
+	_heading(box, tr("Boardroom"), 22)
+	_label(box, tr("Job security: %s (risk %.0f%% • board confidence %d)") % [String(security.get("status", "stable")), float(security.get("risk", 0.0)) * 100.0, int(security.get("confidence", 65))])
+	_label(box, tr("Supporters: mood %d • loyalty %d • expectation %d • attendance %s") % [int(fans.get("mood", 65)), int(fans.get("loyalty", 60)), int(fans.get("expectation", 50)), String(fans.get("attendance_outlook", "healthy"))])
+	_label(box, tr("Season objectives review"))
+	_button(box, tr("Run season review"), func():
+		var review: Dictionary = command.board_season_review(session.world, session.managed_club_id)
+		app.call("_show_error", "Review: %s (%.1f). Objectives: %s" % [String(review.get("status", "")), float(review.get("overall", 0.0)), str(review.get("objectives", []))])
+		app.call("_show_career")
+	)
+	_heading(box, tr("Budget requests"), 18)
+	for kind in ["transfer", "wage"]:
+		var amount := SpinBox.new()
+		amount.min_value = 10000
+		amount.max_value = 50000000
+		amount.step = 10000
+		amount.value = 500000 if kind == "transfer" else 50000
+		box.add_child(app.call("_labeled", tr("%s request") % kind.capitalize(), amount))
+		_button(box, tr("Request %s budget") % kind, func():
+			var result: Dictionary = command.request_board_budget(session.world, session.managed_club_id, kind, int(amount.value), session.seed + int(session.world.get("day_index", 0)))
+			app.call("_show_career")
+			app.call("_show_error", "Approved: granted %d." % int(result.get("granted", 0)) if bool(result.get("approved", false)) else "Declined (%s)." % String(result.get("reason", "board_declined")))
+		)
+
+func _attribute_block(player: Dictionary, block: String) -> Array:
+	var attrs: Dictionary = player.get("attributes", {})
+	var names: Array = []
+	match block:
+		"technical":
+			names = ["corners", "crossing", "dribbling", "finishing", "first_touch", "free_kicks", "heading", "long_shots", "passing", "tackling", "technique"]
+		"mental":
+			names = ["aggression", "anticipation", "composure", "concentration", "decisions", "determination", "leadership", "off_the_ball", "positioning", "teamwork", "vision", "work_rate"]
+		"physical":
+			names = ["acceleration", "agility", "balance", "jumping", "pace", "stamina", "strength", "natural_fitness"]
+		"goalkeeping":
+			if String(player.get("position", "")) != "GK":
+				return []
+			names = ["aerial_reach", "command_of_area", "handling", "kicking", "one_on_ones", "reflexes", "rushing_out", "throwing"]
+	var rows: Array = []
+	for name in names:
+		var raw := int(attrs.get(name, 50))
+		rows.append({"name": String(name), "display": clampi(int(round(raw / 5.0)), 1, 20), "raw": raw})
+	return rows
+
+func _clauses_text(clauses: Dictionary) -> String:
+	if clauses.is_empty():
+		return "fee only"
+	var parts: Array = []
+	if int(clauses.get("instalments", 1)) > 1:
+		parts.append("%dx" % int(clauses.get("instalments", 1)))
+	if float(clauses.get("sell_on_pct", 0.0)) > 0.0:
+		parts.append("sell-on %d%%" % int(round(float(clauses.get("sell_on_pct", 0.0)) * 100.0)))
+	if int(clauses.get("signing_bonus", 0)) > 0:
+		parts.append("bonus %d" % int(clauses.get("signing_bonus", 0)))
+	if int(clauses.get("buy_option", 0)) > 0:
+		parts.append("buy option %d%s" % [int(clauses.get("buy_option", 0)), " (obligation)" if bool(clauses.get("buy_obligation", false)) else ""])
+	if String(clauses.get("squad_status", "")) != "":
+		parts.append(String(clauses.get("squad_status", "")))
+	return ", ".join(parts) if not parts.is_empty() else "fee only"
+
+func _club_form(club_id: String, competition_id: String) -> String:
+	var marks: Array = []
+	for fixture in session.world.get("fixtures", []):
+		if String(fixture.get("competition_id", "")) != competition_id or not bool(fixture.get("played", false)):
+			continue
+		var home := String(fixture.get("home_club_id", "")) == club_id
+		var away := String(fixture.get("away_club_id", "")) == club_id
+		if not home and not away:
+			continue
+		var gf := int(fixture.get("home_goals", 0)) if home else int(fixture.get("away_goals", 0))
+		var ga := int(fixture.get("away_goals", 0)) if home else int(fixture.get("home_goals", 0))
+		marks.append("W" if gf > ga else ("D" if gf == ga else "L"))
+		if marks.size() >= 5:
+			break
+	while marks.size() < 5:
+		marks.append("-")
+	return "".join(marks)
+
+func _competition_qualification_text(competition: Dictionary) -> String:
+	if String(competition.get("qualification", "")) != "":
+		return String(competition.get("qualification", ""))
+	if bool(competition.get("club_world_cup", false)):
+		return "Continental champions-tier winners qualify."
+	if bool(competition.get("continental", false)):
+		return "Tier %d continental qualification via league position." % int(competition.get("continental_tier", 1))
+	if String(competition.get("competition_type", "")) == "knockout":
+		return "Single-elimination domestic cup."
+	return "Double round-robin league with promotion and relegation."

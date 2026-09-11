@@ -11,6 +11,7 @@ const TacticsManagerClass = preload("res://simulation/tactics/tactics_manager.gd
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const PlayerPromisesClass = preload("res://simulation/players/player_promises.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
+const BoardServiceClass = preload("res://application/career/board_service.gd")
 
 func set_training(world: Dictionary, club_id: String, sessions: Array, intensity: float) -> Error:
 	var club := _club(world, club_id)
@@ -180,6 +181,39 @@ func shortlist(world: Dictionary, club_id: String, limit: int = 30) -> Array:
 	var result: Array = []
 	for i in range(mini(limit,candidates.size())): result.append(candidates[i].player)
 	return result
+
+func board_season_review(world: Dictionary, club_id: String, year: int = 0) -> Dictionary:
+	var season_year := year if year > 0 else int(world.get("season_year", 2026))
+	var records: Array = []
+	for competition in world.get("competitions", []):
+		if String(competition.get("competition_type", "")) != "league":
+			continue
+		var fixtures: Array = []
+		for fixture in world.get("fixtures", []):
+			if String(fixture.get("competition_id", "")) == String(competition.get("id", "")):
+				fixtures.append(fixture)
+		var table: Array = preload("res://simulation/competitions/league_table.gd").build(competition.get("club_ids", []), fixtures, 3, 1)
+		records.append({"competition_id": String(competition.get("id", "")), "competition_type": "league", "table": table})
+	return BoardServiceClass.new().season_review(world, club_id, records, season_year)
+
+func request_board_budget(world: Dictionary, club_id: String, kind: String, amount: int, seed: int = 1) -> Dictionary:
+	return BoardServiceClass.new().request_budget(world, club_id, kind, maxi(0, amount), seed)
+
+func job_security_report(world: Dictionary, club_id: String) -> Dictionary:
+	var records: Array = []
+	for competition in world.get("competitions", []):
+		if String(competition.get("competition_type", "")) != "league":
+			continue
+		var fixtures: Array = []
+		for fixture in world.get("fixtures", []):
+			if String(fixture.get("competition_id", "")) == String(competition.get("id", "")):
+				fixtures.append(fixture)
+		var table: Array = preload("res://simulation/competitions/league_table.gd").build(competition.get("club_ids", []), fixtures, 3, 1)
+		records.append({"competition_id": String(competition.get("id", "")), "competition_type": "league", "table": table})
+	return BoardServiceClass.new().job_security(world, club_id, records)
+
+func supporter_report(world: Dictionary, club_id: String) -> Dictionary:
+	return BoardServiceClass.new().supporter_report(world, club_id)
 
 func _ensure_finance_defaults(club: Dictionary) -> void:
 	club["cash"] = int(club.get("cash", 20_000_000))

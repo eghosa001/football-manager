@@ -18,6 +18,7 @@ const StaffMarketClass = preload("res://simulation/staff/staff_market.gd")
 const StaffContractsClass = preload("res://simulation/staff/staff_contracts.gd")
 const StaffDevelopmentClass = preload("res://simulation/staff/staff_development.gd")
 const InternationalSeasonClass = preload("res://application/season/international_season.gd")
+const AiTransferDirectorClass = preload("res://simulation/transfers/ai_transfer_director.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
 const NamePoolServiceClass = preload("res://application/career/name_pool_service.gd")
 const DomainEventBusClass = preload("res://core/events/domain_event_bus.gd")
@@ -87,6 +88,9 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	var staff_contract_result: Dictionary = _staff_contracts.process_expiring(world, next_year)
 	var staff_development_result: Dictionary = _staff_development.advance_year(world, season_result.records, season_seed + 700_005)
 	var squad_result: Dictionary = _market.rebalance_ai_squads(world, next_year, season_seed + 700_007, 20, 30)
+	var ai_market_result: Dictionary = AiTransferDirectorClass.new().run_season_market(world, next_year, season_seed + 700_009)
+	for signing in ai_market_result.get("completed", []):
+		_events.emit(world, "PLAYER_SIGNED", {"player_id": String(signing.get("player_id", "")), "buyer_id": String(signing.get("buyer_id", "")), "seller_id": String(signing.get("seller_id", "")), "fee": int(signing.get("fee", 0)), "transfer_type": "ai_director", "season_year": next_year}, "ai_transfer_director")
 	var registration_result: Dictionary = _registration.auto_register_world(world, next_year)
 	for club in world.clubs:
 		var competition: Dictionary = _competition_for_club(world.competitions, String(club.id))
@@ -106,7 +110,7 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	var reputation_result: Dictionary = _reputation.advance_year(world, season_result.records)
 	var happiness_result: Dictionary = _happiness.update_week(world)
 	_events.emit(world, "SEASON_ENDED", {"completed_year":completed_year,"next_year":next_year,"competition_records":season_result.records.duplicate(true),"promotion_movements":season_result.get("movements", []).duplicate(true),"international_champion":String(international_result.get("champion", ""))}, "career_cycle")
-	return {"season":season_result,"history_archive":history_result,"economy":economy_result,"board":board_result,"stadium_projects":stadium_projects,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"staff_development":staff_development_result,"squads":squad_result,"registrations":registration_result,"living_world":living_result,"living_world_depth":living_depth_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
+	return {"season":season_result,"history_archive":history_result,"economy":economy_result,"board":board_result,"stadium_projects":stadium_projects,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"staff_development":staff_development_result,"squads":squad_result,"ai_transfer_market":ai_market_result,"registrations":registration_result,"living_world":living_result,"living_world_depth":living_depth_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
 
 func _process_ai_manager_market(world: Dictionary, records: Array, year: int) -> Dictionary:
 	var human_club_id := String(world.get("human_manager", {}).get("club_id", ""))

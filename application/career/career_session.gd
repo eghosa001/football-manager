@@ -85,7 +85,10 @@ func snapshot() -> Dictionary:
 
 func _initialize_world(is_new: bool) -> void:
 	var lifecycle = PlayerLifecycleClass.new()
-	for player in world.get("players", []): lifecycle.ensure_player_state(player, seed)
+	var attributes = preload("res://simulation/players/player_attributes.gd").new()
+	for player in world.get("players", []):
+		lifecycle.ensure_player_state(player, seed)
+		attributes.ensure(player, seed)
 	TacticsManagerClass.new().ensure_world(world, seed)
 	ClubEconomyClass.new().ensure_world(world)
 	StaffContractsClass.new().ensure_world(world)
