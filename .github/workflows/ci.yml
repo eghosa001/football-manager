@@ -80,6 +80,10 @@ jobs:
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/remediation_completion_test.gd
 
+      - name: Run polish completion regressions
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/polish_completion_test.gd
+
       - name: Run release hardening regressions
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/release_hardening_test.gd
