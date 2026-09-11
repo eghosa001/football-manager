@@ -7,16 +7,24 @@ on:
       - 'simulation/transfers/**'
       - 'simulation/players/training_system.gd'
       - 'simulation/scouting/**'
+      - 'application/career/transfer_actions.gd'
       - 'application/career/career_command_service.gd'
+      - 'game/career/database_editor.gd'
+      - 'tools/modding/**'
       - 'tests/player_scouting_test.gd'
+      - 'tests/custom_database_training_test.gd'
       - '.github/workflows/career-depth-targeted.yml'
   pull_request:
     paths:
       - 'simulation/transfers/**'
       - 'simulation/players/training_system.gd'
       - 'simulation/scouting/**'
+      - 'application/career/transfer_actions.gd'
       - 'application/career/career_command_service.gd'
+      - 'game/career/database_editor.gd'
+      - 'tools/modding/**'
       - 'tests/player_scouting_test.gd'
+      - 'tests/custom_database_training_test.gd'
       - '.github/workflows/career-depth-targeted.yml'
   workflow_dispatch:
 
@@ -30,7 +38,7 @@ concurrency:
 jobs:
   test:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,6 +50,9 @@ jobs:
       - name: Run player scouting transfer and training regression
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/player_scouting_test.gd
+      - name: Run custom database and training regression
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/custom_database_training_test.gd
       - name: Verify tests did not modify tracked source
         shell: powershell
         run: |
