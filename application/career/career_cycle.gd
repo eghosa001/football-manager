@@ -11,6 +11,7 @@ const StaffMarketClass = preload("res://simulation/staff/staff_market.gd")
 const StaffContractsClass = preload("res://simulation/staff/staff_contracts.gd")
 const InternationalSeasonClass = preload("res://application/season/international_season.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
+const NamePoolServiceClass = preload("res://application/career/name_pool_service.gd")
 
 var _season_runner = SeasonRunnerClass.new()
 var _lifecycle = LifecycleClass.new()
@@ -22,6 +23,7 @@ var _staff_market = StaffMarketClass.new()
 var _staff_contracts = StaffContractsClass.new()
 var _international = InternationalSeasonClass.new()
 var _registration = RegistrationServiceClass.new()
+var _names = NamePoolServiceClass.new()
 
 func complete_year(world: Dictionary, history: Array, season_seed: int, promotion_places: int = 3) -> Dictionary:
 	_tactics.ensure_world(world, season_seed + 600_001)
@@ -36,6 +38,7 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	var next_year: int = int(season_result.next_season_year)
 	var loans_returned: int = _market.return_expired_loans(world, next_year)
 	var lifecycle_result: Dictionary = _lifecycle.advance_year(world, season_seed + 700_001, 2)
+	_names.rename_youth(world, lifecycle_result.get("youth", []), season_seed + 700_002)
 	var contract_result: Dictionary = _market.process_contracts(world, next_year, season_seed + 700_003)
 	var staff_contract_result: Dictionary = _staff_contracts.process_expiring(world, next_year)
 	var squad_result: Dictionary = _market.rebalance_ai_squads(world, next_year, season_seed + 700_007, 20, 30)
