@@ -132,7 +132,7 @@ func _show_result(world: Dictionary, row: Dictionary, owner: Control) -> void:
 	dialog.popup_centered(Vector2i(620, 300))
 
 func _entity(world: Dictionary, kind: String, id: String) -> Dictionary:
-	var collection := {"club":"clubs", "player":"players", "staff":"staff", "competition":"competitions", "country":"countries"}.get(kind, "")
+	var collection: String = String({"club":"clubs", "player":"players", "staff":"staff", "competition":"competitions", "country":"countries"}.get(kind, ""))
 	for value in world.get(collection, []):
 		if String(value.get("id", "")) == id:
 			return value

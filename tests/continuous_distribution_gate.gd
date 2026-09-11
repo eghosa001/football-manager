@@ -12,7 +12,7 @@ func _init() -> void:
 	var engine=EngineClass.new()
 	var goals:=0; var shots:=0; var cards:=0; var home_points:=0.0; var home_goal_diff:=0
 	for i in range(samples):
-		var result=engine.simulate_match(home,away,world.players,900000+i)
+		var result=engine.simulate_match(home,away,world.players,900000+i,false)
 		if result.has("error"):
 			push_error("Continuous simulation error at sample %d"%i); quit(1); return
 		var hg:=int(result.get("home_goals",0)); var ag:=int(result.get("away_goals",0))

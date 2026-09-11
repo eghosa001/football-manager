@@ -29,7 +29,7 @@ func _wire(tabs: TabContainer) -> void:
 	if tab==null: return
 	var session=_career_session(tabs)
 	if session==null or not session.world.has("last_managed_match"): return
-	var box:=_first_vbox(tab); var viewer:=_find_viewer(tab)
+	var box: VBoxContainer = _first_vbox(tab); var viewer: Node = _find_viewer(tab)
 	if box==null or viewer==null: return
 	tabs.set_meta("match_hud_added",true)
 	var result:Dictionary=session.world.last_managed_match.get("result",{})

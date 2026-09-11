@@ -1,6 +1,6 @@
 extends SceneTree
 
-const Engine = preload("res://simulation/match/continuous_spatial_engine_v3.gd")
+const ContinuousEngineClass = preload("res://simulation/match/continuous_spatial_engine_v3.gd")
 
 var checks := 0
 var failures := 0
@@ -14,16 +14,16 @@ func _init() -> void:
 	var strong_distance := 0.0
 	var weak_distance := 0.0
 	for seed in range(30):
-		var a := Engine.new().simulate_continuous(strong,neutral,91000+seed,{}, {},900,{},30)
-		var b := Engine.new().simulate_continuous(weak,neutral,91000+seed,{}, {},900,{},30)
+		var a := ContinuousEngineClass.new().simulate_continuous(strong,neutral,91000+seed,{}, {},900,{},30)
+		var b := ContinuousEngineClass.new().simulate_continuous(weak,neutral,91000+seed,{}, {},900,{},30)
 		strong_goals += int(a.summary.goals)
 		weak_goals += int(b.summary.goals)
 		strong_distance += float(a.summary.home_distance)
 		weak_distance += float(b.summary.home_distance)
 	_expect(strong_distance > weak_distance, "Higher pace/acceleration/stamina must increase aggregate movement distance")
 	_expect(strong_goals >= weak_goals, "Higher finishing/composure must not underperform weak finishing across deterministic sample")
-	var replay_a := Engine.new().simulate_continuous(strong,neutral,99991,{}, {},300,{},20)
-	var replay_b := Engine.new().simulate_continuous(strong,neutral,99991,{}, {},300,{},20)
+	var replay_a := ContinuousEngineClass.new().simulate_continuous(strong,neutral,99991,{}, {},300,{},20)
+	var replay_b := ContinuousEngineClass.new().simulate_continuous(strong,neutral,99991,{}, {},300,{},20)
 	_expect(replay_a == replay_b, "Attribute-sensitive continuous simulation must remain deterministic")
 	if failures == 0:
 		print("[TEST] CONTINUOUS ATTRIBUTES PASS — %d checks" % checks)

@@ -108,7 +108,7 @@ func _test_save_schema_migration() -> void:
 	var world: Dictionary = WorldGeneratorClass.new().create_world(104001, 1, 4, 20)
 	var old_payload := {"schema_version": 1, "world": world, "history": []}
 	var migrated: Dictionary = SaveStoreClass.new()._migrate(old_payload)
-	_expect(int(migrated.get("schema_version", 0)) == 2, "Schema v1 saves must migrate to Phase 10 schema v2")
+	_expect(int(migrated.get("schema_version", 0)) == SaveStoreClass.CURRENT_SCHEMA_VERSION, "Schema v1 saves must migrate to the current schema")
 	for key in ["relationships", "rivalries", "awards", "legends", "news", "manager_careers", "active_mods"]:
 		_expect(migrated.world.has(key), "Migration must initialize %s" % key)
 

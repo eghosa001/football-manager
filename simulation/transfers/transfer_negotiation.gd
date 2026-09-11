@@ -79,10 +79,15 @@ func player_interest(player: Dictionary, buyer: Dictionary, agent: Dictionary = 
 	return clampf(0.22 + buyer_rep / 180.0 + ambition / 300.0 - loyalty / 500.0 + greed / 1000.0 + tactical_fit * 0.08 + playing_time * 0.12, 0.0, 1.0)
 
 func _normalized_clauses(fee: int, clauses: Dictionary) -> Dictionary:
+	var sell_on_raw := float(clauses.get("sell_on_pct", clauses.get("sell_on", clauses.get("sell_on_percentage", 0.0))))
+	if sell_on_raw > 1.0:
+		sell_on_raw /= 100.0
+	var sell_on_fraction := clampf(sell_on_raw, 0.0, 0.30)
 	var normalized := {
 		"fee":maxi(0, fee),
 		"instalments":clampi(int(clauses.get("instalments", 1)), 1, 5),
-		"sell_on_pct":clampf(float(clauses.get("sell_on_pct", clauses.get("sell_on", 0.0))), 0.0, 0.30),
+		"sell_on_pct":sell_on_fraction,
+		"sell_on_percentage":int(round(sell_on_fraction * 100.0)),
 		"signing_bonus":maxi(0, int(clauses.get("signing_bonus", 0))),
 		"wages":maxi(0, int(clauses.get("wages", 0))),
 		"loan_fee":maxi(0, int(clauses.get("loan_fee", 0))),

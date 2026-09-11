@@ -81,8 +81,8 @@ func _add_controls(box: VBoxContainer, session) -> void:
 	box.add_child(_labeled(tr("Focus intensity"), focus_intensity))
 	var trait_choice := OptionButton.new()
 	trait_choice.add_item(tr("No trait target"))
-	for trait in TrainingDepth.TRAITS:
-		trait_choice.add_item(tr(String(trait).replace("_", " ").capitalize()))
+	for trait_name in TrainingDepth.TRAITS:
+		trait_choice.add_item(tr(String(trait_name).replace("_", " ").capitalize()))
 	box.add_child(_labeled(tr("Trait development"), trait_choice))
 
 	var status := Label.new()

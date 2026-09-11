@@ -70,9 +70,25 @@ func _advance_medical(world: Dictionary, managed_club_id: String) -> Array:
 func _run_training_week(world: Dictionary, managed_club_id: String, seed: int) -> Array:
 	var system = TrainingSystemClass.new()
 	var reports: Array = []
+	var players_by_club := {}
+	var staff_by_club := {}
+	for player in world.get("players", []):
+		var player_club_id := String(player.get("club_id", ""))
+		if player_club_id == "":
+			continue
+		if not players_by_club.has(player_club_id):
+			players_by_club[player_club_id] = []
+		players_by_club[player_club_id].append(player)
+	for member in world.get("staff", []):
+		var staff_club_id := String(member.get("club_id", ""))
+		if staff_club_id == "":
+			continue
+		if not staff_by_club.has(staff_club_id):
+			staff_by_club[staff_club_id] = []
+		staff_by_club[staff_club_id].append(member)
 	for club in world.get("clubs", []):
 		var club_id := String(club.get("id", ""))
-		var report: Dictionary = system.run_week(world, club_id, seed + _stable_key(club_id))
+		var report: Dictionary = system.run_week(world, club_id, seed + _stable_key(club_id), players_by_club.get(club_id, []), staff_by_club.get(club_id, []))
 		reports.append({"club_id":club_id,"report":report})
 		if club_id == managed_club_id:
 			InboxServiceClass.new().add_message(world, "training", "Weekly training report", "Players improved: %d. Individual focus gains: %d. Training injuries: %d." % [int(report.get("players_improved", 0)), int(report.get("individual_focus_gains", 0)), int(report.get("training_injuries", 0))])

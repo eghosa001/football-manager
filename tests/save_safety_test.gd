@@ -9,7 +9,9 @@ func _init() -> void:
 	assert(store._migrate({"schema_version":1,"world":"broken"}).is_empty())
 	assert(store._migrate({"schema_version":2,"world":{},"history":42}).is_empty())
 	assert(store._migrate({"schema_version":"bad","world":{}}).is_empty())
-	var slots = Slots.new()
+	var slots = Slots.new("user://test_saves/save_safety")
+	for slot in range(1, 4):
+		slots.delete_slot(slot)
 	assert(slots.first_available_slot() == 1)
 	assert(slots.save_slot(1, {"clubs":[]}, [], {"name":"Existing manager"}) == OK)
 	assert(slots.first_available_slot() == 2)
@@ -27,5 +29,7 @@ func _init() -> void:
 	assert(slots.save_slot(1, {"clubs":[]}, [], {"name":"Recovered manager"}) == OK)
 	assert(store._load_path(slots.slot_path(1) + ".bak").world.human_manager.name == "Existing manager")
 	assert(slots.load_slot(1).world.human_manager.name == "Recovered manager")
+	for slot in range(1, 4):
+		slots.delete_slot(slot)
 	print("[TEST] SAVE SAFETY PASS")
 	quit(0)

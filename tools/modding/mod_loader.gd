@@ -11,6 +11,7 @@ const ALLOWED_PATCH_KEYS := {
 	"competitions": ["name", "country_id", "competition_type", "club_ids", "points_win", "points_draw", "tier", "promotion_places", "relegation_places", "registration_rules", "rules"],
 }
 const GRAPHIC_KEYS := ["logo", "kit_home", "kit_away", "kit_third", "background"]
+const NamePoolServiceClass = preload("res://application/career/name_pool_service.gd")
 
 func load_mod(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path): return {"ok":false,"error":"missing_file","patches":{}}
@@ -20,7 +21,7 @@ func load_mod(path: String) -> Dictionary:
 	if typeof(parsed) != TYPE_DICTIONARY: return {"ok":false,"error":"invalid_json","patches":{}}
 	var validation := validate_mod(parsed)
 	if not validation.ok: return validation
-	return {"ok":true,"error":"","patches":parsed.get("patches",{}).duplicate(true),"additions":parsed.get("additions",{}).duplicate(true),"graphics":parsed.get("graphics",{}).duplicate(true),"metadata":parsed.get("metadata",{}).duplicate(true)}
+	return {"ok":true,"error":"","patches":parsed.get("patches",{}).duplicate(true),"additions":parsed.get("additions",{}).duplicate(true),"graphics":parsed.get("graphics",{}).duplicate(true),"names":parsed.get("names",{}).duplicate(true),"metadata":parsed.get("metadata",{}).duplicate(true)}
 
 func validate_mod(data: Dictionary) -> Dictionary:
 	var metadata = data.get("metadata", {})
@@ -46,7 +47,10 @@ func validate_mod(data: Dictionary) -> Dictionary:
 		if String(entity_id).strip_edges()=="" or typeof(graphics[entity_id])!=TYPE_DICTIONARY: return {"ok":false,"error":"invalid_graphics_entry"}
 		for key in graphics[entity_id].keys():
 			if String(key) not in GRAPHIC_KEYS or not _safe_graphic_path(String(graphics[entity_id][key])): return {"ok":false,"error":"invalid_graphic:%s.%s"%[entity_id,key]}
-	return {"ok":true,"error":"","patches":patches.duplicate(true),"additions":additions.duplicate(true),"graphics":graphics.duplicate(true)}
+	var names = data.get("names", {})
+	var names_validation: Dictionary = NamePoolServiceClass.new().validate_names(names)
+	if not bool(names_validation.get("ok", false)): return names_validation
+	return {"ok":true,"error":"","patches":patches.duplicate(true),"additions":additions.duplicate(true),"graphics":graphics.duplicate(true),"names":names.duplicate(true)}
 
 func _validate_rows(rows_by_collection: Dictionary, additions: bool) -> Dictionary:
 	for root_key in rows_by_collection.keys():
@@ -116,6 +120,7 @@ func apply_mod(world: Dictionary, data: Dictionary) -> Dictionary:
 			applied+=1
 	world["graphics_overrides"]=world.get("graphics_overrides",{})
 	for entity_id in data.get("graphics",{}).keys(): world.graphics_overrides[String(entity_id)]=(data.graphics[entity_id] as Dictionary).duplicate(true)
+	NamePoolServiceClass.new().apply_mod_names(world, [data])
 	world["active_mods"]=world.get("active_mods",[])
 	var metadata: Dictionary=data.get("metadata",{})
 	if not metadata.is_empty(): world.active_mods.append(metadata.duplicate(true))

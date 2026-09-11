@@ -4,6 +4,11 @@ extends RefCounted
 const SaveStoreClass = preload("res://persistence/save_store.gd")
 const PACKAGE_VERSION := "1.0.0"
 
+var _root_path: String = "user://saves"
+
+func _init(root_path: String = "user://saves") -> void:
+	_root_path = root_path.trim_suffix("/")
+
 func first_available_slot(max_slots: int = 10) -> int:
 	for slot in range(1, max_slots + 1):
 		var path := slot_path(slot)
@@ -12,10 +17,10 @@ func first_available_slot(max_slots: int = 10) -> int:
 	return 0
 
 func slot_path(slot: int) -> String:
-	return "user://saves/career_%02d.fdn" % clampi(slot, 1, 20)
+	return _root_path + "/career_%02d.fdn" % clampi(slot, 1, 20)
 
 func package_path(slot: int) -> String:
-	return "user://saves/career_%02d" % clampi(slot, 1, 20)
+	return _root_path + "/career_%02d" % clampi(slot, 1, 20)
 
 func package_world_path(slot: int) -> String:
 	return package_path(slot) + "/world.db"
@@ -27,7 +32,7 @@ func package_thumbnail_path(slot: int) -> String:
 	return package_path(slot) + "/thumbnail.png"
 
 func autosave_path(slot: int, generation: int) -> String:
-	return "user://saves/career_%02d.autosave_%d.fdn" % [clampi(slot, 1, 20), maxi(1, generation)]
+	return _root_path + "/career_%02d.autosave_%d.fdn" % [clampi(slot, 1, 20), maxi(1, generation)]
 
 func save_slot(slot: int, world: Dictionary, history: Array, manager: Dictionary) -> Error:
 	_ensure_directory()
@@ -188,6 +193,6 @@ func _stable_key(text: String) -> int:
 	return value
 
 func _ensure_directory() -> void:
-	var directory := DirAccess.open("user://")
-	if directory != null and not directory.dir_exists("saves"):
-		directory.make_dir("saves")
+	var global_root := ProjectSettings.globalize_path(_root_path)
+	if not DirAccess.dir_exists_absolute(global_root):
+		DirAccess.make_dir_recursive_absolute(global_root)

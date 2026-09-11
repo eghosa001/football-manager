@@ -54,7 +54,7 @@ func materialize_intake(world: Dictionary, club_id: String, seed: int, count: in
 	var previews := intake_preview(world,club_id,seed,count)
 	var created: Array = []
 	for preview in previews:
-		var player := preview.duplicate(true)
+		var player: Dictionary = preview.duplicate(true)
 		player["club_id"] = club_id
 		player["squad_status"] = "academy"
 		player["injured_days"] = 0

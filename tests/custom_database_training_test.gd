@@ -37,8 +37,19 @@ func _run() -> void:
 	root.add_child(app); await process_frame
 	var editor = preload("res://game/career/database_editor.gd").new(app)
 	editor.show(); await process_frame
-	editor.club_name.text = "Editor Club"
-	editor._add_change()
+	editor.collection_selector.select(0)
+	editor._select_collection(0)
+	editor.entity_selector.select(0)
+	editor._select_entity(0)
+	var name_index := -1
+	for field_index in range(editor.field_selector.item_count):
+		if editor.field_selector.get_item_text(field_index) == "name":
+			name_index = field_index
+			break
+	assert(name_index >= 0)
+	editor._select_field(name_index)
+	editor.value_input.text = "Editor Club"
+	editor._apply_change()
 	assert(editor.mod.patches.clubs[0].name == "Editor Club")
 	assert(editor._editable(good))
 	app.queue_free(); await process_frame

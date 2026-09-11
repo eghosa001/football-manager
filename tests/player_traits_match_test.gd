@@ -1,12 +1,12 @@
 extends SceneTree
 
-const Engine = preload("res://simulation/match/continuous_spatial_engine_v4.gd")
+const ContinuousEngineClass = preload("res://simulation/match/continuous_spatial_engine_v4.gd")
 
 var checks := 0
 var failures := 0
 
 func _init() -> void:
-	var engine = Engine.new()
+	var engine = ContinuousEngineClass.new()
 	var home := _lineup("home")
 	var away := _lineup("away")
 	home[10]["traits"] = ["tries_long_shots","runs_with_ball","cuts_inside","beats_offside_trap"]
@@ -23,7 +23,7 @@ func _init() -> void:
 	_expect(trait_events > 0,"Trait-bearing attacker must participate in continuous match events")
 	_expect(tagged > 0,"Learned player traits must change and tag at least one decision across deterministic seed sample")
 	var replay_a := engine.simulate_continuous(home,away,96999,{}, {},500,{},25)
-	var replay_b := Engine.new().simulate_continuous(home,away,96999,{}, {},500,{},25)
+	var replay_b := ContinuousEngineClass.new().simulate_continuous(home,away,96999,{}, {},500,{},25)
 	_expect(replay_a == replay_b,"Trait-aware match decisions must remain deterministic")
 	if failures==0:
 		print("[TEST] PLAYER TRAITS MATCH PASS — %d checks"%checks); quit(0)

@@ -19,6 +19,9 @@ func _init() -> void:
 	print("[TEST] RC2 world initialized")
 	var command = CommandClass.new()
 	var club_id := String(session.managed_club_id)
+	# Integration coverage uses the fast persistent engine; continuous 10 Hz
+	# simulation has its own dedicated regression/calibration tests.
+	session.world["detailed_match_model"] = "persistent_action_v2"
 
 	assert(command.set_tactic(session.world, club_id, "4-2-3-1", "positive", "high", "standard") == OK)
 	var club := _club(session.world, club_id)

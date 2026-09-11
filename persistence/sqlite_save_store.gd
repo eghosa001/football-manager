@@ -117,7 +117,7 @@ func _save_clubs(database, values: Array) -> bool:
 	for i in range(values.size()):
 		var v: Dictionary = values[i]
 		var id := _entity_id(v,"club",i)
-		var country := _nullable_existing_id(database,"countries",String(v.get("country_id","")))
+		var country: Variant = _nullable_existing_id(database,"countries",String(v.get("country_id","")))
 		if not bool(database.call("query_with_bindings","INSERT INTO clubs(id,country_id,name,reputation,cash,city_id,payload) VALUES(?,?,?,?,?,?,?);",[id,country,String(v.get("name",id)),clampf(float(v.get("reputation",50)),0.0,100.0),int(v.get("cash",0)),String(v.get("city_id","")),_encode(v)])): return false
 	return true
 
@@ -125,8 +125,8 @@ func _save_players(database, values: Array) -> bool:
 	for i in range(values.size()):
 		var v: Dictionary = values[i]
 		var id := _entity_id(v,"player",i)
-		var club := _nullable_existing_id(database,"clubs",String(v.get("club_id","")))
-		var country := _nullable_existing_id(database,"countries",String(v.get("country_id",v.get("nationality_id",""))))
+		var club: Variant = _nullable_existing_id(database,"clubs",String(v.get("club_id","")))
+		var country: Variant = _nullable_existing_id(database,"countries",String(v.get("country_id",v.get("nationality_id",""))))
 		var name := String(v.get("name",String(v.get("first_name",""))+" "+String(v.get("last_name","")))).strip_edges()
 		if name == "": name = id
 		if not bool(database.call("query_with_bindings","INSERT INTO players(id,club_id,country_id,name,age,position,current_ability,potential,retired,payload) VALUES(?,?,?,?,?,?,?,?,?,?);",[id,club,country,name,clampi(int(v.get("age",18)),14,60),String(v.get("position","")),clampi(int(v.get("current_ability",1)),0,200),clampi(int(v.get("potential",v.get("current_ability",1))),0,200),1 if bool(v.get("retired",false)) else 0,_encode(v)])): return false
@@ -136,7 +136,7 @@ func _save_competitions(database, values: Array) -> bool:
 	for i in range(values.size()):
 		var v: Dictionary = values[i]
 		var id := _entity_id(v,"competition",i)
-		var country := _nullable_existing_id(database,"countries",String(v.get("country_id","")))
+		var country: Variant = _nullable_existing_id(database,"countries",String(v.get("country_id","")))
 		if not bool(database.call("query_with_bindings","INSERT INTO competitions(id,country_id,name,type,season_year,payload) VALUES(?,?,?,?,?,?);",[id,country,String(v.get("name",id)),String(v.get("type","league")),int(v.get("season_year",0)),_encode(v)])): return false
 	return true
 
@@ -154,7 +154,7 @@ func _save_fixtures(database, values: Array) -> bool:
 		var v: Dictionary = values[i]
 		var home := String(v.get("home_club_id",v.get("home_id",""))); var away := String(v.get("away_club_id",v.get("away_id","")))
 		if home == "" or away == "" or home == away or not _id_exists(database,"clubs",home) or not _id_exists(database,"clubs",away): continue
-		var competition := _nullable_existing_id(database,"competitions",String(v.get("competition_id","")))
+		var competition: Variant = _nullable_existing_id(database,"competitions",String(v.get("competition_id","")))
 		var id := _entity_id(v,"fixture",i)
 		if not bool(database.call("query_with_bindings","INSERT INTO fixtures(id,competition_id,home_club_id,away_club_id,match_date,played,home_goals,away_goals,payload) VALUES(?,?,?,?,?,?,?,?,?);",[id,competition,home,away,String(v.get("date",v.get("match_date",""))),1 if bool(v.get("played",false)) else 0,maxi(0,int(v.get("home_goals",0))),maxi(0,int(v.get("away_goals",0))),_encode(v)])): return false
 	return true

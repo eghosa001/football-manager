@@ -66,12 +66,12 @@ func _test_mod_v3() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 func _test_lineup_assignments() -> void:
-	var world := WorldGenerator.new().create_world(72001, 1, 4, 20)
-	var club := world.clubs[0]
+	var world: Dictionary = WorldGenerator.new().create_world(72001, 1, 4, 20)
+	var club: Dictionary = world.clubs[0]
 	var manager = TacticsManager.new()
 	club["tactic"] = manager.create_tactic("4-3-3")
 	var service = LineupAssignments.new()
-	var slot_keys := preload("res://application/career/tactics_actions.gd").new().slot_keys(club.tactic)
+	var slot_keys: Array = preload("res://application/career/tactics_actions.gd").new().slot_keys(club.tactic)
 	var assigned_player: Dictionary = {}
 	for player in world.players:
 		if String(player.club_id) == String(club.id) and String(player.position) != "GK":
@@ -81,7 +81,7 @@ func _test_lineup_assignments() -> void:
 	var slot := String(slot_keys[1])
 	_expect(service.assign_player(world, String(club.id), slot, String(assigned_player.id)) == OK, "Starter can be assigned to a tactical slot")
 	_expect(service.set_instruction(world, String(club.id), slot, "shooting", "shoot_more") == OK, "Individual instruction can be stored")
-	var lineup := service.resolve(world.players, String(club.id), club.tactic)
+	var lineup: Array = service.resolve(world.players, String(club.id), club.tactic)
 	_expect(lineup.size() == 11, "Resolved assigned lineup must contain eleven starters")
 	var found := false
 	for player in lineup:
@@ -92,22 +92,26 @@ func _test_lineup_assignments() -> void:
 	_expect(found, "Explicit assigned starter must be present in resolved lineup")
 
 func _test_simulation_tiers() -> void:
-	var world := WorldGenerator.new().create_world(73001, 2, 4, 20)
-	var managed := world.clubs[0]
-	var same_country_opponent := world.clubs[1]
+	var world: Dictionary = WorldGenerator.new().create_world(73001, 2, 4, 20)
+	var managed: Dictionary = world.clubs[0]
+	var same_country_opponent: Dictionary = world.clubs[1]
 	var distant: Dictionary = {}
 	for club in world.clubs:
 		if String(club.country_id) != String(managed.country_id):
 			distant = club
 			break
 	var policy = SimulationTierPolicy.new()
-	var managed_comp := _competition_for_club(world, String(managed.id))
+	var managed_comp: Dictionary = _competition_for_club(world, String(managed.id))
 	_expect(policy.tier_for_fixture(world, managed, same_country_opponent, String(managed.id), String(managed_comp.id)) == SimulationTierPolicy.USER_LEAGUE, "Managed fixture must use tier 1")
-	var same_comp := _competition_for_club(world, String(same_country_opponent.id))
-	var other_same := _other_club(world, String(same_country_opponent.country_id), String(same_country_opponent.id))
+	var same_comp: Dictionary = _competition_for_club(world, String(same_country_opponent.id))
+	var other_same: Dictionary = {}
+	for candidate in world.clubs:
+		if String(candidate.country_id) == String(same_country_opponent.country_id) and String(candidate.id) != String(same_country_opponent.id) and String(candidate.id) != String(managed.id):
+			other_same = candidate
+			break
 	_expect(policy.tier_for_fixture(world, same_country_opponent, other_same, String(managed.id), String(same_comp.id)) == SimulationTierPolicy.DETAILED_LEAGUE, "Unmanaged fixture in managed country must use tier 2")
-	var distant_comp := _competition_for_club(world, String(distant.id))
-	var distant_other := _other_club(world, String(distant.country_id), String(distant.id))
+	var distant_comp: Dictionary = _competition_for_club(world, String(distant.id))
+	var distant_other: Dictionary = _other_club(world, String(distant.country_id), String(distant.id))
 	_expect(policy.tier_for_fixture(world, distant, distant_other, String(managed.id), String(distant_comp.id)) == SimulationTierPolicy.BACKGROUND_LEAGUE, "Distant active fixture must use tier 3")
 	distant_comp["active"] = false
 	_expect(policy.tier_for_fixture(world, distant, distant_other, String(managed.id), String(distant_comp.id)) == SimulationTierPolicy.INACTIVE_WORLD, "Inactive competition must use tier 4")

@@ -88,7 +88,7 @@ func _complete_match_analysis(tabs: TabContainer) -> void:
 	if session == null or not session.world.has("last_managed_match"):
 		return
 	var box := _first_vbox(analysis_tab)
-	var viewer := _find_match_viewer(analysis_tab)
+	var viewer: Node = _find_match_viewer(analysis_tab)
 	if box == null or viewer == null:
 		return
 	tabs.set_meta("completion_analysis", true)

@@ -16,7 +16,7 @@ func _should_retire(player: Dictionary, seed: int) -> bool:
 		return false
 	var ability := float(player.get("current_ability",50))
 	var fitness := float(player.get("fitness",80))
-	var injuries := player.get("injury_history",[]).size()
+	var injuries: int = int(player.get("injury_history", []).size())
 	var injured_days := float(player.get("injured_days",0))
 	var hidden: Dictionary = player.get("hidden_attributes",{})
 	var professionalism := float(hidden.get("professionalism",50))

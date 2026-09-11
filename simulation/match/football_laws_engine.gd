@@ -29,12 +29,12 @@ func process_event(event: Dictionary, home: Array, away: Array, home_tactic: Dic
 		var control := _quality(receiver, ["first_touch", "technique", "composure"])
 		var weak_foot := clampf(float(passer.get("weak_foot", 10)) / 20.0, 0.2, 1.0)
 		var pressure := _pressure(defend, passer)
-		var execution := clampf(pass_quality * float(weather.get("pass_factor", 1.0)) * lerpf(0.82, 1.02, weak_foot) * (1.0 - pressure * 0.16), 0.05, 0.99)
+		var execution := clampf((0.56 + pass_quality * 0.38) * float(weather.get("pass_factor", 1.0)) * lerpf(0.90, 1.02, weak_foot) * (1.0 - pressure * 0.08), 0.30, 0.96)
 		if SeededRngClass.unit_for(seed, 92000 + int(e.get("tick", 0))) > execution:
 			e["success"] = false
 			e["outcome"] = "misplaced"
 		elif not receiver.is_empty():
-			var first_touch := clampf(control * float(weather.get("touch_factor", 1.0)) * (1.0 - pressure * 0.10), 0.08, 0.99)
+			var first_touch := clampf((0.66 + control * 0.30) * float(weather.get("touch_factor", 1.0)) * (1.0 - pressure * 0.05), 0.45, 0.98)
 			if SeededRngClass.unit_for(seed, 93000 + int(e.get("tick", 0))) > first_touch:
 				e["success"] = false
 				e["outcome"] = "poor_first_touch"
@@ -75,9 +75,9 @@ func injury_from_event(event: Dictionary, lineup: Array, weather: Dictionary, se
 	if player.is_empty():
 		return {}
 	var fitness := _quality(player, ["natural_fitness", "stamina", "strength"])
-	var base := 0.0015 + (1.0 - fitness) * 0.004
+	var base := 0.00012 + (1.0 - fitness) * 0.00045
 	if String(event.get("type", "")) == "foul":
-		base *= 2.5
+		base *= 3.0
 	if String(weather.get("kind", "clear")) == "heavy_rain":
 		base *= 1.35
 	if SeededRngClass.unit_for(seed, 97000 + int(event.get("tick", event.get("minute", 0)))) >= base:
@@ -112,7 +112,7 @@ func _maybe_foul(event: Dictionary, attack: Array, defend: Array, seed: int) -> 
 	var tackling := _quality(defender, ["tackling", "decisions", "anticipation"])
 	var aggression := _quality(defender, ["aggression", "bravery"])
 	var dribbling := _quality(ball_player, ["dribbling", "agility", "balance"])
-	var foul_chance := clampf(0.015 + aggression * 0.035 + dribbling * 0.018 - tackling * 0.025, 0.004, 0.085)
+	var foul_chance := clampf(0.0035 + aggression * 0.012 + dribbling * 0.007 - tackling * 0.009, 0.0015, 0.025)
 	if SeededRngClass.unit_for(seed, 95000 + int(event.get("tick", minute))) >= foul_chance:
 		return []
 	var dangerous := aggression > 0.72 and SeededRngClass.unit_for(seed, 95100 + minute) < 0.22
@@ -122,7 +122,7 @@ func _maybe_foul(event: Dictionary, attack: Array, defend: Array, seed: int) -> 
 	var card := ""
 	if dangerous or denial:
 		card = "red" if dangerous and SeededRngClass.unit_for(seed, 95300 + minute) < 0.16 else "yellow"
-	elif SeededRngClass.unit_for(seed, 95400 + minute) < 0.33:
+	elif SeededRngClass.unit_for(seed, 95400 + minute) < 0.22:
 		card = "yellow"
 	var result: Array = [{"type":"foul","side":"away" if side == "home" else "home","player_id":String(defender.get("id", "")),"victim_id":String(ball_player.get("id", "")),"minute":minute,"advantage":advantage,"restart":"penalty" if penalty else "direct_free_kick","success":false}]
 	if penalty:
@@ -186,6 +186,7 @@ func _quality(player: Dictionary, keys: Array) -> float:
 	var count := 0
 	for key in keys:
 		if attrs.has(key):
-			total += clampf(float(attrs.get(key, 10)) / 20.0, 0.0, 1.0)
+			var raw := float(attrs.get(key, 10))
+			total += clampf(raw / (20.0 if raw <= 20.0 else 100.0), 0.0, 1.0)
 			count += 1
-	return total / float(count) if count > 0 else clampf(float(player.get("current_ability", 100)) / 200.0, 0.0, 1.0)
+	return total / float(count) if count > 0 else clampf(float(player.get("current_ability", 50)) / 100.0, 0.0, 1.0)

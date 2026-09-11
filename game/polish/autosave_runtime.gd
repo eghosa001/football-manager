@@ -27,7 +27,7 @@ func _scan() -> void:
 		return
 	var desired := _settings_store.load(SETTINGS_PATH)
 	var session = app.get("session")
-	var tabs := _career_tabs(app)
+	var tabs: TabContainer = _career_tabs(app)
 	# career_app.gd predates save policies and performs its own interval save when
 	# settings.autosave is true. Disable only that in-memory legacy switch while
 	# a career screen is active; the persisted preference remains the authority
@@ -223,7 +223,7 @@ func _find_career_app(node: Node):
 
 func _career_tabs(app: Node):
 	for child in app.get_children():
-		var tabs := _find_tabs(child)
+		var tabs: TabContainer = _find_tabs(child)
 		if tabs != null:
 			return tabs
 	return null

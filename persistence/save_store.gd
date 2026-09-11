@@ -13,7 +13,7 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 		"history": history,
 	}
 	var raw: PackedByteArray = var_to_bytes(payload)
-	var checksum := int(raw.hash())
+	var checksum := int(hash(raw))
 	var temp_path := path + ".tmp"
 	var backup_path := path + ".bak"
 	var temp_global := ProjectSettings.globalize_path(temp_path)
@@ -81,7 +81,7 @@ func _load_path(path: String) -> Dictionary:
 	file.close()
 	if raw.size() != payload_length:
 		return {}
-	if expected_checksum >= 0 and int(raw.hash()) != expected_checksum:
+	if expected_checksum >= 0 and int(hash(raw)) != expected_checksum:
 		return {}
 	var parsed = bytes_to_var(raw)
 	if typeof(parsed) != TYPE_DICTIONARY:

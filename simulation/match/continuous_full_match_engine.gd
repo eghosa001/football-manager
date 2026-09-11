@@ -12,9 +12,10 @@ var _tactics = TacticsManagerClass.new()
 var _lineup_resolver = LineupResolverClass.new()
 var _laws = LawsClass.new()
 
-func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int) -> Dictionary:
-	var home_tactic: Dictionary = home_club.get("tactic", _tactics.create_tactic("4-3-3")).duplicate(true)
-	var away_tactic: Dictionary = away_club.get("tactic", _tactics.create_tactic("4-3-3")).duplicate(true)
+func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, capture_frames: bool = true) -> Dictionary:
+	var tactics = TacticsManagerClass.new()
+	var home_tactic: Dictionary = home_club.get("tactic", tactics.create_tactic("4-3-3")).duplicate(true)
+	var away_tactic: Dictionary = away_club.get("tactic", tactics.create_tactic("4-3-3")).duplicate(true)
 	var home: Array = _lineup_resolver.resolve(players, String(home_club.id), home_tactic).duplicate(true)
 	var away: Array = _lineup_resolver.resolve(players, String(away_club.id), away_tactic).duplicate(true)
 	if home.size() < 11 or away.size() < 11:
@@ -42,7 +43,8 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 			_adapt_tactic("away", away_tactic, events, int(segment.start))
 			_maybe_state_substitution("home",home,benches.home,participants,substitutions,events,int(segment.start),previous_state,seed+segment_index*7001)
 			_maybe_state_substitution("away",away,benches.away,participants,substitutions,events,int(segment.start),previous_state,seed+segment_index*7003)
-		var run := _continuous.simulate_continuous(home,away,seed+segment_index*100003,home_tactic,away_tactic,int(segment.ticks),previous_state,15)
+		var frame_stride := 15 if capture_frames else int(segment.ticks)
+		var run := _continuous.simulate_continuous(home,away,seed+segment_index*100003,home_tactic,away_tactic,int(segment.ticks),previous_state,frame_stride)
 		var duration := float(segment.end)-float(segment.start)
 		for frame in run.frames:
 			var copy: Dictionary = frame.duplicate(true)
@@ -77,7 +79,7 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	return {
 		"home_goals":int(goals.home),"away_goals":int(goals.away),"events":events,"stats":stats,
 		"lineups":starters,"participants":participants,"final_lineups":{"home":_ids(home),"away":_ids(away)},"substitutions":substitutions,
-		"spatial":{"pitch_length":105.0,"pitch_width":68.0,"frames":frames,"model":"continuous_10hz_sampled","physics_hz":10,"frame_stride":15},
+		"spatial":{"pitch_length":105.0,"pitch_width":68.0,"frames":frames,"model":"continuous_10hz_sampled","physics_hz":10,"frame_stride":15 if capture_frames else 9000,"capture_frames":capture_frames},
 		"tactics":{"home":home_tactic.duplicate(true),"away":away_tactic.duplicate(true)},"seed":seed,"model":"continuous_full_match_v2",
 		"weather":weather,"discipline":discipline
 	}

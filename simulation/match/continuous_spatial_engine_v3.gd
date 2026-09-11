@@ -42,7 +42,7 @@ func simulate_continuous(home_lineup: Array, away_lineup: Array, seed: int, home
 			events.append({"type":"interception","side":interceptor.side,"player_id":interceptor.id,"tick":tick,"success":true})
 		elif SpatialStateClass.distance(ball,ball_target)<1.2:
 			var profile:Dictionary=home_profile if possession=="home" else away_profile
-			var interval:=maxi(4,int(roundi(float(profile.decision_interval)*TICK_HZ*0.5)))
+			var interval:=maxi(4,int(roundi(float(profile.decision_interval)*TICK_HZ*2.0)))
 			if tick%interval==0:
 				var previous_owner:=ball_owner.duplicate(true)
 				var outcome:=_decide_action(ball,ball_owner,possession,home_lineup,away_lineup,home_pos,away_pos,home_profile,away_profile,loads,seed,tick)
@@ -51,8 +51,23 @@ func simulate_continuous(home_lineup: Array, away_lineup: Array, seed: int, home
 				if event_type!="":
 					var event:=outcome.duplicate(true); event.erase("event"); event.erase("possession"); event.erase("owner_id"); event.erase("target"); event["type"]=event_type; event["side"]=String(previous_owner.side); event["player_id"]=String(previous_owner.id); event["tick"]=tick
 					events.append(event)
-					if event_type=="shot": shots+=1
-					elif event_type=="goal": shots+=1; goals+=1
+					if event_type=="shot":
+						shots+=1
+						var defending_side := "away" if String(previous_owner.side)=="home" else "home"
+						var defending_lineup: Array = away_lineup if defending_side=="away" else home_lineup
+						possession=defending_side
+						ball_owner={"side":defending_side,"id":String(defending_lineup[0].id) if not defending_lineup.is_empty() else ""}
+						ball={"x":PITCH_LENGTH-6.0 if defending_side=="away" else 6.0,"y":PITCH_WIDTH*0.5}
+						ball_target=ball.duplicate(true)
+					elif event_type=="goal":
+						shots+=1; goals+=1
+						var kickoff_side := "away" if String(previous_owner.side)=="home" else "home"
+						var kickoff_lineup: Array = away_lineup if kickoff_side=="away" else home_lineup
+						possession=kickoff_side
+						var kickoff_index := mini(6,kickoff_lineup.size()-1)
+						ball_owner={"side":kickoff_side,"id":String(kickoff_lineup[kickoff_index].id) if kickoff_index>=0 and not kickoff_lineup.is_empty() else ""}
+						ball={"x":PITCH_LENGTH*0.5,"y":PITCH_WIDTH*0.5}
+						ball_target=ball.duplicate(true)
 		if tick%stride==0 or tick==ticks-1:
 			frames.append({"tick":tick,"ball":ball.duplicate(true),"home":_copy_positions(home_pos),"away":_copy_positions(away_pos),"possession":possession,"home_loads":_copy_loads({"home":loads.home}).home,"away_loads":_copy_loads({"away":loads.away}).away})
 	var summary:={"ticks":ticks,"shots":shots,"goals":goals,"interceptions":interceptions,"events":events.size(),"home_distance":_total_distance(loads.home),"away_distance":_total_distance(loads.away)}
@@ -71,6 +86,7 @@ func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionar
 		var anchor: Dictionary = _role_anchor(player, i, profile)
 		var target := anchor.duplicate(true)
 		var instruction: Dictionary = player.get("match_instruction", {})
+		var press_trigger: float = float(profile.press_trigger)
 		if in_possession:
 			target = _blend(target, {"x": float(anchor.x) + (6.0 if _is_home_side(own, pos) else -6.0), "y": anchor.y}, 0.35)
 			match String(instruction.get("width", "normal")):
@@ -79,7 +95,6 @@ func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionar
 			if marking.has(id):
 				target = _blend(target, ball, 0.15)
 		else:
-			var press_trigger := float(profile.press_trigger)
 			var work_rate := _quality(player,["work_rate","stamina","anticipation"])
 			press_trigger *= lerpf(0.82,1.18,work_rate)
 			match String(instruction.get("pressing", "normal")):
@@ -120,8 +135,6 @@ func _decide_action(ball: Dictionary, owner: Dictionary, possession: String, hom
 	match String(instruction.get("risk", "normal")):
 		"take_more_risks": active_profile.directness = clampf(float(active_profile.directness) + 0.22, 0.0, 1.5)
 		"take_fewer_risks": active_profile.directness = clampf(float(active_profile.directness) - 0.22, 0.0, 1.5)
-	# Better decision-makers can execute a slightly more progressive plan without
-	# turning low-decision players into purely random agents.
 	active_profile.directness = clampf(float(active_profile.directness) + (decision_quality-0.5)*0.14,0.0,1.5)
 	var outcome: Dictionary = super._decide_action(ball,owner,possession,home_lineup,away_lineup,home_pos,away_pos,home_adjusted,away_adjusted,loads,seed,tick)
 	var event_type := String(outcome.get("event", ""))

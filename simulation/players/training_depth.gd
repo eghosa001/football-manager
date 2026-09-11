@@ -43,13 +43,13 @@ func set_position_training(player: Dictionary, position: String) -> Error:
 	player["position_training"] = position
 	return OK
 
-func set_trait_development(player: Dictionary, trait: String) -> Error:
+func set_trait_development(player: Dictionary, trait_name: String) -> Error:
 	ensure_player(player)
-	if trait not in TRAITS:
+	if trait_name not in TRAITS:
 		return ERR_INVALID_PARAMETER
-	if trait in player.traits:
+	if trait_name in player.traits:
 		return ERR_ALREADY_EXISTS
-	player["trait_training"] = trait
+	player["trait_training"] = trait_name
 	return OK
 
 func train_role(player: Dictionary, role: String, sessions: int) -> Dictionary:
@@ -91,16 +91,16 @@ func apply_week(player: Dictionary, sessions: int, coaching_quality: float, faci
 		position_gain = after_pos - before_pos
 
 	var learned_trait := ""
-	var trait := String(player.get("trait_training", ""))
-	if trait in TRAITS and trait not in player.traits and effective_sessions > 0:
-		var progress := float(player.trait_training_progress.get(trait, 0.0))
+	var trait_name := String(player.get("trait_training", ""))
+	if trait_name in TRAITS and trait_name not in player.traits and effective_sessions > 0:
+		var progress := float(player.trait_training_progress.get(trait_name, 0.0))
 		progress += float(effective_sessions) * (2.0 + training_factor * 2.5)
-		player.trait_training_progress[trait] = clampf(progress, 0.0, 100.0)
+		player.trait_training_progress[trait_name] = clampf(progress, 0.0, 100.0)
 		if progress >= 100.0:
-			player.traits.append(trait)
-			player.trait_training_progress.erase(trait)
+			player.traits.append(trait_name)
+			player.trait_training_progress.erase(trait_name)
 			player.trait_training = ""
-			learned_trait = trait
+			learned_trait = trait_name
 	return {"focus_gain":focus_gain,"role_gain":role_gain,"position_gain":position_gain,"learned_trait":learned_trait}
 
 func mentor(mentor_player: Dictionary, youth: Dictionary, sessions: int) -> Dictionary:

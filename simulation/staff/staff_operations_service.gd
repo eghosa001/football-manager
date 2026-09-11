@@ -19,7 +19,7 @@ func assign(world: Dictionary, club_id: String, staff_id: String, responsibiliti
 func workload(world: Dictionary, staff_id: String) -> Dictionary:
 	ensure_world(world)
 	var assignment: Dictionary = world.staff_assignments.get(staff_id,{"responsibilities":[]})
-	var count := assignment.get("responsibilities",[]).size()
+	var count: int = int(assignment.get("responsibilities", []).size())
 	var factor := clampf(1.0-float(maxi(0,count-2))*0.12,0.45,1.0)
 	return {"staff_id":staff_id,"responsibility_count":count,"effectiveness":factor,"overloaded":count>4}
 

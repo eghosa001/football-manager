@@ -25,7 +25,7 @@ func ensure_club(club: Dictionary) -> void:
 		club.tactic["familiarity_axes"] = familiarity
 		club.tactic["familiarity"] = _familiarity_average(familiarity)
 
-func run_week(world: Dictionary, club_id: String, seed: int) -> Dictionary:
+func run_week(world: Dictionary, club_id: String, seed: int, club_players: Array = [], club_staff: Array = []) -> Dictionary:
 	var club := _club(world.get("clubs", []), club_id)
 	if club.is_empty():
 		return {"error":ERR_DOES_NOT_EXIST}
@@ -36,7 +36,8 @@ func run_week(world: Dictionary, club_id: String, seed: int) -> Dictionary:
 	var individual_focus_gains := 0
 	var learned_traits: Array = []
 	var ceiling_changes := 0
-	var coaching := _coaching_quality(world.get("staff", []), club_id)
+	var staff_source: Array = club_staff if not club_staff.is_empty() else world.get("staff", [])
+	var coaching := _coaching_quality(staff_source, club_id)
 	var facilities := float(club.get("training_facilities", 50))
 	var mix := _session_mix(club.training_schedule)
 	var work_days := int(mix.work_days)
@@ -45,7 +46,8 @@ func run_week(world: Dictionary, club_id: String, seed: int) -> Dictionary:
 	var workload_multiplier := float(mix.workload)
 	var morale_delta := int(mix.morale_delta)
 	var depth = TrainingDepthClass.new()
-	for player in world.get("players", []):
+	var players_source: Array = club_players if not club_players.is_empty() else world.get("players", [])
+	for player in players_source:
 		if String(player.get("club_id", "")) != club_id or bool(player.get("retired", false)):
 			continue
 		depth.ensure_player(player)
@@ -68,7 +70,7 @@ func run_week(world: Dictionary, club_id: String, seed: int) -> Dictionary:
 			player.current_ability = mini(int(player.development_ceiling),int(player.get("current_ability",50))+gain)
 			_apply_session_attribute_bias(player,mix,gain)
 			improved += 1
-		var individual := depth.apply_week(player,work_days,coaching,facilities,seed+_stable_key(String(player.get("id",""))))
+		var individual: Dictionary = depth.apply_week(player,work_days,coaching,facilities,seed+_stable_key(String(player.get("id",""))))
 		individual_focus_gains += int(individual.get("focus_gain",0))
 		if String(individual.get("learned_trait","")) != "":
 			learned_traits.append({"player_id":String(player.get("id","")),"trait":String(individual.learned_trait)})

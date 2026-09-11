@@ -105,7 +105,7 @@ func _apply_match_injuries(world: Dictionary, fixture: Dictionary, result: Dicti
 				continue
 			var load: Dictionary = loads.get(String(player_id), {})
 			var energy := clampf(float(load.get("energy",1.0)),0.0,1.0)
-			var fatigue := maxf(float(player.get("fatigue",0)), (1.0-energy)*100.0, 100.0-float(player.get("fitness",100)))
+			var fatigue := maxf(maxf(float(player.get("fatigue", 0)), (1.0 - energy) * 100.0), 100.0 - float(player.get("fitness", 100)))
 			var context := {"fatigue":fatigue,"match_intensity":match_intensity,"training_load":0.0,"surface":surface,"base_risk":0.0035}
 			var injury := _medical.maybe_suffer_injury(player, match_seed + _stable_key(String(player_id)), "match", context)
 			if not bool(injury.get("injured",false)):
