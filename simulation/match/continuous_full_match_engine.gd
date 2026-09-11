@@ -3,16 +3,18 @@ extends RefCounted
 
 const ContinuousClass = preload("res://simulation/match/continuous_spatial_engine_v3.gd")
 const TacticsManagerClass = preload("res://simulation/tactics/tactics_manager.gd")
+const LineupResolverClass = preload("res://application/career/lineup_assignment_service.gd")
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
 
 var _continuous = ContinuousClass.new()
 var _tactics = TacticsManagerClass.new()
+var _lineup_resolver = LineupResolverClass.new()
 
 func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int) -> Dictionary:
 	var home_tactic: Dictionary = home_club.get("tactic", _tactics.create_tactic("4-3-3"))
 	var away_tactic: Dictionary = away_club.get("tactic", _tactics.create_tactic("4-3-3"))
-	var home: Array = _tactics.select_lineup(players, String(home_club.id), home_tactic).duplicate(true)
-	var away: Array = _tactics.select_lineup(players, String(away_club.id), away_tactic).duplicate(true)
+	var home: Array = _lineup_resolver.resolve(players, String(home_club.id), home_tactic).duplicate(true)
+	var away: Array = _lineup_resolver.resolve(players, String(away_club.id), away_tactic).duplicate(true)
 	if home.size() < 11 or away.size() < 11:
 		return {"error":ERR_UNAVAILABLE,"home_goals":0,"away_goals":0,"events":[],"stats":{}}
 	var starters := {"home":_ids(home),"away":_ids(away)}
@@ -110,7 +112,7 @@ func _bench(players: Array, club_id: String, lineup: Array) -> Array:
 	for player in lineup: ids[String(player.id)] = true
 	var bench: Array = []
 	for player in players:
-		if String(player.get("club_id","")) == club_id and not bool(player.get("retired",false)) and not ids.has(String(player.id)): bench.append(player)
+		if String(player.get("club_id","")) == club_id and not bool(player.get("retired",false)) and int(player.get("injured_days",0)) <= 0 and not ids.has(String(player.id)): bench.append(player)
 	bench.sort_custom(func(a: Dictionary,b: Dictionary):
 		if int(a.get("current_ability",0)) == int(b.get("current_ability",0)): return String(a.id)<String(b.id)
 		return int(a.get("current_ability",0))>int(b.get("current_ability",0))
