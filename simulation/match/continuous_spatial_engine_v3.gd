@@ -80,6 +80,8 @@ func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionar
 				target = _blend(target, ball, 0.15)
 		else:
 			var press_trigger := float(profile.press_trigger)
+			var work_rate := _quality(player,["work_rate","stamina","anticipation"])
+			press_trigger *= lerpf(0.82,1.18,work_rate)
 			match String(instruction.get("pressing", "normal")):
 				"press_more": press_trigger *= 1.4
 				"press_less": press_trigger *= 0.65
@@ -89,11 +91,13 @@ func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionar
 			elif marking.has(id):
 				var aid: String = marking[id]
 				var mark_pos: Dictionary = _opp_position(opp, aid, pos)
-				target = _blend(anchor, mark_pos, 0.55)
+				target = _blend(anchor, mark_pos, lerpf(0.42,0.68,_quality(player,["marking","positioning","anticipation"])))
 			else:
 				target = _blend(anchor, ball, 0.25)
 		var energy := PhysicalModelClass.energy_factor(loads.get(id, {"energy": 1.0}))
-		var speed: float = float(profile.closing_speed) * (0.6 + 0.4 * energy) * float(profile.execution)
+		var athleticism := _quality(player,["pace","acceleration","agility"])
+		var endurance := _quality(player,["stamina","natural_fitness"])
+		var speed: float = float(profile.closing_speed) * lerpf(0.78,1.18,athleticism) * (0.55 + 0.45 * energy) * lerpf(0.92,1.06,endurance) * float(profile.execution)
 		var step := speed * dt
 		var before := pos.duplicate(true)
 		var moved: Dictionary = SpatialStateClass.advance(pos, target, step)
@@ -104,21 +108,39 @@ func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionar
 
 func _decide_action(ball: Dictionary, owner: Dictionary, possession: String, home_lineup: Array, away_lineup: Array, home_pos: Dictionary, away_pos: Dictionary, home_profile: Dictionary, away_profile: Dictionary, loads: Dictionary, seed: int, tick: int) -> Dictionary:
 	var team: Array = home_lineup if possession == "home" else away_lineup
+	var opposition: Array = away_lineup if possession == "home" else home_lineup
 	var owner_player := _player_by_id(team, String(owner.get("id", "")))
 	var instruction: Dictionary = owner_player.get("match_instruction", {})
 	var home_adjusted := home_profile.duplicate(true)
 	var away_adjusted := away_profile.duplicate(true)
 	var active_profile: Dictionary = home_adjusted if possession == "home" else away_adjusted
+	var decision_quality := _quality(owner_player,["decisions","vision","composure"])
+	var passing_quality := _quality(owner_player,["passing","technique","vision"])
+	active_profile.execution = clampf(float(active_profile.execution) * lerpf(0.82,1.12,(decision_quality+passing_quality)*0.5),0.55,1.35)
 	match String(instruction.get("risk", "normal")):
 		"take_more_risks": active_profile.directness = clampf(float(active_profile.directness) + 0.22, 0.0, 1.5)
 		"take_fewer_risks": active_profile.directness = clampf(float(active_profile.directness) - 0.22, 0.0, 1.5)
+	# Better decision-makers can execute a slightly more progressive plan without
+	# turning low-decision players into purely random agents.
+	active_profile.directness = clampf(float(active_profile.directness) + (decision_quality-0.5)*0.14,0.0,1.5)
 	var outcome: Dictionary = super._decide_action(ball,owner,possession,home_lineup,away_lineup,home_pos,away_pos,home_adjusted,away_adjusted,loads,seed,tick)
 	var event_type := String(outcome.get("event", ""))
+	var finishing := _quality(owner_player,["finishing","composure","technique"])
+	var goalkeeper: Dictionary = opposition[0] if not opposition.is_empty() else {}
+	var keeper_quality := _quality(goalkeeper,["reflexes","one_on_ones","goalkeeper_positioning","handling"])
+	if event_type in ["shot","goal"]:
+		var base_xg := float(outcome.get("xg",0.05))
+		var adjusted_xg := clampf(base_xg*lerpf(0.72,1.34,finishing),0.01,0.72)
+		outcome["xg"] = adjusted_xg
+		var conversion := clampf(adjusted_xg*lerpf(1.16,0.76,keeper_quality),0.008,0.72)
+		var scored := SeededRngClass.unit_for(seed,27000+tick) < conversion
+		outcome["event"] = "goal" if scored else "shot"
+		event_type = String(outcome.event)
 	var shooting := String(instruction.get("shooting", "normal"))
 	if shooting == "shoot_less" and event_type in ["shot", "goal"] and SeededRngClass.unit_for(seed, 25000 + tick) < 0.7:
 		var direction := 1.0 if possession == "home" else -1.0
 		outcome["event"] = "dribble"
-		outcome["target"] = SpatialStateClass.clamp_position({"x":float(ball.x)+direction*4.0,"y":float(ball.y)})
+		outcome["target"] = SpatialStateClass.clamp_position({"x":float(ball.x)+direction*lerpf(3.0,6.5,_quality(owner_player,["dribbling","pace","balance"])),"y":float(ball.y)})
 		outcome["owner_id"] = String(owner.get("id", ""))
 		outcome["success"] = true
 		outcome.erase("xg")
@@ -127,8 +149,8 @@ func _decide_action(ball: Dictionary, owner: Dictionary, possession: String, hom
 		var goal_x := PITCH_LENGTH if possession == "home" else 0.0
 		var dist_goal := absf(goal_x - float(ball.x))
 		if dist_goal < 34.0 and SeededRngClass.unit_for(seed, 26000 + tick) < 0.28:
-			var xg := clampf(0.34 - dist_goal / 120.0, 0.025, 0.28) * float(active_profile.execution)
-			var scored := SeededRngClass.unit_for(seed, 26100 + tick) < xg
+			var xg := clampf((0.34 - dist_goal / 120.0) * float(active_profile.execution) * lerpf(0.72,1.34,finishing), 0.015, 0.46)
+			var scored := SeededRngClass.unit_for(seed, 26100 + tick) < xg*lerpf(1.16,0.76,keeper_quality)
 			outcome = {"possession":possession,"owner_id":String(owner.get("id", "")),"target":{"x":goal_x,"y":PITCH_WIDTH*0.5},"event":"goal" if scored else "shot","xg":xg,"outcome":"goal" if scored else "missed","success":scored}
 	if String(outcome.get("event",""))=="":
 		var next_owner:=String(outcome.get("owner_id",owner.get("id","")))
@@ -139,7 +161,8 @@ func _decide_action(ball: Dictionary, owner: Dictionary, possession: String, hom
 	elif String(outcome.event)=="goal":
 		outcome["outcome"]="goal"; outcome["success"]=true
 	elif String(outcome.event)=="shot":
-		var saved:=SeededRngClass.unit_for(seed,24000+tick)<0.45
+		var save_chance:=clampf(0.18+keeper_quality*0.52-finishing*0.16,0.10,0.72)
+		var saved:=SeededRngClass.unit_for(seed,24000+tick)<save_chance
 		outcome["outcome"]="saved" if saved else "missed"; outcome["success"]=false
 	return outcome
 
@@ -148,3 +171,22 @@ func _player_by_id(team: Array, player_id: String) -> Dictionary:
 		if String(player.get("id", "")) == player_id:
 			return player
 	return {}
+
+func _quality(player: Dictionary, keys: Array) -> float:
+	if player.is_empty():
+		return 0.5
+	var attrs: Dictionary = player.get("attributes", player.get("player_attributes", {}))
+	var total := 0.0
+	var count := 0
+	for key in keys:
+		var value = attrs.get(String(key), player.get(String(key), null))
+		if value == null:
+			continue
+		var numeric := float(value)
+		if numeric <= 20.0:
+			numeric *= 5.0
+		total += clampf(numeric,1.0,100.0)
+		count += 1
+	if count == 0:
+		return clampf(float(player.get("current_ability",50))/100.0,0.15,1.0)
+	return clampf(total/float(count)/100.0,0.05,1.0)
