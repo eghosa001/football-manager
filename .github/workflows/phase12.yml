@@ -31,6 +31,18 @@ jobs:
       - name: Run Phase 12 continuous spatial acceptance
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/phase12_continuous_spatial_test.gd
+      - name: Run Phase 12 extended simulation
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/phase12_extended_test.gd
+      - name: Run spatial distribution gate
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/spatial_distribution_test.gd -TimeoutSeconds 1200
+      - name: Run tactical experiment gate
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/tactical_experiment_test.gd -TimeoutSeconds 1200
+      - name: Run career depth gate
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/career_depth_test.gd
       - name: Verify tests did not modify tracked source
         shell: powershell
         run: |
