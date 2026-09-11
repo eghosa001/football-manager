@@ -15,44 +15,28 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Godot 4.7.2
-        uses: chickensoft-games/setup-godot@v2
         with:
-          version: 4.7.2
-          use-dotnet: false
-          include-templates: true
-
-      - name: Verify engine
-        run: godot --version
+          fetch-depth: 1
+          clean: false
 
       - name: Import project
-        run: bash tools/test-headless.sh import
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
 
       - name: Run mobile export validation
-        run: bash tools/test-headless.sh tests/mobile_export_test.gd
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/mobile_export_test.gd
 
       - name: Check preset paths (no SDK required)
+        shell: powershell
         run: |
-          test -f export_presets.cfg
-          grep -q 'platform="Android"' export_presets.cfg
-          grep -q 'platform="iOS"' export_presets.cfg
-          grep -q 'platform="macOS"' export_presets.cfg
-          grep -q 'build/android/FootballDynasty.aab' export_presets.cfg
-          grep -q 'build/ios/FootballDynasty.xcodeproj' export_presets.cfg
-          grep -q 'build/macos/FootballDynasty.app' export_presets.cfg
-
-      - name: Attempt Android debug export (best effort)
-        continue-on-error: true
-        run: |
-          mkdir -p build/android
-          if godot --headless --path . --export-debug "Android" build/android/FootballDynasty-debug.apk; then
-            test -s build/android/FootballDynasty-debug.apk
-            echo "Android debug export succeeded"
-          else
-            echo "Android debug export skipped: SDK/keystore not configured in CI image"
-          fi
+          if (-not (Test-Path export_presets.cfg)) { throw 'export_presets.cfg missing' }
+          $text = Get-Content export_presets.cfg -Raw
+          foreach ($needle in @('platform="Android"', 'platform="iOS"', 'platform="macOS"', 'build/android/FootballDynasty.aab', 'build/ios/FootballDynasty.xcodeproj', 'build/macos/FootballDynasty.app')) {
+            if ($text -notmatch [regex]::Escape($needle)) { throw "missing $needle" }
+          }
