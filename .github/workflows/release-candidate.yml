@@ -63,20 +63,7 @@ jobs:
 
       - name: Smoke-test Windows release offline
         shell: powershell
-        run: |
-          $log = 'build/windows/runtime.log'
-          $err = $log + '.err'
-          $proc = Start-Process -FilePath (Resolve-Path 'build/windows/FootballDynasty.exe') -ArgumentList @('--headless','--','--release-smoke') -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $err
-          if (-not $proc.WaitForExit(180000)) { try { $proc.Kill($true) } catch {}; throw 'Windows release smoke timed out.' }
-          $proc.Refresh()
-          $exitCode = $proc.ExitCode
-          $stdout = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
-          $stderr = if (Test-Path $err) { Get-Content $err -Raw } else { '' }
-          Write-Host $stdout
-          if ($stderr) { Write-Host $stderr }
-          if ($null -ne $exitCode -and "$exitCode" -ne '' -and [int]$exitCode -ne 0) { throw "Windows release smoke exited with code $exitCode." }
-          if ($stdout -notmatch 'RELEASE SMOKE PASS') { throw 'Windows release smoke did not emit PASS marker.' }
-          if (($stdout + "`n" + $stderr) -match 'SCRIPT ERROR:') { throw 'Windows release smoke reported a script error.' }
+        run: .\tools\release-smoke.ps1 -Executable build/windows/FootballDynasty.exe
 
       - name: Create integrity hashes
         shell: powershell
