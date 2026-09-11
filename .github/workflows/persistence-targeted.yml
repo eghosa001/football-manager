@@ -1,0 +1,54 @@
+name: Persistence Targeted
+
+on:
+  push:
+    branches: [cross-platform-mobile-and-hardening]
+    paths:
+      - 'persistence/**'
+      - 'application/career/save_slots.gd'
+      - 'tests/save_safety_test.gd'
+      - 'tests/sqlite_integration_test.gd'
+      - '.github/workflows/persistence-targeted.yml'
+  pull_request:
+    paths:
+      - 'persistence/**'
+      - 'application/career/save_slots.gd'
+      - 'tests/save_safety_test.gd'
+      - 'tests/sqlite_integration_test.gd'
+      - '.github/workflows/persistence-targeted.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: persistence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: false
+      - name: Import project
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
+      - name: Run portable save safety regression
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/save_safety_test.gd
+      - name: Install pinned Godot-SQLite if missing
+        shell: powershell
+        run: |
+          if (Test-Path 'addons/godot-sqlite') { exit 0 }
+          $zip = Join-Path $env:RUNNER_TEMP 'godot-sqlite-addons.zip'
+          Invoke-WebRequest -Uri 'https://github.com/2shady4u/godot-sqlite/releases/download/v4.9/addons.zip' -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '95e91b72fe32984a84edaf6357a78753661f37a170cb362f5b948e0ede7c2cb0') { throw 'Godot-SQLite checksum mismatch.' }
+          Expand-Archive -Path $zip -DestinationPath . -Force
+      - name: Run SQLite portable round-trip
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/sqlite_integration_test.gd
