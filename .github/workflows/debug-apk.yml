@@ -42,19 +42,33 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('export_presets.cfg')
-          s = p.read_text()
+
+          preset = Path('export_presets.cfg')
+          s = preset.read_text()
           start = s.index('[preset.2]')
           end = s.index('[preset.3]')
           block = s[start:end]
           block = block.replace('export_path="build/android/FootballDynasty.aab"', 'export_path="build/android/FootballDynasty-debug.apk"')
           block = block.replace('gradle_build/use_gradle_build=true', 'gradle_build/use_gradle_build=false')
           block = block.replace('gradle_build/export_format=1', 'gradle_build/export_format=0')
-          s = s[:start] + block + s[end:]
-          p.write_text(s)
+          block = block.replace('gradle_build/min_sdk="24"\n', '')
+          block = block.replace('gradle_build/target_sdk="34"\n', '')
+          preset.write_text(s[:start] + block + s[end:])
+
+          project = Path('project.godot')
+          p = project.read_text()
+          flag = 'textures/vram_compression/import_etc2_astc=true'
+          if flag not in p:
+              marker = '[rendering]\n'
+              p = p.replace(marker, marker + flag + '\n', 1)
+              project.write_text(p)
           PY
           mkdir -p build/android
           sed -n '/\[preset.2\]/,/\[preset.3\]/p' export_presets.cfg | grep -E 'name=|export_path=|use_gradle_build=|export_format=|arm64-v8a='
+          grep 'import_etc2_astc' project.godot
+
+      - name: Re-import Android textures
+        run: godot --headless --editor --path . --import --quit
 
       - name: Build debug APK
         run: godot --headless --path . --export-debug "Android" build/android/FootballDynasty-debug.apk
