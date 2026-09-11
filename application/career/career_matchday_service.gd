@@ -7,6 +7,7 @@ const TacticalMatchEngineClass = preload("res://simulation/match/tactical_match_
 const FullMatchEngineV2Class = preload("res://simulation/match/full_match_engine_v2.gd")
 const AggregateMatchEngineClass = preload("res://simulation/match/background_aggregate_engine.gd")
 const SimulationTierPolicyClass = preload("res://application/performance/simulation_tier_policy.gd")
+const DomainEventBusClass = preload("res://core/events/domain_event_bus.gd")
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const PlayerStatsServiceClass = preload("res://application/career/player_stats_service.gd")
 const DressingRoomClass = preload("res://simulation/players/dressing_room.gd")
@@ -19,6 +20,7 @@ var _abstract = AbstractMatchEngineClass.new()
 var _tactical = TacticalMatchEngineClass.new()
 var _aggregate = AggregateMatchEngineClass.new()
 var _tier_policy = SimulationTierPolicyClass.new()
+var _events = DomainEventBusClass.new()
 var _detailed = FullMatchEngineV2Class.new()
 var _continuous = null
 var _continuous_attempted := false
@@ -28,6 +30,7 @@ var _registration = RegistrationServiceClass.new()
 
 func play_date(world: Dictionary, date_string: String, managed_club_id: String, season_seed: int) -> Array:
 	SeasonRunnerClass.new().assign_fixture_dates(world)
+	_events.ensure_world(world)
 	var results: Array = []
 	var touched_competitions := {}
 	for fixture in world.get("fixtures", []):
@@ -73,12 +76,38 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 		if not result.has("error"):
 			_stats.record_match(world, fixture, result)
 			_apply_dressing_room_result(world, home, away, result)
+			_emit_match_events(world, fixture, result, tier, detailed_model, date_string)
 		results.append({"fixture":fixture,"result":result,"match_seed":match_seed,"detailed":is_managed,"model":detailed_model,"simulation_tier":tier})
 		touched_competitions[competition_id] = true
 	for competition_id in touched_competitions.keys():
 		_knockout.advance_ready(world, String(competition_id), date_string)
 	world["date"] = date_string
 	return results
+
+func _emit_match_events(world: Dictionary, fixture: Dictionary, result: Dictionary, tier: int, model: String, date_string: String) -> void:
+	var common := {
+		"fixture_id":String(fixture.get("id", "")),
+		"competition_id":String(fixture.get("competition_id", "")),
+		"home_club_id":String(fixture.get("home_club_id", "")),
+		"away_club_id":String(fixture.get("away_club_id", "")),
+		"date":date_string,
+		"simulation_tier":tier,
+		"model":model,
+	}
+	var finished := common.duplicate(true)
+	finished["home_goals"] = int(result.get("home_goals", 0))
+	finished["away_goals"] = int(result.get("away_goals", 0))
+	finished["stats"] = result.get("stats", {}).duplicate(true)
+	_events.emit(world, "MATCH_FINISHED", finished, "career_matchday")
+	for match_event in result.get("events", []):
+		if String(match_event.get("type", "")) != "shot" or String(match_event.get("outcome", "")) != "goal":
+			continue
+		var goal := common.duplicate(true)
+		goal["minute"] = int(match_event.get("minute", 0))
+		goal["side"] = String(match_event.get("side", ""))
+		goal["player_id"] = String(match_event.get("player_id", ""))
+		goal["xg"] = float(match_event.get("xg", 0.0))
+		_events.emit(world, "GOAL_SCORED", goal, "match_engine")
 
 func _continuous_engine():
 	if _continuous_attempted:
