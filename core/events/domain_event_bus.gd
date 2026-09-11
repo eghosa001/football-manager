@@ -9,8 +9,14 @@ const CORE_EVENTS := [
 	"PLAYER_SIGNED",
 	"CONTRACT_SIGNED",
 	"MANAGER_FIRED",
-	"SEASON_ENDED",
+	"MANAGER_HIRED",
+	"PLAYER_RETIRED",
 	"YOUTH_INTAKE",
+	"CLUB_PROMOTED",
+	"CLUB_RELEGATED",
+	"COMPETITION_WON",
+	"RECORD_BROKEN",
+	"SEASON_ENDED",
 	"PROMISE_RESOLVED",
 ]
 
@@ -32,8 +38,6 @@ func emit(world: Dictionary, event_type: String, payload: Dictionary = {}, sourc
 		"payload": payload.duplicate(true),
 	}
 	world.domain_events.append(event)
-	# The live world only needs a bounded event journal. Permanent achievements
-	# remain in their dedicated history/awards/records collections.
 	if world.domain_events.size() > 2000:
 		world.domain_events = world.domain_events.slice(world.domain_events.size() - 2000)
 	return event
