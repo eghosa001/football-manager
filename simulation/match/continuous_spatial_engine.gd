@@ -67,11 +67,11 @@ func _advance_frame(previous: Dictionary, target: Dictionary, energy: Dictionary
 	var ball_target: Dictionary = target.get("ball", previous.get("ball", {"x": PITCH_LENGTH * 0.5, "y": PITCH_WIDTH * 0.5}))
 	return {
 		"ball": _step_towards(previous.get("ball", ball_target), ball_target, 1000.0 / float(remaining_steps)),
-		"home": _advance_positions(previous.get("home", {}), target.get("home", {}), energy.get("home", {}), home, home_tactic, true, possession_side == "home", ball_target, remaining_steps),
-		"away": _advance_positions(previous.get("away", {}), target.get("away", {}), energy.get("away", {}), away, away_tactic, false, possession_side == "away", ball_target, remaining_steps)
+		"home": _advance_positions(previous.get("home", {}), target.get("home", {}), energy.get("home", {}), home, home_tactic, true, possession_side == "home", ball_target),
+		"away": _advance_positions(previous.get("away", {}), target.get("away", {}), energy.get("away", {}), away, away_tactic, false, possession_side == "away", ball_target)
 	}
 
-func _advance_positions(previous: Dictionary, target: Dictionary, side_energy: Dictionary, lineup: Array, tactic: Dictionary, is_home: bool, in_possession: bool, ball: Dictionary, remaining_steps: int) -> Dictionary:
+func _advance_positions(previous: Dictionary, target: Dictionary, side_energy: Dictionary, lineup: Array, tactic: Dictionary, is_home: bool, in_possession: bool, ball: Dictionary) -> Dictionary:
 	var players := {}
 	for player in lineup:
 		players[String(player.id)] = player
@@ -84,7 +84,6 @@ func _advance_positions(previous: Dictionary, target: Dictionary, side_energy: D
 		var pace := float(attrs.get("pace", player.get("current_ability", 50)))
 		var energy_factor := clampf(float(side_energy.get(id, 1.0)), MIN_ENERGY, 1.0)
 		var max_step := (0.8 + pace / 70.0) * energy_factor
-		max_step = maxf(max_step, SpatialStateClass.distance(start_pos, end_pos) / float(maxi(1, remaining_steps)))
 		result[id] = _step_towards(start_pos, end_pos, max_step)
 	return result
 
@@ -131,7 +130,6 @@ func _tactical_target(position: Dictionary, ball: Dictionary, tactic: Dictionary
 		match pressing:
 			"high": press_blend = 0.08
 			"very_high": press_blend = 0.14
-			"low": press_blend = -0.03
 		if press_blend > 0.0:
 			result.x = lerpf(float(result.x), float(ball.get("x", result.x)), press_blend)
 			result.y = lerpf(float(result.y), float(ball.get("y", result.y)), press_blend)
