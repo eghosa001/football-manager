@@ -1,9 +1,10 @@
 class_name SaveStore
 extends "res://persistence/save_repository.gd"
 
-const CURRENT_SCHEMA_VERSION := 2
+const CURRENT_SCHEMA_VERSION := 3
 const MAGIC := 1_179_016_753 # "FDN1"
-const HEADER_BYTES := 8
+const LEGACY_HEADER_BYTES := 8
+const HEADER_BYTES := 12
 
 func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 	var payload := {
@@ -12,6 +13,7 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 		"history": history,
 	}
 	var raw: PackedByteArray = var_to_bytes(payload)
+	var checksum := int(raw.hash())
 	var temp_path := path + ".tmp"
 	var backup_path := path + ".bak"
 	var temp_global := ProjectSettings.globalize_path(temp_path)
@@ -22,6 +24,7 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 		return FileAccess.get_open_error()
 	file.store_32(MAGIC)
 	file.store_32(raw.size())
+	file.store_32(checksum)
 	file.store_buffer(raw)
 	file.flush()
 	file.close()
@@ -31,7 +34,6 @@ func save_atomic(path: String, world: Dictionary, history: Array = []) -> Error:
 	if FileAccess.file_exists(path):
 		var backup_error: Error = OK
 		if _load_path(path).is_empty():
-			# A recovered career must retain its good backup, not replace it with corruption.
 			backup_error = DirAccess.remove_absolute(save_global)
 		else:
 			if FileAccess.file_exists(backup_path):
@@ -58,20 +60,28 @@ func _load_path(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}
 	var file := FileAccess.open(path, FileAccess.READ)
-	if file == null or file.get_length() < HEADER_BYTES:
-		if file != null:
-			file.close()
+	if file == null or file.get_length() < LEGACY_HEADER_BYTES:
+		if file != null: file.close()
 		return {}
 	if file.get_32() != MAGIC:
 		file.close()
 		return {}
 	var payload_length: int = file.get_32()
-	if payload_length <= 0 or payload_length > file.get_length() - HEADER_BYTES:
+	if payload_length <= 0:
+		file.close()
+		return {}
+	var remaining := int(file.get_length() - LEGACY_HEADER_BYTES)
+	var expected_checksum := -1
+	if remaining == payload_length + 4:
+		expected_checksum = int(file.get_32())
+	elif remaining != payload_length:
 		file.close()
 		return {}
 	var raw: PackedByteArray = file.get_buffer(payload_length)
 	file.close()
 	if raw.size() != payload_length:
+		return {}
+	if expected_checksum >= 0 and int(raw.hash()) != expected_checksum:
 		return {}
 	var parsed = bytes_to_var(raw)
 	if typeof(parsed) != TYPE_DICTIONARY:
@@ -79,28 +89,41 @@ func _load_path(path: String) -> Dictionary:
 	return _migrate(parsed)
 
 func _migrate(payload: Dictionary) -> Dictionary:
-	# Validate before typed assignments so damaged files fall back to the backup.
 	if not payload.get("world") is Dictionary or not payload.get("history", []) is Array:
 		return {}
 	if not payload.get("schema_version", 0) is int:
 		return {}
 	var version: int = int(payload.get("schema_version", 0))
+	if version > CURRENT_SCHEMA_VERSION:
+		return {}
 	if version == 0:
 		payload["history"] = payload.get("history", [])
 		payload["schema_version"] = 1
 		version = 1
 	if version == 1:
-		var world: Dictionary = payload.get("world", {})
-		world["relationships"] = world.get("relationships", [])
-		world["rivalries"] = world.get("rivalries", [])
-		world["awards"] = world.get("awards", [])
-		world["legends"] = world.get("legends", [])
-		world["news"] = world.get("news", [])
-		world["manager_careers"] = world.get("manager_careers", [])
-		world["active_mods"] = world.get("active_mods", [])
-		payload["world"] = world
+		var world_v1: Dictionary = payload.get("world", {})
+		world_v1["relationships"] = world_v1.get("relationships", [])
+		world_v1["rivalries"] = world_v1.get("rivalries", [])
+		world_v1["awards"] = world_v1.get("awards", [])
+		world_v1["legends"] = world_v1.get("legends", [])
+		world_v1["news"] = world_v1.get("news", [])
+		world_v1["manager_careers"] = world_v1.get("manager_careers", [])
+		world_v1["active_mods"] = world_v1.get("active_mods", [])
+		payload["world"] = world_v1
 		payload["schema_version"] = 2
 		version = 2
+	if version == 2:
+		var world_v2: Dictionary = payload.get("world", {})
+		world_v2["discipline"] = world_v2.get("discipline", {})
+		world_v2["manager_job_market"] = world_v2.get("manager_job_market", [])
+		world_v2["international_history"] = world_v2.get("international_history", [])
+		world_v2["cities"] = world_v2.get("cities", [])
+		world_v2["regions"] = world_v2.get("regions", [])
+		world_v2["fixture_changes"] = world_v2.get("fixture_changes", [])
+		world_v2["economic_indices"] = world_v2.get("economic_indices", {"wage":1.0,"transfer":1.0,"broadcast":1.0})
+		payload["world"] = world_v2
+		payload["schema_version"] = 3
+		version = 3
 	if version != CURRENT_SCHEMA_VERSION:
 		return {}
 	return payload
