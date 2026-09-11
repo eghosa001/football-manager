@@ -22,6 +22,7 @@ SquadRuntime="*res://game/polish/squad_runtime.gd"
 AutosaveRuntime="*res://game/polish/autosave_runtime.gd"
 DashboardRuntime="*res://game/polish/dashboard_runtime.gd"
 NavigationRuntime="*res://game/polish/navigation_runtime.gd"
+TrainingRuntime="*res://game/polish/training_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
