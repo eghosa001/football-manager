@@ -13,6 +13,7 @@ config/features=PackedStringArray("4.7")
 PolishRuntime="*res://game/polish/polish_runtime.gd"
 CompletionRuntime="*res://game/polish/completion_runtime.gd"
 TacticsRuntime="*res://game/polish/tactics_runtime.gd"
+SearchRuntime="*res://game/polish/search_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
