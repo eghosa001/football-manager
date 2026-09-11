@@ -10,6 +10,7 @@ const SimulationTierPolicyClass = preload("res://application/performance/simulat
 const DomainEventBusClass = preload("res://core/events/domain_event_bus.gd")
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const PlayerStatsServiceClass = preload("res://application/career/player_stats_service.gd")
+const MedicalSystemClass = preload("res://simulation/players/medical_system.gd")
 const DressingRoomClass = preload("res://simulation/players/dressing_room.gd")
 const KnockoutSeasonClass = preload("res://application/season/knockout_season.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
@@ -21,6 +22,7 @@ var _tactical = TacticalMatchEngineClass.new()
 var _aggregate = AggregateMatchEngineClass.new()
 var _tier_policy = SimulationTierPolicyClass.new()
 var _events = DomainEventBusClass.new()
+var _medical = MedicalSystemClass.new()
 var _detailed = FullMatchEngineV2Class.new()
 var _continuous = null
 var _continuous_attempted := false
@@ -76,6 +78,8 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 		if not result.has("error"):
 			_stats.record_match(world, fixture, result)
 			_apply_dressing_room_result(world, home, away, result)
+			if tier != SimulationTierPolicyClass.INACTIVE_WORLD:
+				result["injuries"] = _apply_match_injuries(world, fixture, result, tier, match_seed, managed_club_id)
 			_emit_match_events(world, fixture, result, tier, detailed_model, date_string)
 		results.append({"fixture":fixture,"result":result,"match_seed":match_seed,"detailed":is_managed,"model":detailed_model,"simulation_tier":tier})
 		touched_competitions[competition_id] = true
@@ -84,23 +88,50 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 	world["date"] = date_string
 	return results
 
+func _apply_match_injuries(world: Dictionary, fixture: Dictionary, result: Dictionary, tier: int, match_seed: int, managed_club_id: String) -> Array:
+	var injuries: Array = []
+	var participants: Dictionary = result.get("participants", result.get("lineups", {}))
+	var surface := _pitch_surface(_club(world, String(fixture.get("home_club_id", ""))))
+	var match_intensity := 1.0 if tier == SimulationTierPolicyClass.USER_LEAGUE else (0.82 if tier == SimulationTierPolicyClass.DETAILED_LEAGUE else 0.64)
+	var final_frame: Dictionary = {}
+	var frames: Array = result.get("spatial", {}).get("frames", [])
+	if not frames.is_empty():
+		final_frame = frames[frames.size()-1]
+	for side in ["home","away"]:
+		var loads: Dictionary = final_frame.get("home_loads" if side=="home" else "away_loads", {})
+		for player_id in participants.get(side, []):
+			var player := _player(world, String(player_id))
+			if player.is_empty() or int(player.get("injured_days",0)) > 0:
+				continue
+			var load: Dictionary = loads.get(String(player_id), {})
+			var energy := clampf(float(load.get("energy",1.0)),0.0,1.0)
+			var fatigue := maxf(float(player.get("fatigue",0)), (1.0-energy)*100.0, 100.0-float(player.get("fitness",100)))
+			var context := {"fatigue":fatigue,"match_intensity":match_intensity,"training_load":0.0,"surface":surface,"base_risk":0.0035}
+			var injury := _medical.maybe_suffer_injury(player, match_seed + _stable_key(String(player_id)), "match", context)
+			if not bool(injury.get("injured",false)):
+				continue
+			var row := {"player_id":String(player_id),"club_id":String(player.get("club_id","")),"injury":String(injury.get("name","injury")),"severity":String(injury.get("severity","moderate")),"days_total":int(injury.get("days_total",0)),"surface":surface}
+			injuries.append(row)
+			_events.emit(world, "PLAYER_INJURED", row, "match_medical")
+			if String(player.get("club_id","")) == managed_club_id:
+				InboxServiceClass.new().add_message(world, "medical", "%s injured" % _player_name(player), "%s suffered a %s during the match. The medical team will provide a recovery range." % [_player_name(player), String(injury.get("name","injury"))])
+	return injuries
+
 func _emit_match_events(world: Dictionary, fixture: Dictionary, result: Dictionary, tier: int, model: String, date_string: String) -> void:
 	var common := {
-		"fixture_id":String(fixture.get("id", "")),
-		"competition_id":String(fixture.get("competition_id", "")),
-		"home_club_id":String(fixture.get("home_club_id", "")),
-		"away_club_id":String(fixture.get("away_club_id", "")),
-		"date":date_string,
-		"simulation_tier":tier,
-		"model":model,
+		"fixture_id":String(fixture.get("id", "")),"competition_id":String(fixture.get("competition_id", "")),
+		"home_club_id":String(fixture.get("home_club_id", "")),"away_club_id":String(fixture.get("away_club_id", "")),
+		"date":date_string,"simulation_tier":tier,"model":model,
 	}
 	var finished := common.duplicate(true)
 	finished["home_goals"] = int(result.get("home_goals", 0))
 	finished["away_goals"] = int(result.get("away_goals", 0))
 	finished["stats"] = result.get("stats", {}).duplicate(true)
+	finished["injuries"] = result.get("injuries", []).duplicate(true)
 	_events.emit(world, "MATCH_FINISHED", finished, "career_matchday")
 	for match_event in result.get("events", []):
-		if String(match_event.get("type", "")) != "shot" or String(match_event.get("outcome", "")) != "goal":
+		var is_goal := (String(match_event.get("type", "")) == "shot" and String(match_event.get("outcome", "")) == "goal") or String(match_event.get("type", "")) == "goal"
+		if not is_goal:
 			continue
 		var goal := common.duplicate(true)
 		goal["minute"] = int(match_event.get("minute", 0))
@@ -161,6 +192,24 @@ func _add_match_message(world: Dictionary, home: Dictionary, away: Dictionary, r
 		outcome = "defeat"
 	InboxServiceClass.new().add_message(world, "match", "Match result: %d-%d" % [gf, ga], "%s against %s. Review the match analysis for spatial frames, xG and events." % [outcome.capitalize(), String(opponent.get("name", "opponent"))])
 
+func _pitch_surface(club: Dictionary) -> String:
+	var quality := int(club.get("stadium",{}).get("pitch_quality",75))
+	if quality < 40:
+		return "poor"
+	if quality < 58:
+		return "hard"
+	return "good"
+
+func _player(world: Dictionary, player_id: String) -> Dictionary:
+	for player in world.get("players", []):
+		if String(player.get("id", "")) == player_id:
+			return player
+	return {}
+
+func _player_name(player: Dictionary) -> String:
+	var value := String(player.get("name", "")).strip_edges()
+	return value if value != "" else (String(player.get("first_name", "")) + " " + String(player.get("last_name", ""))).strip_edges()
+
 func _club(world: Dictionary, club_id: String) -> Dictionary:
 	for club in world.get("clubs", []):
 		if String(club.get("id", "")) == club_id:
@@ -172,6 +221,12 @@ func _competition(world: Dictionary, competition_id: String) -> Dictionary:
 		if String(competition.get("id", "")) == competition_id:
 			return competition
 	return {}
+
+func _stable_key(text: String) -> int:
+	var value := 89
+	for character in text.to_utf8_buffer():
+		value = posmod(value * 191 + int(character), 2_147_483_647)
+	return value
 
 func _fixture_seed(season_seed: int, fixture_id: String) -> int:
 	var value := season_seed
