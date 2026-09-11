@@ -2,10 +2,11 @@ class_name ModEditor
 extends RefCounted
 
 const ModLoaderClass = preload("res://tools/modding/mod_loader.gd")
+const NamePoolServiceClass = preload("res://application/career/name_pool_service.gd")
 var _loader = ModLoaderClass.new()
 
 func create_mod(id: String, name: String, version: String = "1.0", author: String = "", dependencies: Array = [], conflicts: Array = []) -> Dictionary:
-	return {"metadata":{"id":id.strip_edges(),"name":name.strip_edges(),"version":version.strip_edges(),"api_version":ModLoaderClass.SUPPORTED_API_VERSION,"author":author.strip_edges(),"dependencies":dependencies.duplicate(),"conflicts":conflicts.duplicate()},"patches":{},"additions":{},"graphics":{}}
+	return {"metadata":{"id":id.strip_edges(),"name":name.strip_edges(),"version":version.strip_edges(),"api_version":ModLoaderClass.SUPPORTED_API_VERSION,"author":author.strip_edges(),"dependencies":dependencies.duplicate(),"conflicts":conflicts.duplicate()},"patches":{},"additions":{},"graphics":{},"names":{}}
 
 func set_metadata(mod: Dictionary, key: String, value) -> Dictionary:
 	var candidate := mod.duplicate(true)
@@ -37,14 +38,16 @@ func remove_patch(mod: Dictionary, collection: String, entity_id: String) -> Dic
 func validate_project(mod: Dictionary, enabled_mods: Array = []) -> Dictionary:
 	var validation := _loader.validate_mod(mod)
 	if not validation.ok: return validation
+	var name_validation := NamePoolServiceClass.new().validate_names(mod.get("names", {}))
+	if not bool(name_validation.ok): return name_validation
 	var all_mods := enabled_mods.duplicate(true); all_mods.append(mod)
 	return _loader.validate_load_order(all_mods)
 
 func export_mod(path: String, mod: Dictionary) -> Error:
 	var exportable := mod.duplicate(true)
 	if exportable.has("metadata"): exportable.metadata.erase("_source_dir")
-	var validation: Dictionary = _loader.validate_mod(exportable)
-	if not validation.ok: return ERR_INVALID_DATA
+	var validation := validate_project(exportable)
+	if not bool(validation.get("ok", false)): return ERR_INVALID_DATA
 	var metadata: Dictionary = exportable.get("metadata", {})
 	if String(metadata.get("id", "")).strip_edges() == "" or String(metadata.get("version", "")).strip_edges() == "": return ERR_INVALID_DATA
 	var file := FileAccess.open(path, FileAccess.WRITE)
@@ -54,7 +57,15 @@ func export_mod(path: String, mod: Dictionary) -> Error:
 
 func import_mod(path: String) -> Dictionary:
 	var result := _loader.load_mod(path)
-	if bool(result.get("ok", false)):
-		result["metadata"] = result.get("metadata", {}).duplicate(true)
-		result.metadata["_source_dir"] = path.get_base_dir()
+	if not bool(result.get("ok", false)): return result
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file != null:
+		var parsed = JSON.parse_string(file.get_as_text()); file.close()
+		if typeof(parsed) == TYPE_DICTIONARY:
+			var names = parsed.get("names", {})
+			var name_validation := NamePoolServiceClass.new().validate_names(names)
+			if not bool(name_validation.ok): return {"ok":false,"error":String(name_validation.error)}
+			result["names"] = names.duplicate(true)
+	result["metadata"] = result.get("metadata", {}).duplicate(true)
+	result.metadata["_source_dir"] = path.get_base_dir()
 	return result
