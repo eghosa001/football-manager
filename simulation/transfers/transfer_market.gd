@@ -3,8 +3,10 @@ extends RefCounted
 
 const LedgerClass = preload("res://simulation/finance/ledger.gd")
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
+const DomainEventBusClass = preload("res://core/events/domain_event_bus.gd")
 
 var _ledger = LedgerClass.new()
+var _events = DomainEventBusClass.new()
 
 func player_value(player: Dictionary, season_year: int) -> int:
 	if bool(player.get("retired", false)):
@@ -20,6 +22,7 @@ func recommended_wage(player: Dictionary) -> int:
 
 func process_contracts(world: Dictionary, season_year: int, seed: int) -> Dictionary:
 	_ledger.ensure(world)
+	_events.ensure_world(world)
 	var renewed: Array = []
 	var released: Array = []
 	for contract in world.contracts:
@@ -35,6 +38,7 @@ func process_contracts(world: Dictionary, season_year: int, seed: int) -> Dictio
 			contract.end_year = season_year + 3
 			contract.weekly_wage = wage
 			renewed.append(String(player.id))
+			_events.emit(world, "CONTRACT_SIGNED", {"player_id":String(player.id),"club_id":String(club.id),"start_year":season_year,"end_year":season_year+3,"weekly_wage":wage,"renewal":true}, "transfer_market")
 		else:
 			player.club_id = ""
 			released.append(String(player.id))
@@ -49,6 +53,7 @@ func negotiate_contract(player: Dictionary, club: Dictionary, offered_wage: int,
 
 func execute_transfer(world: Dictionary, player_id: String, buyer_id: String, fee: int, wage: int, years: int, season_year: int, seed: int) -> Error:
 	_ledger.ensure(world)
+	_events.ensure_world(world)
 	var player: Dictionary = _find_player(world.players, player_id)
 	var buyer: Dictionary = _find_club(world.clubs, buyer_id)
 	if player.is_empty() or buyer.is_empty() or bool(player.get("retired", false)):
@@ -68,10 +73,13 @@ func execute_transfer(world: Dictionary, player_id: String, buyer_id: String, fe
 	player.erase("loan_parent_club_id")
 	player.erase("loan_end_year")
 	_upsert_contract(world, player_id, buyer_id, season_year, season_year + years, wage)
+	_events.emit(world, "PLAYER_SIGNED", {"player_id":player_id,"buyer_id":buyer_id,"seller_id":seller_id,"fee":fee,"transfer_type":"permanent","season_year":season_year}, "transfer_market")
+	_events.emit(world, "CONTRACT_SIGNED", {"player_id":player_id,"club_id":buyer_id,"start_year":season_year,"end_year":season_year+years,"weekly_wage":wage,"renewal":false}, "transfer_market")
 	return OK
 
 func execute_loan(world: Dictionary, player_id: String, borrower_id: String, fee: int, season_year: int) -> Error:
 	_ledger.ensure(world)
+	_events.ensure_world(world)
 	var player: Dictionary = _find_player(world.players, player_id)
 	var borrower: Dictionary = _find_club(world.clubs, borrower_id)
 	if player.is_empty() or borrower.is_empty() or String(player.get("club_id", "")) == "":
@@ -85,6 +93,7 @@ func execute_loan(world: Dictionary, player_id: String, borrower_id: String, fee
 	player.loan_parent_club_id = parent_id
 	player.loan_end_year = season_year + 1
 	player.club_id = borrower_id
+	_events.emit(world, "PLAYER_SIGNED", {"player_id":player_id,"buyer_id":borrower_id,"seller_id":parent_id,"fee":fee,"transfer_type":"loan","loan_end_year":season_year+1}, "transfer_market")
 	return OK
 
 func return_expired_loans(world: Dictionary, season_year: int) -> int:
@@ -99,6 +108,7 @@ func return_expired_loans(world: Dictionary, season_year: int) -> int:
 
 func rebalance_ai_squads(world: Dictionary, season_year: int, seed: int, min_squad: int = 20, max_squad: int = 30) -> Dictionary:
 	_ledger.ensure(world)
+	_events.ensure_world(world)
 	var free_agents: Array = _free_agents(world.players)
 	var signings := 0
 	var releases := 0
@@ -136,8 +146,11 @@ func _sign_free_agent(world: Dictionary, player: Dictionary, club: Dictionary, s
 	var wage: int = recommended_wage(player)
 	if wage > int(club.wage_budget):
 		return false
+	var previous_club := String(player.get("club_id", ""))
 	player.club_id = String(club.id)
 	_upsert_contract(world, String(player.id), String(club.id), season_year, season_year + 2, wage)
+	_events.emit(world, "PLAYER_SIGNED", {"player_id":String(player.id),"buyer_id":String(club.id),"seller_id":previous_club,"fee":0,"transfer_type":"free_agent","season_year":season_year}, "transfer_market")
+	_events.emit(world, "CONTRACT_SIGNED", {"player_id":String(player.id),"club_id":String(club.id),"start_year":season_year,"end_year":season_year+2,"weekly_wage":wage,"renewal":false}, "transfer_market")
 	return true
 
 func _free_agents(players: Array) -> Array:
