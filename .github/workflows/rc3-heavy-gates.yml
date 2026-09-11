@@ -1,0 +1,52 @@
+name: RC3 Heavy Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [release/rc3-convergence]
+    paths:
+      - '.github/rc3-heavy-gate-trigger'
+
+concurrency:
+  group: rc3-heavy-acceptance
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  heavy-gates:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 720
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: release/rc3-convergence
+          fetch-depth: 1
+          clean: false
+
+      - name: Import project
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
+
+      - name: Continuous 100k distribution gate
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/continuous_distribution_gate.gd -TimeoutSeconds 14400
+
+      - name: Cross-tier equivalence gate
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/cross_tier_regression.gd -TimeoutSeconds 7200
+
+      - name: Full 100-season career/economy soak
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/full_career_soak.gd -TimeoutSeconds 21600
+
+      - name: Verify source stayed clean
+        shell: powershell
+        run: |
+          git diff --quiet -- .
+          if ($LASTEXITCODE -ne 0) {
+            git diff -- .
+            throw 'Heavy acceptance modified tracked source files.'
+          }
