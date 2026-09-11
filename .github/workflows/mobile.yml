@@ -2,8 +2,22 @@ name: Mobile Export Validation
 
 on:
   push:
-    branches: [main, production/remaining-features, phase-10-11-living-world-release]
+    branches: [main]
+    paths:
+      - 'export_presets.cfg'
+      - 'tests/mobile_export_test.gd'
+      - '.github/workflows/mobile.yml'
+      - 'tools/**'
+      - 'game/**'
+      - 'ui/**'
   pull_request:
+    paths:
+      - 'export_presets.cfg'
+      - 'tests/mobile_export_test.gd'
+      - '.github/workflows/mobile.yml'
+      - 'tools/**'
+      - 'game/**'
+      - 'ui/**'
   workflow_dispatch:
 
 concurrency:

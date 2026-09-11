@@ -2,7 +2,7 @@ class_name MatchEngineRouter
 extends RefCounted
 
 const ContinuousClass = preload("res://simulation/match/continuous_full_match_engine.gd")
-const EventClass = preload("res://simulation/match/full_match_engine_v2.gd")
+const EventClass = preload("res://simulation/match/event_match_engine.gd")
 const AbstractClass = preload("res://simulation/match/abstract_match_engine.gd")
 const AggregateClass = preload("res://simulation/match/background_aggregate_engine.gd")
 

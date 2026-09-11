@@ -3,9 +3,9 @@ extends RefCounted
 
 const WorldGeneratorClass = preload("res://simulation/world/world_generator.gd")
 const LaunchWorldBuilderClass = preload("res://data/launch_world_builder.gd")
-const CareerCycleClass = preload("res://application/career/career_cycle_v2.gd")
+const CareerCycleClass = preload("res://application/career/career_cycle_service.gd")
 const SaveStoreClass = preload("res://persistence/save_store.gd")
-const PlayerLifecycleClass = preload("res://simulation/players/player_lifecycle_v2.gd")
+const PlayerLifecycleClass = preload("res://simulation/players/player_lifecycle_service.gd")
 const TacticsManagerClass = preload("res://simulation/tactics/tactics_manager.gd")
 const ClubEconomyClass = preload("res://simulation/finance/club_economy.gd")
 const StaffContractsClass = preload("res://simulation/staff/staff_contracts.gd")

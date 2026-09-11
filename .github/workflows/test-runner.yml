@@ -8,6 +8,11 @@ on:
         required: false
         default: main
         type: string
+      test_script:
+        description: Optional single Godot test script, e.g. tests/registration_safety_test.gd
+        required: false
+        default: ""
+        type: string
   push:
     branches: [main]
 
@@ -52,7 +57,22 @@ jobs:
         shell: powershell
         run: '& (Join-Path $env:RUNNER_TEMP ''test-headless.ps1'') -Script import'
 
+      - name: Run isolated test
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_script != '' }}
+        shell: powershell
+        run: |
+          $helper = Join-Path $env:RUNNER_TEMP 'test-headless.ps1'
+          $suite = '${{ inputs.test_script }}'
+          if (-not $suite.StartsWith('tests/') -or -not $suite.EndsWith('.gd')) {
+            throw "test_script must be a tests/*.gd path"
+          }
+          if (-not (Test-Path $suite)) {
+            throw "Test script does not exist: $suite"
+          }
+          & $helper -Script $suite
+
       - name: Run main regression suite
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.test_script == '' }}
         shell: powershell
         run: |
           $helper = Join-Path $env:RUNNER_TEMP 'test-headless.ps1'

@@ -2,8 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, phase-10-11-living-world-release]
-  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       full_match_validation:
@@ -44,6 +43,10 @@ jobs:
         shell: powershell
         run: .\tools\test-headless.ps1 -Script import
 
+      - name: Run architecture convergence test
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/architecture_convergence_test.gd
+
       - name: Run Phase 1/2 tests
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/test_runner.gd
@@ -67,6 +70,10 @@ jobs:
       - name: Run Phase 10/11 tests
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/phase1011_test_runner.gd
+
+      - name: Run Phase 12-14 completion tests
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/phase1214_completion_test.gd
 
       - name: Run 72-gap remediation regressions
         shell: powershell

@@ -2,7 +2,7 @@ class_name CareerCycle
 extends RefCounted
 
 const SeasonRunnerClass = preload("res://application/season/season_runner.gd")
-const LifecycleClass = preload("res://simulation/players/player_lifecycle_v2.gd")
+const LifecycleClass = preload("res://simulation/players/player_lifecycle_service.gd")
 const YouthQualityClass = preload("res://simulation/players/youth_quality_service.gd")
 const MarketClass = preload("res://simulation/transfers/transfer_market.gd")
 const EconomyClass = preload("res://simulation/finance/club_economy.gd")
