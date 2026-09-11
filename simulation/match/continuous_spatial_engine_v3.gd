@@ -58,8 +58,78 @@ func simulate_continuous(home_lineup: Array, away_lineup: Array, seed: int, home
 	var summary:={"ticks":ticks,"shots":shots,"goals":goals,"interceptions":interceptions,"events":events.size(),"home_distance":_total_distance(loads.home),"away_distance":_total_distance(loads.away)}
 	return {"frames":frames,"events":events,"summary":summary,"loads":loads,"final":{"home_positions":home_pos,"away_positions":away_pos,"ball":ball,"possession":possession,"loads":loads},"model":"continuous_10hz_sampled","frame_stride":stride}
 
+func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionary, profile: Dictionary, loads: Dictionary, marking: Dictionary, in_possession: bool, dt: float, tick: int) -> void:
+	var by_id := {}
+	for player in lineup:
+		by_id[String(player.id)] = player
+	for i in range(lineup.size()):
+		var player: Dictionary = lineup[i]
+		var id := String(player.id)
+		if i == 0:
+			continue
+		var pos: Dictionary = own[id]
+		var anchor: Dictionary = _role_anchor(player, i, profile)
+		var target := anchor.duplicate(true)
+		var instruction: Dictionary = player.get("match_instruction", {})
+		if in_possession:
+			target = _blend(target, {"x": float(anchor.x) + (6.0 if _is_home_side(own, pos) else -6.0), "y": anchor.y}, 0.35)
+			match String(instruction.get("width", "normal")):
+				"stay_wider": target.y = clampf(float(target.y) + (7.0 if float(target.y) >= PITCH_WIDTH * 0.5 else -7.0), 2.0, PITCH_WIDTH - 2.0)
+				"sit_narrower": target.y = lerpf(float(target.y), PITCH_WIDTH * 0.5, 0.45)
+			if marking.has(id):
+				target = _blend(target, ball, 0.15)
+		else:
+			var press_trigger := float(profile.press_trigger)
+			match String(instruction.get("pressing", "normal")):
+				"press_more": press_trigger *= 1.4
+				"press_less": press_trigger *= 0.65
+			var ball_d := SpatialStateClass.distance(pos, ball)
+			if ball_d < press_trigger:
+				target = ball.duplicate(true)
+			elif marking.has(id):
+				var aid: String = marking[id]
+				var mark_pos: Dictionary = _opp_position(opp, aid, pos)
+				target = _blend(anchor, mark_pos, 0.55)
+			else:
+				target = _blend(anchor, ball, 0.25)
+		var energy := PhysicalModelClass.energy_factor(loads.get(id, {"energy": 1.0}))
+		var speed: float = float(profile.closing_speed) * (0.6 + 0.4 * energy) * float(profile.execution)
+		var step := speed * dt
+		var before := pos.duplicate(true)
+		var moved: Dictionary = SpatialStateClass.advance(pos, target, step)
+		own[id] = moved
+		var dist := SpatialStateClass.distance(before, moved)
+		var pressing := (not in_possession) and SpatialStateClass.distance(before, ball) < press_trigger if not in_possession else false
+		loads[id] = PhysicalModelClass.update(loads.get(id, PhysicalModelClass.initial_load()), dist, dist / maxf(dt, 0.001), pressing, by_id.get(id, {}), false)
+
 func _decide_action(ball: Dictionary, owner: Dictionary, possession: String, home_lineup: Array, away_lineup: Array, home_pos: Dictionary, away_pos: Dictionary, home_profile: Dictionary, away_profile: Dictionary, loads: Dictionary, seed: int, tick: int) -> Dictionary:
-	var outcome: Dictionary = super._decide_action(ball,owner,possession,home_lineup,away_lineup,home_pos,away_pos,home_profile,away_profile,loads,seed,tick)
+	var team: Array = home_lineup if possession == "home" else away_lineup
+	var owner_player := _player_by_id(team, String(owner.get("id", "")))
+	var instruction: Dictionary = owner_player.get("match_instruction", {})
+	var home_adjusted := home_profile.duplicate(true)
+	var away_adjusted := away_profile.duplicate(true)
+	var active_profile: Dictionary = home_adjusted if possession == "home" else away_adjusted
+	match String(instruction.get("risk", "normal")):
+		"take_more_risks": active_profile.directness = clampf(float(active_profile.directness) + 0.22, 0.0, 1.5)
+		"take_fewer_risks": active_profile.directness = clampf(float(active_profile.directness) - 0.22, 0.0, 1.5)
+	var outcome: Dictionary = super._decide_action(ball,owner,possession,home_lineup,away_lineup,home_pos,away_pos,home_adjusted,away_adjusted,loads,seed,tick)
+	var event_type := String(outcome.get("event", ""))
+	var shooting := String(instruction.get("shooting", "normal"))
+	if shooting == "shoot_less" and event_type in ["shot", "goal"] and SeededRngClass.unit_for(seed, 25000 + tick) < 0.7:
+		var direction := 1.0 if possession == "home" else -1.0
+		outcome["event"] = "dribble"
+		outcome["target"] = SpatialStateClass.clamp_position({"x":float(ball.x)+direction*4.0,"y":float(ball.y)})
+		outcome["owner_id"] = String(owner.get("id", ""))
+		outcome["success"] = true
+		outcome.erase("xg")
+		outcome.erase("outcome")
+	elif shooting == "shoot_more" and event_type not in ["shot", "goal"]:
+		var goal_x := PITCH_LENGTH if possession == "home" else 0.0
+		var dist_goal := absf(goal_x - float(ball.x))
+		if dist_goal < 34.0 and SeededRngClass.unit_for(seed, 26000 + tick) < 0.28:
+			var xg := clampf(0.34 - dist_goal / 120.0, 0.025, 0.28) * float(active_profile.execution)
+			var scored := SeededRngClass.unit_for(seed, 26100 + tick) < xg
+			outcome = {"possession":possession,"owner_id":String(owner.get("id", "")),"target":{"x":goal_x,"y":PITCH_WIDTH*0.5},"event":"goal" if scored else "shot","xg":xg,"outcome":"goal" if scored else "missed","success":scored}
 	if String(outcome.get("event",""))=="":
 		var next_owner:=String(outcome.get("owner_id",owner.get("id","")))
 		if next_owner!=String(owner.get("id","")):
@@ -72,3 +142,9 @@ func _decide_action(ball: Dictionary, owner: Dictionary, possession: String, hom
 		var saved:=SeededRngClass.unit_for(seed,24000+tick)<0.45
 		outcome["outcome"]="saved" if saved else "missed"; outcome["success"]=false
 	return outcome
+
+func _player_by_id(team: Array, player_id: String) -> Dictionary:
+	for player in team:
+		if String(player.get("id", "")) == player_id:
+			return player
+	return {}
