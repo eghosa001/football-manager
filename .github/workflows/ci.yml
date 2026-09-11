@@ -2,8 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, phase-10-11-living-world-release, release/rc3-convergence]
-  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       full_match_validation:
