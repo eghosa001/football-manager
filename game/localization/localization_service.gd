@@ -5,17 +5,30 @@ static var _career_translations: Array[Translation] = []
 
 func install(locale: String) -> void:
 	if _career_translations.is_empty():
-		var file := FileAccess.open("res://game/localization/career_strings.json", FileAccess.READ)
-		if file != null:
-			var catalog: Dictionary = JSON.parse_string(file.get_as_text())
-			for index in range(2):
-				var translation := Translation.new()
-				translation.locale = "fr" if index == 0 else "pt"
+		var catalogs: Array[Dictionary] = []
+		for path in ["res://game/localization/career_strings.json", "res://game/localization/completion_strings.json"]:
+			var loaded := _load_catalog(path)
+			if not loaded.is_empty():
+				catalogs.append(loaded)
+		for index in range(2):
+			var translation := Translation.new()
+			translation.locale = "fr" if index == 0 else "pt"
+			for catalog in catalogs:
 				for source in catalog:
-					translation.add_message(String(source), String(catalog[source][index]))
-				TranslationServer.add_translation(translation)
-				_career_translations.append(translation)
+					var values = catalog[source]
+					if typeof(values) == TYPE_ARRAY and values.size() > index:
+						translation.add_message(String(source), String(values[index]))
+			TranslationServer.add_translation(translation)
+			_career_translations.append(translation)
 	TranslationServer.set_locale(language(locale))
+
+func _load_catalog(path: String) -> Dictionary:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed = JSON.parse_string(file.get_as_text())
+	file.close()
+	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
 
 const SUPPORTED := ["en", "fr", "pt"]
 const STRINGS := {
