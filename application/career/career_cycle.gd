@@ -47,36 +47,40 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	_history_records.ensure_world(world)
 	_staff_market.ensure_world(world)
 	_staff_contracts.ensure_world(world)
-	for club in world.clubs:
-		_tactics.train_tactic(club, 8)
+	for club in world.clubs: _tactics.train_tactic(club, 8)
+	var previous_records: Dictionary = world.history_archive.get("records", {}).duplicate(true)
 	var season_result: Dictionary = _season_runner.complete_and_rollover(world, history, season_seed, promotion_places)
 	var completed_year: int = int(season_result.next_season_year) - 1
+	for record in season_result.records:
+		var champion := String(record.get("champion_club_id", ""))
+		if champion != "": _events.emit(world,"COMPETITION_WON",{"year":completed_year,"competition_id":String(record.get("competition_id","")),"club_id":champion},"season_runner")
+	for movement in season_result.get("movements",[]):
+		for club_id in movement.get("promoted",[]): _events.emit(world,"CLUB_PROMOTED",{"year":completed_year,"club_id":String(club_id),"from_competition_id":String(movement.get("lower_competition_id","")),"to_competition_id":String(movement.get("upper_competition_id",""))},"league_system")
+		for club_id in movement.get("relegated",[]): _events.emit(world,"CLUB_RELEGATED",{"year":completed_year,"club_id":String(club_id),"from_competition_id":String(movement.get("upper_competition_id","")),"to_competition_id":String(movement.get("lower_competition_id",""))},"league_system")
 	var history_result: Dictionary = _history_records.record_season(world, season_result.records, completed_year)
+	for key in world.history_archive.records.keys():
+		if world.history_archive.records.get(key) != previous_records.get(key): _events.emit(world,"RECORD_BROKEN",{"year":completed_year,"record":String(key),"value":world.history_archive.records.get(key)},"history")
 	var economy_result: Dictionary = _economy.run_season_finances(world, completed_year, season_result.records)
 	var board_result: Dictionary = _board.evaluate_world(world, season_result.records)
 	var manager_market_result: Dictionary = _process_ai_manager_market(world, season_result.records, completed_year)
 	var next_year: int = int(season_result.next_season_year)
 	var loans_returned: int = _market.return_expired_loans(world, next_year)
 	var lifecycle_result: Dictionary = _lifecycle.advance_year(world, season_seed + 700_001, 2)
+	for player_id in lifecycle_result.get("retired",[]): _events.emit(world,"PLAYER_RETIRED",{"season_year":next_year,"player_id":String(player_id)},"player_lifecycle")
 	_names.rename_youth(world, lifecycle_result.get("youth", []), season_seed + 700_002)
 	var youth_quality_result: Dictionary = _youth_quality.apply_to_intake(world, lifecycle_result.get("youth", []), season_seed + 700_002)
-	if not lifecycle_result.get("youth", []).is_empty():
-		_events.emit(world, "YOUTH_INTAKE", {"season_year":next_year,"player_ids":lifecycle_result.get("youth", []).duplicate(),"count":lifecycle_result.get("youth", []).size(),"elite_prospects":int(youth_quality_result.get("elite_prospects", 0))}, "player_lifecycle")
+	if not lifecycle_result.get("youth", []).is_empty(): _events.emit(world, "YOUTH_INTAKE", {"season_year":next_year,"player_ids":lifecycle_result.get("youth", []).duplicate(),"count":lifecycle_result.get("youth", []).size(),"elite_prospects":int(youth_quality_result.get("elite_prospects", 0))}, "player_lifecycle")
 	var contract_result: Dictionary = _market.process_contracts(world, next_year, season_seed + 700_003)
 	var staff_contract_result: Dictionary = _staff_contracts.process_expiring(world, next_year)
 	var staff_development_result: Dictionary = _staff_development.advance_year(world, season_result.records, season_seed + 700_005)
 	var squad_result: Dictionary = _market.rebalance_ai_squads(world, next_year, season_seed + 700_007, 20, 30)
 	var registration_result: Dictionary = _registration.auto_register_world(world, next_year)
 	for club in world.clubs:
-		var competition: Dictionary = _competition_for_club(world.competitions, String(club.id))
-		var opponent_id := ""
+		var competition: Dictionary = _competition_for_club(world.competitions, String(club.id)); var opponent_id := ""
 		if not competition.is_empty():
 			for other_id in competition.club_ids:
-				if String(other_id) != String(club.id):
-					opponent_id = String(other_id)
-					break
-		if opponent_id != "":
-			club.tactic = _tactics.ai_choose_tactic(world, String(club.id), opponent_id, season_seed + 800_001 + next_year)
+				if String(other_id) != String(club.id): opponent_id = String(other_id); break
+		if opponent_id != "": club.tactic = _tactics.ai_choose_tactic(world, String(club.id), opponent_id, season_seed + 800_001 + next_year)
 	var international_result: Dictionary = _international.run_year(world, completed_year, season_seed + 850_001)
 	world["international_history"] = world.get("international_history", [])
 	world.international_history.append({"year":completed_year,"champion_country_id":String(international_result.get("champion", "")),"qualified":international_result.get("qualified", []).duplicate()})
@@ -87,41 +91,29 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	return {"season":season_result,"history_archive":history_result,"economy":economy_result,"board":board_result,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"staff_development":staff_development_result,"squads":squad_result,"registrations":registration_result,"living_world":living_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
 
 func _process_ai_manager_market(world: Dictionary, records: Array, year: int) -> Dictionary:
-	var human_club_id := String(world.get("human_manager", {}).get("club_id", ""))
-	var sacked: Array = []
-	var hired: Array = []
+	var human_club_id := String(world.get("human_manager", {}).get("club_id", "")); var sacked: Array=[]; var hired:Array=[]
 	for club in world.get("clubs", []):
-		var club_id := String(club.get("id", ""))
-		if club_id == human_club_id:
-			continue
-		var ppg := _season_ppg(records, club_id)
-		var patience := int(club.get("board", {}).get("patience", 50))
-		var security: Dictionary = _staff_market.evaluate_manager_security(world, club_id, ppg, patience)
+		var club_id := String(club.get("id", "")); if club_id == human_club_id: continue
+		var security: Dictionary = _staff_market.evaluate_manager_security(world, club_id, _season_ppg(records, club_id), int(club.get("board", {}).get("patience", 50)))
 		if String(security.get("status", "secure")) == "critical":
 			var manager_id := String(security.get("manager_id", ""))
 			if _staff_market.sack_manager(world, club_id, "poor_results", year) == OK:
-				sacked.append(club_id)
-				_events.emit(world, "MANAGER_FIRED", {"manager_id":manager_id,"club_id":club_id,"reason":"poor_results","year":year,"risk":float(security.get("risk", 1.0))}, "staff_market")
+				sacked.append(club_id); _events.emit(world,"MANAGER_FIRED",{"manager_id":manager_id,"club_id":club_id,"reason":"poor_results","year":year,"risk":float(security.get("risk",1.0))},"staff_market")
 	for club_id in sacked:
-		var options: Array = _staff_market.candidates(world, String(club_id), 8)
-		if options.is_empty():
-			continue
+		var options: Array = _staff_market.candidates(world, String(club_id), 8); if options.is_empty(): continue
 		var candidate_id := String(options[0].staff_id)
 		if _staff_market.hire_manager(world, String(club_id), candidate_id, year) == OK:
-			hired.append({"club_id":String(club_id),"staff_id":candidate_id})
+			hired.append({"club_id":String(club_id),"staff_id":candidate_id}); _events.emit(world,"MANAGER_HIRED",{"manager_id":candidate_id,"club_id":String(club_id),"year":year},"staff_market")
 	return {"sacked":sacked,"hired":hired}
 
 func _season_ppg(records: Array, club_id: String) -> float:
 	for record in records:
-		if String(record.get("competition_type", "league")) != "league":
-			continue
+		if String(record.get("competition_type", "league")) != "league": continue
 		for row in record.get("table", []):
-			if String(row.get("club_id", "")) == club_id:
-				return float(row.get("points", 0)) / float(maxi(1, int(row.get("played",0))))
+			if String(row.get("club_id", "")) == club_id: return float(row.get("points", 0)) / float(maxi(1, int(row.get("played",0))))
 	return 1.2
 
 func _competition_for_club(competitions: Array, club_id: String) -> Dictionary:
 	for competition in competitions:
-		if String(competition.get("competition_type", "league")) == "league" and club_id in competition.club_ids:
-			return competition
+		if String(competition.get("competition_type", "league")) == "league" and club_id in competition.club_ids: return competition
 	return {}
