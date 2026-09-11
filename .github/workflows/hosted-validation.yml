@@ -40,5 +40,8 @@ jobs:
       - name: Career and living-world smoke
         run: bash tools/test-headless.sh tests/phase1011_test_runner.gd 1200
 
+      - name: Phase 12-14 completion gate
+        run: bash tools/test-headless.sh tests/phase1214_completion_test.gd 300
+
       - name: Release hardening smoke
         run: bash tools/test-headless.sh tests/release_hardening_test.gd 1200
