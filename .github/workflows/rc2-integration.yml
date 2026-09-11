@@ -17,6 +17,9 @@ on:
       - 'tests/history_archive_test.gd'
       - 'tests/stadium_management_test.gd'
       - 'tests/training_session_test.gd'
+      - 'tests/player_lifecycle_v2_test.gd'
+      - 'tests/medical_uncertainty_test.gd'
+      - 'tests/living_world_depth_test.gd'
       - 'game/localization/**'
       - 'game/polish/**'
       - 'tools/test-headless.ps1'
@@ -56,7 +59,7 @@ permissions:
 jobs:
   rc2-integration:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,6 +79,12 @@ jobs:
         run: .\tools\test-headless.ps1 -Script tests/stadium_management_test.gd
       - shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/training_session_test.gd
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/player_lifecycle_v2_test.gd
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/medical_uncertainty_test.gd
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/living_world_depth_test.gd
       - shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/career_rollover_test.gd
       - shell: powershell
