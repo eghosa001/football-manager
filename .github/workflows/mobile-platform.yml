@@ -31,6 +31,7 @@ on:
         type: choice
         options:
           - android
+          - android_play
           - ios
           - all
 
@@ -97,6 +98,55 @@ jobs:
         with:
           name: FootballDynasty-android-arm64-debug
           path: build/android/FootballDynasty-debug.apk
+
+  android_play:
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.platform == 'android_play' || inputs.platform == 'all') }}
+    needs: contract
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 45
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: false
+      - name: Resolve Godot and signing credentials
+        shell: powershell
+        run: |
+          foreach ($name in @('ANDROID_KEYSTORE_BASE64','ANDROID_KEY_ALIAS','ANDROID_KEYSTORE_PASSWORD')) {
+            if (-not (Get-Item "env:$name" -ErrorAction SilentlyContinue).Value) { throw "$name secret is required for Google Play export." }
+          }
+          $candidate = $null
+          if ($env:GODOT_EXE -and (Test-Path $env:GODOT_EXE)) { $candidate = $env:GODOT_EXE }
+          elseif ($env:GODOT_PATH -and (Test-Path $env:GODOT_PATH)) { $candidate = $env:GODOT_PATH }
+          else {
+            foreach ($name in @('godot','godot4')) {
+              $cmd = Get-Command $name -ErrorAction SilentlyContinue
+              if ($cmd) { $candidate = $cmd.Source; break }
+            }
+          }
+          if (-not $candidate) { throw 'Godot executable not found.' }
+          $keystore = Join-Path $env:RUNNER_TEMP 'football-dynasty-release.keystore'
+          [IO.File]::WriteAllBytes($keystore, [Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64))
+          "GODOT_EXE=$candidate" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$keystore" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$env:ANDROID_KEY_ALIAS" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$env:ANDROID_KEYSTORE_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build signed Google Play AAB
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path build/android | Out-Null
+          & $env:GODOT_EXE --headless --path . --install-android-build-template --export-release 'Android Play' build/android/FootballDynasty.aab
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path build/android/FootballDynasty.aab)) { throw 'Android AAB missing.' }
+      - name: Upload Google Play build
+        uses: actions/upload-artifact@v4
+        with:
+          name: FootballDynasty-google-play-aab
+          path: build/android/FootballDynasty.aab
 
   ios:
     if: ${{ github.event_name == 'workflow_dispatch' && (inputs.platform == 'ios' || inputs.platform == 'all') }}
