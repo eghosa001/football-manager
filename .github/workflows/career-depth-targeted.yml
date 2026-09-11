@@ -1,0 +1,49 @@
+name: Career Depth Targeted
+
+on:
+  push:
+    branches: [cross-platform-mobile-and-hardening]
+    paths:
+      - 'simulation/transfers/**'
+      - 'simulation/players/training_system.gd'
+      - 'simulation/scouting/**'
+      - 'application/career/career_command_service.gd'
+      - 'tests/player_scouting_test.gd'
+      - '.github/workflows/career-depth-targeted.yml'
+  pull_request:
+    paths:
+      - 'simulation/transfers/**'
+      - 'simulation/players/training_system.gd'
+      - 'simulation/scouting/**'
+      - 'application/career/career_command_service.gd'
+      - 'tests/player_scouting_test.gd'
+      - '.github/workflows/career-depth-targeted.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: career-depth-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: false
+      - name: Import project
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
+      - name: Run player scouting transfer and training regression
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/player_scouting_test.gd
+      - name: Verify tests did not modify tracked source
+        shell: powershell
+        run: |
+          $dirty = git status --porcelain
+          if ($dirty) { Write-Host $dirty; throw 'Tests modified tracked source.' }
