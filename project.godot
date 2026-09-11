@@ -11,6 +11,7 @@ config/features=PackedStringArray("4.7")
 
 [autoload]
 PolishRuntime="*res://game/polish/polish_runtime.gd"
+CompletionRuntime="*res://game/polish/completion_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
