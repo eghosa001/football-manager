@@ -14,6 +14,7 @@ on:
       - 'tests/completion_features_test_runner.gd'
       - 'tests/event_news_test.gd'
       - 'tests/continuous_attribute_test.gd'
+      - 'tests/player_traits_match_test.gd'
       - 'tests/history_archive_test.gd'
       - 'tests/stadium_management_test.gd'
       - 'tests/training_session_test.gd'
@@ -73,6 +74,8 @@ jobs:
         run: .\tools\test-headless.ps1 -Script tests/event_news_test.gd
       - shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/continuous_attribute_test.gd -TimeoutSeconds 180
+      - shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/player_traits_match_test.gd -TimeoutSeconds 180
       - shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/history_archive_test.gd
       - shell: powershell
