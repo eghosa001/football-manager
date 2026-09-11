@@ -5,6 +5,7 @@ config_version=5
 [application]
 config/name="Football Dynasty"
 config/version="1.0.0-rc2-dev"
+config/unique_name="com.eghosa001.footballdynasty"
 run/main_scene="res://game/scenes/career_app.tscn"
 config/features=PackedStringArray("4.7")
 
@@ -13,6 +14,8 @@ window/size/viewport_width=1280
 window/size/viewport_height=720
 window/size/window_width_override=1280
 window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [rendering]
 renderer/rendering_method="gl_compatibility"
