@@ -13,8 +13,10 @@ func build(world: Dictionary, history: Array = []) -> Dictionary:
 		"transfer_records": _transfer_records(world, player_names, club_names),
 		"club_honours": _club_honours(world, history, club_names, competition_names),
 		"competition_history": _competition_history(world, history, club_names, competition_names),
+		"league_positions": _league_positions(world, history, club_names, competition_names),
 		"manager_history": _manager_history(world, club_names),
 		"legends": _legends(world, player_names, club_names),
+		"biographies": _biographies(world, players, club_names),
 		"timeline": _timeline(world, history),
 	}
 
@@ -27,17 +29,8 @@ func _all_time_players(world: Dictionary, players: Array) -> Array:
 	var rows: Array = []
 	for player in players:
 		var id := String(player.get("id", ""))
-		rows.append({
-			"player_id": id,
-			"name": _person_name(player),
-			"appearances": int(player.get("career_appearances", 0)),
-			"goals": int(goals.get(id, player.get("career_goals", 0))),
-			"retired": bool(player.get("retired", false)),
-		})
-	rows.sort_custom(func(a, b):
-		if int(a.goals) == int(b.goals): return int(a.appearances) > int(b.appearances)
-		return int(a.goals) > int(b.goals)
-	)
+		rows.append({"player_id":id,"name":_person_name(player),"appearances":int(player.get("career_appearances",0)),"goals":int(goals.get(id,player.get("career_goals",0))),"retired":bool(player.get("retired",false))})
+	rows.sort_custom(func(a,b): return int(a.goals) > int(b.goals) if int(a.goals) != int(b.goals) else int(a.appearances) > int(b.appearances))
 	return rows.slice(0, mini(25, rows.size()))
 
 func _transfer_records(world: Dictionary, player_names: Dictionary, club_names: Dictionary) -> Array:
@@ -45,14 +38,8 @@ func _transfer_records(world: Dictionary, player_names: Dictionary, club_names: 
 	for transfer in world.get("transfers", []):
 		var fee := int(transfer.get("fee", transfer.get("amount", transfer.get("transfer_fee", 0))))
 		if fee <= 0: continue
-		rows.append({
-			"player": player_names.get(String(transfer.get("player_id", "")), "Unknown player"),
-			"from": club_names.get(String(transfer.get("from_club_id", transfer.get("selling_club_id", ""))), "Free agent"),
-			"to": club_names.get(String(transfer.get("to_club_id", transfer.get("buying_club_id", ""))), "Unknown club"),
-			"fee": fee,
-			"date": String(transfer.get("date", transfer.get("completed_date", ""))),
-		})
-	rows.sort_custom(func(a, b): return int(a.fee) > int(b.fee))
+		rows.append({"player":player_names.get(String(transfer.get("player_id","")),"Unknown player"),"from":club_names.get(String(transfer.get("from_club_id",transfer.get("selling_club_id",""))),"Free agent"),"to":club_names.get(String(transfer.get("to_club_id",transfer.get("buying_club_id",""))),"Unknown club"),"fee":fee,"date":String(transfer.get("date",transfer.get("completed_date","")))})
+	rows.sort_custom(func(a,b): return int(a.fee) > int(b.fee))
 	return rows.slice(0, mini(20, rows.size()))
 
 func _club_honours(world: Dictionary, history: Array, club_names: Dictionary, competition_names: Dictionary) -> Array:
@@ -60,79 +47,100 @@ func _club_honours(world: Dictionary, history: Array, club_names: Dictionary, co
 	for row in world.get("club_honours", []):
 		var club_id := String(row.get("club_id", ""))
 		if club_id == "": continue
-		var key := "%s|%s" % [club_id, String(row.get("competition_id", row.get("competition", "")))]
-		if not totals.has(key): totals[key] = {"club_id":club_id,"competition_id":String(row.get("competition_id", row.get("competition", ""))),"titles":0}
-		totals[key].titles = int(totals[key].titles) + int(row.get("titles", 1))
+		var competition_id := String(row.get("competition_id", row.get("competition", "")))
+		var key := "%s|%s" % [club_id, competition_id]
+		if not totals.has(key): totals[key] = {"club_id":club_id,"competition_id":competition_id,"titles":0}
+		totals[key].titles = int(totals[key].titles) + int(row.get("titles",1))
 	for row in _championship_rows(world, history):
-		var club_id := String(row.get("champion_id", row.get("winner_club_id", row.get("club_id", ""))))
+		var club_id := String(row.get("champion_id",row.get("winner_club_id",row.get("club_id",""))))
 		if club_id == "": continue
 		var competition_id := String(row.get("competition_id", ""))
 		var key := "%s|%s" % [club_id, competition_id]
 		if not totals.has(key): totals[key] = {"club_id":club_id,"competition_id":competition_id,"titles":0}
 		totals[key].titles = int(totals[key].titles) + 1
 	var rows: Array = []
-	for value in totals.values():
-		rows.append({"club":club_names.get(String(value.club_id), String(value.club_id)),"competition":competition_names.get(String(value.competition_id), String(value.competition_id)),"titles":int(value.titles)})
-	rows.sort_custom(func(a, b): return int(a.titles) > int(b.titles))
+	for value in totals.values(): rows.append({"club":club_names.get(String(value.club_id),String(value.club_id)),"competition":competition_names.get(String(value.competition_id),String(value.competition_id)),"titles":int(value.titles)})
+	rows.sort_custom(func(a,b): return int(a.titles) > int(b.titles))
 	return rows.slice(0, mini(30, rows.size()))
 
 func _competition_history(world: Dictionary, history: Array, club_names: Dictionary, competition_names: Dictionary) -> Array:
 	var rows: Array = []
 	for row in _championship_rows(world, history):
 		var competition_id := String(row.get("competition_id", ""))
-		var champion_id := String(row.get("champion_id", row.get("winner_club_id", row.get("club_id", ""))))
+		var champion_id := String(row.get("champion_id",row.get("winner_club_id",row.get("club_id",""))))
 		if competition_id == "" or champion_id == "": continue
-		rows.append({
-			"season": int(row.get("season_year", row.get("year", 0))),
-			"competition": competition_names.get(competition_id, competition_id),
-			"champion": club_names.get(champion_id, champion_id),
-		})
-	rows.sort_custom(func(a, b): return int(a.season) > int(b.season))
+		rows.append({"season":int(row.get("season_year",row.get("year",0))),"competition":competition_names.get(competition_id,competition_id),"champion":club_names.get(champion_id,champion_id)})
+	rows.sort_custom(func(a,b): return int(a.season) > int(b.season))
 	return rows.slice(0, mini(50, rows.size()))
+
+func _league_positions(world: Dictionary, history: Array, club_names: Dictionary, competition_names: Dictionary) -> Array:
+	var rows: Array = []
+	for source in [world.get("league_position_history", []), world.get("season_history", []), history]:
+		for item in source:
+			if typeof(item) != TYPE_DICTIONARY: continue
+			var position := int(item.get("position", item.get("league_position", 0)))
+			var club_id := String(item.get("club_id", ""))
+			if position <= 0 or club_id == "": continue
+			var competition_id := String(item.get("competition_id", ""))
+			rows.append({"season":int(item.get("season_year",item.get("year",0))),"club":club_names.get(club_id,club_id),"competition":competition_names.get(competition_id,competition_id),"position":position,"points":int(item.get("points",0))})
+	rows.sort_custom(func(a,b): return int(a.season) > int(b.season))
+	return rows.slice(0, mini(60, rows.size()))
 
 func _manager_history(world: Dictionary, club_names: Dictionary) -> Array:
 	var rows: Array = []
-	for row in world.get("manager_history", []):
-		rows.append({
-			"manager": String(row.get("manager_name", row.get("name", row.get("manager_id", "Manager")))),
-			"club": club_names.get(String(row.get("club_id", "")), String(row.get("club_id", ""))),
-			"from": String(row.get("start_date", row.get("from", ""))),
-			"to": String(row.get("end_date", row.get("to", "present"))),
-			"reason": String(row.get("reason", row.get("outcome", ""))),
-		})
-	return rows.slice(maxi(0, rows.size() - 30), rows.size())
+	for row in world.get("manager_history", []): rows.append({"manager":String(row.get("manager_name",row.get("name",row.get("manager_id","Manager")))),"club":club_names.get(String(row.get("club_id","")),String(row.get("club_id",""))),"from":String(row.get("start_date",row.get("from",""))),"to":String(row.get("end_date",row.get("to","present"))),"reason":String(row.get("reason",row.get("outcome","")))})
+	return rows.slice(maxi(0, rows.size()-30), rows.size())
 
 func _legends(world: Dictionary, player_names: Dictionary, club_names: Dictionary) -> Array:
 	var rows: Array = []
 	for legend in world.get("legends", []):
-		var player_id := String(legend.get("player_id", legend.get("person_id", "")))
-		rows.append({
-			"name": player_names.get(player_id, String(legend.get("name", player_id))),
-			"club": club_names.get(String(legend.get("club_id", "")), String(legend.get("club_id", ""))),
-			"score": float(legend.get("score", legend.get("legend_score", 0.0))),
-			"summary": String(legend.get("summary", legend.get("reason", "Club legend"))),
-		})
-	rows.sort_custom(func(a, b): return float(a.score) > float(b.score))
+		var player_id := String(legend.get("player_id",legend.get("person_id","")))
+		rows.append({"name":player_names.get(player_id,String(legend.get("name",player_id))),"club":club_names.get(String(legend.get("club_id","")),String(legend.get("club_id",""))),"score":float(legend.get("score",legend.get("legend_score",0.0))),"summary":String(legend.get("summary",legend.get("reason","Club legend")))})
+	rows.sort_custom(func(a,b): return float(a.score) > float(b.score))
+	return rows.slice(0, mini(25, rows.size()))
+
+func _biographies(world: Dictionary, players: Array, club_names: Dictionary) -> Array:
+	var by_player := {}
+	for row in world.get("player_history", []):
+		var id := String(row.get("player_id", ""))
+		if id == "": continue
+		if not by_player.has(id): by_player[id] = {"apps":0,"goals":0,"clubs":{},"first":9999,"last":0}
+		var data: Dictionary = by_player[id]
+		data.apps = int(data.apps) + int(row.get("appearances",0))
+		data.goals = int(data.goals) + int(row.get("goals",0))
+		var club_id := String(row.get("club_id", ""))
+		if club_id != "": data.clubs[club_id] = true
+		var season := int(row.get("season_year",0)); if season > 0: data.first = mini(int(data.first),season); data.last = maxi(int(data.last),season)
+	var player_map := {}
+	for player in players: player_map[String(player.get("id",""))] = player
+	var rows: Array = []
+	for id in by_player.keys():
+		var data: Dictionary = by_player[id]
+		if int(data.apps) < 25 and int(data.goals) < 10: continue
+		var club_list: Array[String] = []
+		for club_id in data.clubs.keys(): club_list.append(String(club_names.get(String(club_id),String(club_id))))
+		club_list.sort()
+		var player: Dictionary = player_map.get(String(id), {})
+		rows.append({"name":_person_name(player),"summary":"%d appearances, %d goals across %d club%s (%s-%s). Clubs: %s" % [int(data.apps),int(data.goals),club_list.size(),"s" if club_list.size()!=1 else "",String(data.first if int(data.first)<9999 else "?"),String(data.last if int(data.last)>0 else "?"),", ".join(club_list)],"score":int(data.apps)+int(data.goals)*4})
+	rows.sort_custom(func(a,b): return int(a.score) > int(b.score))
 	return rows.slice(0, mini(25, rows.size()))
 
 func _timeline(world: Dictionary, history: Array) -> Array:
 	var rows: Array = []
-	for source in [world.get("news", []), world.get("news_events", []), world.get("causal_records", []), history]:
+	for source in [world.get("news",[]),world.get("news_events",[]),world.get("causal_records",[]),history]:
 		for item in source:
 			if typeof(item) != TYPE_DICTIONARY: continue
-			var text := String(item.get("headline", item.get("title", item.get("summary", item.get("type", "")))))
+			var text := String(item.get("headline",item.get("title",item.get("summary",item.get("type","")))))
 			if text == "": continue
-			rows.append({"date":String(item.get("date", item.get("season_year", item.get("year", "")))),"text":text})
-	return rows.slice(maxi(0, rows.size() - 100), rows.size())
+			rows.append({"date":String(item.get("date",item.get("season_year",item.get("year","")))),"text":text})
+	return rows.slice(maxi(0,rows.size()-100),rows.size())
 
 func _championship_rows(world: Dictionary, history: Array) -> Array:
 	var rows: Array = []
-	for key in ["competition_history", "season_history", "historical_records"]:
-		for row in world.get(key, []):
-			if typeof(row) == TYPE_DICTIONARY: rows.append(row)
+	for key in ["competition_history","season_history","historical_records"]:
+		for row in world.get(key, []): if typeof(row) == TYPE_DICTIONARY: rows.append(row)
 	for row in history:
-		if typeof(row) == TYPE_DICTIONARY and (row.has("champion_id") or row.has("winner_club_id")):
-			rows.append(row)
+		if typeof(row) == TYPE_DICTIONARY and (row.has("champion_id") or row.has("winner_club_id")): rows.append(row)
 	return rows
 
 func _index_names(values: Array) -> Dictionary:
@@ -140,8 +148,7 @@ func _index_names(values: Array) -> Dictionary:
 	for value in values:
 		if typeof(value) != TYPE_DICTIONARY: continue
 		var id := String(value.get("id", ""))
-		if id == "": continue
-		out[id] = _person_name(value)
+		if id != "": out[id] = _person_name(value)
 	return out
 
 func _person_name(value: Dictionary) -> String:
