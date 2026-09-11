@@ -10,6 +10,7 @@ const StadiumServiceClass = preload("res://simulation/finance/stadium_service.gd
 const BoardEvaluationClass = preload("res://simulation/finance/board_evaluation.gd")
 const TacticsClass = preload("res://simulation/tactics/tactics_manager.gd")
 const LivingWorldClass = preload("res://simulation/world/living_world.gd")
+const LivingWorldDepthClass = preload("res://simulation/world/living_world_depth.gd")
 const ReputationModelClass = preload("res://simulation/world/reputation_model.gd")
 const HistoryRecordServiceClass = preload("res://simulation/world/history_record_service.gd")
 const PlayerHappinessClass = preload("res://simulation/players/player_happiness.gd")
@@ -30,6 +31,7 @@ var _stadiums = StadiumServiceClass.new()
 var _board = BoardEvaluationClass.new()
 var _tactics = TacticsClass.new()
 var _living_world = LivingWorldClass.new()
+var _living_depth = LivingWorldDepthClass.new()
 var _reputation = ReputationModelClass.new()
 var _history_records = HistoryRecordServiceClass.new()
 var _happiness = PlayerHappinessClass.new()
@@ -68,6 +70,7 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 		if world.history_archive.records.get(key) != previous_records.get(key):
 			_events.emit(world, "RECORD_BROKEN", {"year":completed_year,"record":String(key),"value":world.history_archive.records.get(key)}, "history")
 	var economy_result: Dictionary = _economy.run_season_finances(world, completed_year, season_result.records)
+	_history_records.enrich_club_context(world, economy_result, completed_year)
 	var board_result: Dictionary = _board.evaluate_world(world, season_result.records)
 	var manager_market_result: Dictionary = _process_ai_manager_market(world, season_result.records, completed_year)
 	var next_year: int = int(season_result.next_season_year)
@@ -99,10 +102,11 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	world["international_history"] = world.get("international_history", [])
 	world.international_history.append({"year":completed_year,"champion_country_id":String(international_result.get("champion", "")),"qualified":international_result.get("qualified", []).duplicate()})
 	var living_result: Dictionary = _living_world.advance_year(world, season_result.records, season_seed + 900_001)
+	var living_depth_result: Dictionary = _living_depth.advance_year(world, completed_year)
 	var reputation_result: Dictionary = _reputation.advance_year(world, season_result.records)
 	var happiness_result: Dictionary = _happiness.update_week(world)
 	_events.emit(world, "SEASON_ENDED", {"completed_year":completed_year,"next_year":next_year,"competition_records":season_result.records.duplicate(true),"promotion_movements":season_result.get("movements", []).duplicate(true),"international_champion":String(international_result.get("champion", ""))}, "career_cycle")
-	return {"season":season_result,"history_archive":history_result,"economy":economy_result,"board":board_result,"stadium_projects":stadium_projects,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"staff_development":staff_development_result,"squads":squad_result,"registrations":registration_result,"living_world":living_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
+	return {"season":season_result,"history_archive":history_result,"economy":economy_result,"board":board_result,"stadium_projects":stadium_projects,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"staff_development":staff_development_result,"squads":squad_result,"registrations":registration_result,"living_world":living_result,"living_world_depth":living_depth_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
 
 func _process_ai_manager_market(world: Dictionary, records: Array, year: int) -> Dictionary:
 	var human_club_id := String(world.get("human_manager", {}).get("club_id", ""))
