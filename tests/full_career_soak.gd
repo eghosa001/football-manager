@@ -1,7 +1,7 @@
 extends SceneTree
 
 const GeneratorClass = preload("res://simulation/world/world_generator.gd")
-const CareerCycleClass = preload("res://application/career/career_cycle.gd")
+const CareerCycleClass = preload("res://application/career/career_cycle_v2.gd")
 
 func _init() -> void:
 	var seasons:=100
