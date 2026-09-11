@@ -9,8 +9,10 @@ const DressingRoomClass = preload("res://simulation/players/dressing_room.gd")
 const PlayerPromisesClass = preload("res://simulation/players/player_promises.gd")
 const PlayerHappinessClass = preload("res://simulation/players/player_happiness.gd")
 const DomainEventBusClass = preload("res://core/events/domain_event_bus.gd")
+const EventNewsServiceClass = preload("res://application/career/event_news_service.gd")
 
 var _events = DomainEventBusClass.new()
+var _news = EventNewsServiceClass.new()
 
 func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 	_events.ensure_world(world)
@@ -39,7 +41,8 @@ func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 				managed_concerns += 1
 		if managed_concerns > 0:
 			InboxServiceClass.new().add_message(world, "dressing_room", "Player happiness concerns", "%d first-team players have significant happiness concerns. Review Dynamics for the causes." % managed_concerns)
-	return {"day_index":day_index,"medical":medical,"training":training,"scouting":scouting,"promises":promises,"happiness":happiness}
+	var news_result := _news.consume(world)
+	return {"day_index":day_index,"medical":medical,"training":training,"scouting":scouting,"promises":promises,"happiness":happiness,"news":news_result}
 
 func _advance_medical(world: Dictionary, managed_club_id: String) -> Array:
 	var medical_system = MedicalSystemClass.new()
