@@ -5,6 +5,8 @@ const SeasonRunnerClass = preload("res://application/season/season_runner.gd")
 const AbstractMatchEngineClass = preload("res://simulation/match/abstract_match_engine.gd")
 const TacticalMatchEngineClass = preload("res://simulation/match/tactical_match_engine.gd")
 const FullMatchEngineV2Class = preload("res://simulation/match/full_match_engine_v2.gd")
+const AggregateMatchEngineClass = preload("res://simulation/match/background_aggregate_engine.gd")
+const SimulationTierPolicyClass = preload("res://application/performance/simulation_tier_policy.gd")
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const PlayerStatsServiceClass = preload("res://application/career/player_stats_service.gd")
 const DressingRoomClass = preload("res://simulation/players/dressing_room.gd")
@@ -15,6 +17,8 @@ const CONTINUOUS_ENGINE_PATH := "res://simulation/match/continuous_full_match_en
 
 var _abstract = AbstractMatchEngineClass.new()
 var _tactical = TacticalMatchEngineClass.new()
+var _aggregate = AggregateMatchEngineClass.new()
+var _tier_policy = SimulationTierPolicyClass.new()
 var _detailed = FullMatchEngineV2Class.new()
 var _continuous = null
 var _continuous_attempted := false
@@ -34,11 +38,14 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 		if home.is_empty() or away.is_empty():
 			continue
 		var match_seed := _fixture_seed(season_seed, String(fixture.get("id", "")))
-		var is_managed := managed_club_id != "" and (String(home.id) == managed_club_id or String(away.id) == managed_club_id)
 		var competition_id := String(fixture.get("competition_id", ""))
-		var eligible_players: Array = _eligible_match_players(world, String(home.id), String(away.id), competition_id)
+		var tier := _tier_policy.tier_for_fixture(world, home, away, managed_club_id, competition_id)
+		var is_managed := tier == SimulationTierPolicyClass.USER_LEAGUE
+		var eligible_players: Array = []
+		if tier != SimulationTierPolicyClass.INACTIVE_WORLD:
+			eligible_players = _eligible_match_players(world, String(home.id), String(away.id), competition_id)
 		var result: Dictionary
-		var detailed_model := "background"
+		var detailed_model := _tier_policy.label(tier)
 		if is_managed:
 			var preferred := String(world.get("detailed_match_model", "continuous"))
 			var engine = _continuous_engine() if preferred == "continuous" else null
@@ -52,16 +59,21 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 				_detailed.apply_to_fixture(fixture, result)
 				detailed_model = "persistent_action_v2"
 			if not result.has("error"):
-				world["last_managed_match"] = {"fixture":fixture.duplicate(true),"result":result.duplicate(true),"date":date_string,"model":detailed_model}
+				world["last_managed_match"] = {"fixture":fixture.duplicate(true),"result":result.duplicate(true),"date":date_string,"model":detailed_model,"simulation_tier":tier}
 				_add_match_message(world, home, away, result, managed_club_id)
+		elif tier == SimulationTierPolicyClass.DETAILED_LEAGUE:
+			result = _tactical.simulate_match(home, away, eligible_players, match_seed)
+			_tactical.apply_to_fixture(fixture, result)
+		elif tier == SimulationTierPolicyClass.BACKGROUND_LEAGUE:
+			result = _abstract.simulate_match(home, away, eligible_players, match_seed)
+			_abstract.apply_to_fixture(fixture, result)
 		else:
-			var background_engine = _tactical if home.has("tactic") or away.has("tactic") else _abstract
-			result = background_engine.simulate_match(home, away, eligible_players, match_seed)
-			background_engine.apply_to_fixture(fixture, result)
+			result = _aggregate.simulate_match(home, away, [], match_seed)
+			_aggregate.apply_to_fixture(fixture, result)
 		if not result.has("error"):
 			_stats.record_match(world, fixture, result)
 			_apply_dressing_room_result(world, home, away, result)
-		results.append({"fixture":fixture,"result":result,"match_seed":match_seed,"detailed":is_managed,"model":detailed_model})
+		results.append({"fixture":fixture,"result":result,"match_seed":match_seed,"detailed":is_managed,"model":detailed_model,"simulation_tier":tier})
 		touched_competitions[competition_id] = true
 	for competition_id in touched_competitions.keys():
 		_knockout.advance_ready(world, String(competition_id), date_string)
