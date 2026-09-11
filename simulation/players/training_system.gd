@@ -2,6 +2,7 @@ class_name TrainingSystem
 extends RefCounted
 
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
+const TrainingDepthClass = preload("res://simulation/players/training_depth.gd")
 const SESSIONS := ["recovery", "technical", "tactical", "physical", "set_pieces", "match_prep", "rest"]
 
 func ensure_club(club: Dictionary) -> void:
@@ -16,6 +17,8 @@ func run_week(world: Dictionary, club_id: String, seed: int) -> Dictionary:
 	var improved := 0
 	var fatigue_added := 0
 	var injuries := 0
+	var individual_focus_gains := 0
+	var learned_traits: Array = []
 	var coaching := _coaching_quality(world.get("staff", []), club_id)
 	var facilities := float(club.get("training_facilities", 50))
 	var work_days := 0
@@ -23,9 +26,11 @@ func run_week(world: Dictionary, club_id: String, seed: int) -> Dictionary:
 	for session in club.training_schedule:
 		if session in ["rest", "recovery"]: recovery_days += 1
 		else: work_days += 1
+	var depth = TrainingDepthClass.new()
 	for player in world.get("players", []):
 		if String(player.get("club_id", "")) != club_id or bool(player.get("retired", false)):
 			continue
+		depth.ensure_player(player)
 		if int(player.get("injured_days", 0)) > 0: continue
 		var intensity := float(club.training_intensity)
 		var professionalism := float(player.get("hidden_attributes", {}).get("professionalism", 50))
@@ -37,6 +42,10 @@ func run_week(world: Dictionary, club_id: String, seed: int) -> Dictionary:
 		if gain > 0:
 			player.current_ability = mini(int(player.get("potential", 100)), int(player.get("current_ability", 50)) + gain)
 			improved += 1
+		var individual := depth.apply_week(player, work_days, coaching, facilities, seed + _stable_key(String(player.get("id", ""))))
+		individual_focus_gains += int(individual.get("focus_gain", 0))
+		if String(individual.get("learned_trait", "")) != "":
+			learned_traits.append({"player_id":String(player.get("id", "")),"trait":String(individual.learned_trait)})
 		var fatigue := maxi(0, int(round(intensity * float(work_days) * 2.0)) - recovery_days)
 		if work_days == 0: player.fitness = mini(100, int(player.get("fitness", 100)) + recovery_days * 2)
 		player.fitness = clampi(int(player.get("fitness", 100)) - fatigue, 45, 100)
@@ -47,7 +56,7 @@ func run_week(world: Dictionary, club_id: String, seed: int) -> Dictionary:
 		if work_days > 0 and SeededRngClass.unit_for(seed, key) < injury_risk * float(work_days) / 5.0:
 			player.injured_days = maxi(int(player.get("injured_days", 0)), 5 + int(SeededRngClass.value_for(seed, key + 7) % 24))
 			injuries += 1
-	return {"players_improved":improved,"fatigue_added":fatigue_added,"training_injuries":injuries,"coaching_quality":coaching}
+	return {"players_improved":improved,"individual_focus_gains":individual_focus_gains,"learned_traits":learned_traits,"fatigue_added":fatigue_added,"training_injuries":injuries,"coaching_quality":coaching}
 
 func set_schedule(club: Dictionary, sessions: Array, intensity: float) -> Error:
 	if sessions.size() != 7:
@@ -63,7 +72,7 @@ func _coaching_quality(staff: Array, club_id: String) -> float:
 	var total := 0.0
 	var count := 0
 	for member in staff:
-		if String(member.get("club_id", "")) == club_id and String(member.get("role", "")) in ["coach","assistant_manager","manager"]:
+		if String(member.get("club_id", "")) == club_id and String(member.get("role", "")) in ["coach","assistant_manager","assistant","manager"]:
 			total += float(member.get("ability", 50))
 			count += 1
 	return total / maxf(float(count), 1.0)
