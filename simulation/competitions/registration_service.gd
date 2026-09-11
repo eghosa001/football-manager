@@ -1,6 +1,9 @@
 class_name RegistrationService
 extends RefCounted
 
+var _cached_player_index: Dictionary = {}
+var _cached_player_signature := ""
+
 func ensure_world(world: Dictionary) -> void:
 	world["registrations"] = world.get("registrations", {})
 
@@ -89,6 +92,8 @@ func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
 			var result: Dictionary = register_squad(world, String(club_id), competition, ids, season_year, player_index)
 			registered += 1
 			if not bool(result.get("valid", false)): invalid += 1
+	_cached_player_index = player_index
+	_cached_player_signature = _player_signature(world.get("players", []))
 	return {"registered":registered,"invalid":invalid}
 
 func registered_players(world: Dictionary, club_id: String, competition_id: String, season_year: int) -> Array:
@@ -96,9 +101,12 @@ func registered_players(world: Dictionary, club_id: String, competition_id: Stri
 	var key := _key(club_id, competition_id, season_year)
 	if not world.registrations.has(key): return []
 	var ids: Array = world.registrations[key].get("player_ids", [])
+	var player_index := _player_index(world)
 	var players: Array = []
-	for player in world.get("players", []):
-		if String(player.get("id", "")) in ids and String(player.get("club_id", "")) == club_id and not bool(player.get("retired", false)): players.append(player)
+	for player_id in ids:
+		var player: Dictionary = player_index.get(String(player_id), {})
+		if not player.is_empty() and String(player.get("club_id", "")) == club_id and not bool(player.get("retired", false)):
+			players.append(player)
 	return players
 
 func is_registered(world: Dictionary, club_id: String, competition_id: String, season_year: int, player_id: String) -> bool:
@@ -106,10 +114,23 @@ func is_registered(world: Dictionary, club_id: String, competition_id: String, s
 	var key := _key(club_id, competition_id, season_year)
 	return player_id in world.registrations.get(key, {}).get("player_ids", [])
 
+func _player_index(world: Dictionary) -> Dictionary:
+	var players: Array = world.get("players", [])
+	var signature := _player_signature(players)
+	if signature == _cached_player_signature and not _cached_player_index.is_empty():
+		return _cached_player_index
+	_cached_player_index = {}
+	for player in players:
+		_cached_player_index[String(player.get("id", ""))] = player
+	_cached_player_signature = signature
+	return _cached_player_index
+
+func _player_signature(players: Array) -> String:
+	if players.is_empty(): return "0"
+	return "%d:%s:%s" % [players.size(), String(players[0].get("id", "")), String(players[players.size() - 1].get("id", ""))]
+
 func _key(club_id: String, competition_id: String, season_year: int) -> String:
 	return "%s:%s:%d" % [club_id, competition_id, season_year]
 
 func _player(world: Dictionary, player_id: String) -> Dictionary:
-	for player in world.get("players", []):
-		if String(player.get("id", "")) == player_id: return player
-	return {}
+	return _player_index(world).get(player_id, {})
