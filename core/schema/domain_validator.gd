@@ -20,7 +20,8 @@ func validate_player(player: Dictionary) -> Dictionary:
 	var errors: Array = []; var warnings: Array = []
 	_validate_entity(player,"player",PLAYER_REQUIRED,errors,warnings)
 	if int(player.get("age",0)) < 14 or int(player.get("age",0)) > 60: errors.append(_issue("player_age_out_of_range",player))
-	if int(player.get("current_ability",0)) < 0 or int(player.get("current_ability",0)) > 200: errors.append(_issue("player_ca_out_of_range",player))
+	if int(player.get("current_ability",0)) < 0 or int(player.get("current_ability",0)) > 100: errors.append(_issue("player_ca_out_of_range",player))
+	if int(player.get("potential",0)) < 0 or int(player.get("potential",0)) > 100: errors.append(_issue("player_potential_out_of_range",player))
 	if int(player.get("potential",0)) < int(player.get("current_ability",0)): warnings.append(_issue("potential_below_current_ability",player))
 	return {"ok":errors.is_empty(),"errors":errors,"warnings":warnings}
 
@@ -30,8 +31,8 @@ func normalize_player(player: Dictionary) -> Dictionary:
 	value["club_id"] = String(value.get("club_id",""))
 	value["age"] = clampi(int(value.get("age",18)),14,60)
 	value["position"] = String(value.get("position","MC"))
-	value["current_ability"] = clampi(int(value.get("current_ability",50)),0,200)
-	value["potential"] = clampi(int(value.get("potential",value.current_ability)),int(value.current_ability),200)
+	value["current_ability"] = clampi(int(value.get("current_ability",50)),0,100)
+	value["potential"] = clampi(int(value.get("potential",value.current_ability)),int(value.current_ability),100)
 	value["retired"] = bool(value.get("retired",false))
 	value["injured_days"] = maxi(0,int(value.get("injured_days",0)))
 	return value
