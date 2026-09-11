@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, phase-10-11-living-world-release]
+    branches: [main, phase-10-11-living-world-release, release/rc3-convergence]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -43,6 +43,10 @@ jobs:
       - name: Import project
         shell: powershell
         run: .\tools\test-headless.ps1 -Script import
+
+      - name: Run architecture convergence test
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/architecture_convergence_test.gd
 
       - name: Run Phase 1/2 tests
         shell: powershell
