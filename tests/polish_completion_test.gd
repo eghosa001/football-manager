@@ -7,6 +7,7 @@ const ViewerQualityClass = preload("res://game/analysis/match_viewer_quality.gd"
 const FormSchemaClass = preload("res://tools/modding/competition_form_schema.gd")
 const ScreenRegistryClass = preload("res://game/career/career_screen_registry.gd")
 const UIAuditClass = preload("res://game/quality/ui_quality_audit.gd")
+const ArtDirectionClass = preload("res://game/polish/art_direction_runtime.gd")
 
 var failures:Array=[]
 
@@ -17,6 +18,7 @@ func _init()->void:
 	_test_form_schema()
 	_test_screen_registry()
 	_test_ui_audit()
+	_test_art_direction()
 	# Preloading the canonical cycle is itself a parser/dependency gate.
 	_assert(CareerCycleV2Class!=null,"canonical career cycle preload")
 	if failures.is_empty(): print("POLISH COMPLETION: PASS"); quit(0)
@@ -67,6 +69,12 @@ func _test_ui_audit()->void:
 	var result=UIAuditClass.new().audit(root,{"en":{"known":"Known"}})
 	_assert(bool(result.ok),"basic accessibility audit")
 	root.free()
+
+func _test_art_direction()->void:
+	_assert(ArtDirectionClass!=null,"art direction runtime parses")
+	_assert(ArtDirectionClass.TAB_ART.size()>=15,"major career screens have dedicated artwork")
+	for required in ["Dashboard","Squad","Tactics","Transfers","Scouting","Finances","Board","Inbox","News","Match Analysis","Medical","Training","Competitions","Club","World History"]:
+		_assert(ArtDirectionClass.TAB_ART.has(required),"art coverage: %s" % required)
 
 func _assert(condition:bool,label:String)->void:
 	if not condition: failures.append(label)

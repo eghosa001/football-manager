@@ -27,6 +27,7 @@ HappinessRuntime="*res://game/polish/happiness_runtime.gd"
 UIReadabilityRuntime="*res://game/polish/ui_readability_runtime.gd"
 PresentationRuntime="*res://game/polish/presentation_runtime.gd"
 CompositionRuntime="*res://game/polish/composition_runtime.gd"
+ArtDirectionRuntime="*res://game/polish/art_direction_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
