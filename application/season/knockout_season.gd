@@ -2,6 +2,7 @@ class_name KnockoutSeason
 extends RefCounted
 
 const KnockoutClass = preload("res://simulation/competitions/knockout_competition.gd")
+const ResolutionClass = preload("res://simulation/competitions/knockout_resolution_service.gd")
 const CalendarClass = preload("res://core/calendar/calendar_service.gd")
 
 func initialize_all(world: Dictionary, season_year: int) -> void:
@@ -44,7 +45,10 @@ func advance_ready(world: Dictionary, competition_id: String, current_date: Stri
 		if fixture.is_empty(): return bracket
 		var row := {"home_goals":int(fixture.get("home_goals",0)),"away_goals":int(fixture.get("away_goals",0))}
 		if int(row.home_goals) == int(row.away_goals):
-			row["shootout_winner"] = _shootout_winner(String(pairing.home), String(pairing.away), String(fixture.get("id", "")))
+			_resolve_tied_fixture(world, competition, fixture, pairing)
+			row["extra_time_home_goals"] = int(fixture.get("extra_time_home_goals",0))
+			row["extra_time_away_goals"] = int(fixture.get("extra_time_away_goals",0))
+			row["shootout_winner"] = String(fixture.get("shootout_winner", ""))
 		results.append(row)
 	var next: Dictionary = KnockoutClass.new().advance_round(bracket, results)
 	if next.is_empty(): return bracket
@@ -60,12 +64,30 @@ func advance_ready(world: Dictionary, competition_id: String, current_date: Stri
 func record(world: Dictionary, competition: Dictionary) -> Dictionary:
 	var bracket: Dictionary = competition.get("knockout_bracket", {})
 	var fixtures := []
+	var extra_time_matches := 0
+	var shootouts := 0
 	for fixture in world.get("fixtures", []):
-		if String(fixture.get("competition_id", "")) == String(competition.get("id", "")): fixtures.append(fixture)
-	return {"competition_id":String(competition.get("id", "")),"competition_name":String(competition.get("name", "")),"season_start_year":int(competition.get("season_year", world.get("season_year", 2026))),"tier":0,"complete":bool(bracket.get("complete", false)),"fixture_count":fixtures.size(),"table":[],"champion_club_id":String(competition.get("champion_club_id", "")),"competition_type":"knockout"}
+		if String(fixture.get("competition_id", "")) != String(competition.get("id", "")): continue
+		fixtures.append(fixture)
+		if bool(fixture.get("after_extra_time", false)): extra_time_matches += 1
+		if String(fixture.get("shootout_winner", "")) != "": shootouts += 1
+	return {"competition_id":String(competition.get("id", "")),"competition_name":String(competition.get("name", "")),"season_start_year":int(competition.get("season_year", world.get("season_year", 2026))),"tier":0,"complete":bool(bracket.get("complete", false)),"fixture_count":fixtures.size(),"table":[],"champion_club_id":String(competition.get("champion_club_id", "")),"competition_type":"knockout","extra_time_matches":extra_time_matches,"shootouts":shootouts}
+
+func _resolve_tied_fixture(world: Dictionary, competition: Dictionary, fixture: Dictionary, pairing: Dictionary) -> void:
+	# Modern proper knockout matches use two 15-minute periods before penalties.
+	# The resolution service uses squad quality, fitness, morale, traits, an
+	# extra-time substitution and player/keeper penalty attributes.
+	if not bool(competition.get("extra_time", true)):
+		fixture["shootout_winner"] = _shootout_winner(String(pairing.home), String(pairing.away), String(fixture.get("id", "")))
+		fixture["decided_by"] = "penalties"
+		return
+	var resolution := ResolutionClass.new().resolve_level_match(world, fixture, competition, _stable_seed(String(fixture.get("id","")), int(competition.get("season_year",0))))
+	for key in resolution.keys(): fixture[key] = resolution[key]
+	fixture["decided_by"] = String(resolution.get("decided", "extra_time"))
+	fixture["final_home_goals"] = int(fixture.get("home_goals",0)) + int(fixture.get("extra_time_home_goals",0))
+	fixture["final_away_goals"] = int(fixture.get("away_goals",0)) + int(fixture.get("extra_time_away_goals",0))
 
 func _advance_bye_only_rounds(world: Dictionary, competition: Dictionary, season_year: int) -> void:
-	# If a bracket round contains only byes, advance it immediately.
 	for guard in range(8):
 		var bracket: Dictionary = competition.get("knockout_bracket", {})
 		if bracket.is_empty() or bool(bracket.get("complete", false)): return
@@ -82,7 +104,6 @@ func _advance_bye_only_rounds(world: Dictionary, competition: Dictionary, season
 		_append_round_fixtures(world, competition, next, season_year, "%04d-09-10" % season_year)
 
 func _append_round_fixtures(world: Dictionary, competition: Dictionary, bracket: Dictionary, season_year: int, date_string: String) -> void:
-	# League dates may not have been materialized yet during initialization.
 	for fixture in world.fixtures:
 		if String(fixture.get("date", "")) == "":
 			fixture["date"] = _add_days("%04d-08-01" % season_year, (int(fixture.get("round", 1)) - 1) * 7)
@@ -93,7 +114,7 @@ func _append_round_fixtures(world: Dictionary, competition: Dictionary, bracket:
 		var candidate := date_string
 		while _has_conflict(world, home, away, candidate): candidate = _add_days(candidate, 1)
 		date_string = candidate
-		world.fixtures.append({"id":"cup-%s-%d-r%d-m%d" % [String(competition.get("id", "cup")),season_year,int(bracket.get("round",1)),i],"competition_id":String(competition.get("id","")),"round":int(bracket.get("round",1)),"bracket_index":i,"home_club_id":home,"away_club_id":away,"played":false,"home_goals":0,"away_goals":0,"date":date_string,"season_year":season_year,"knockout":true})
+		world.fixtures.append({"id":"cup-%s-%d-r%d-m%d" % [String(competition.get("id", "cup")),season_year,int(bracket.get("round",1)),i],"competition_id":String(competition.get("id","")),"round":int(bracket.get("round",1)),"bracket_index":i,"home_club_id":home,"away_club_id":away,"played":false,"home_goals":0,"away_goals":0,"date":date_string,"season_year":season_year,"knockout":true,"stage":"knockout","extra_time":true,"penalties":true,"away_goals":false})
 
 func _has_conflict(world: Dictionary, home: String, away: String, date_string: String) -> bool:
 	for fixture in world.fixtures:
