@@ -1,0 +1,83 @@
+name: Visual QA Screenshots
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'game/**'
+      - 'project.godot'
+      - 'tests/visual_qa_capture.gd'
+      - '.github/workflows/visual-qa-screenshots.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'game/**'
+      - 'project.godot'
+      - 'tests/visual_qa_capture.gd'
+      - '.github/workflows/visual-qa-screenshots.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visual-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture-all-screens:
+    name: capture-all-screens
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      VISUAL_QA_DIR: ${{ github.workspace }}/visual-qa
+
+    steps:
+      - name: Checkout clean source
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Verify Godot and virtual display
+        run: |
+          godot --version
+          command -v xvfb-run
+
+      - name: Import project
+        run: godot --headless --path . --editor --quit-after 20
+
+      - name: Capture every runtime screen
+        run: |
+          rm -rf "$VISUAL_QA_DIR"
+          mkdir -p "$VISUAL_QA_DIR"
+          xvfb-run -a -s "-screen 0 1280x720x24" \
+            godot --path . \
+              --rendering-method gl_compatibility \
+              --resolution 1280x720 \
+              --script tests/visual_qa_capture.gd
+
+      - name: Validate screenshot set
+        shell: bash
+        run: |
+          test -f "$VISUAL_QA_DIR/manifest.txt"
+          png_count=$(find "$VISUAL_QA_DIR" -maxdepth 1 -type f -name '*.png' | wc -l)
+          echo "Captured $png_count screenshots"
+          cat "$VISUAL_QA_DIR/manifest.txt"
+          if [ "$png_count" -lt 10 ]; then
+            echo "Expected at least 10 screenshots, got $png_count"
+            exit 1
+          fi
+
+      - name: Upload visual QA screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-dynasty-visual-qa-${{ github.run_number }}
+          path: visual-qa/
+          if-no-files-found: error
+          retention-days: 14
