@@ -36,9 +36,16 @@ jobs:
           use-dotnet: false
           include-templates: true
 
-      - name: Verify engine
+      - name: Resolve concrete Godot executable
         shell: powershell
-        run: godot --version
+        run: |
+          $candidate = Get-ChildItem -Path (Join-Path $env:USERPROFILE 'godot') -Filter 'Godot*.exe' -File -Recurse -ErrorAction Stop |
+            Where-Object { $_.Name -match '4\.7\.2' } |
+            Select-Object -First 1
+          if (-not $candidate) { throw 'Concrete Godot 4.7.2 executable not found.' }
+          "GODOT_EXE=$($candidate.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $candidate.FullName --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Import project
         shell: powershell
@@ -52,17 +59,18 @@ jobs:
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/ui_readability_test.gd
 
-      - name: Build Windows release candidate
+      - name: Build and smoke-test Windows release candidate
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force build\windows | Out-Null
-          godot --headless --path . --export-release 'Windows Desktop' build\windows\FootballDynasty.exe
+          & $env:GODOT_EXE --headless --path . --export-release 'Windows Desktop' build\windows\FootballDynasty.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (-not (Test-Path build\windows\FootballDynasty.exe)) { throw 'Windows export missing' }
-
-      - name: Execute unpackaged release smoke
-        shell: powershell
-        run: .\tools\release-smoke.ps1 -ExePath build\windows\FootballDynasty.exe -LogPath build\windows\runtime.log
+          $exe = Resolve-Path build\windows\FootballDynasty.exe -ErrorAction Stop
+          $item = Get-Item $exe
+          if ($item.Length -le 0) { throw 'Windows export is empty.' }
+          Write-Host "Exported $($item.FullName) ($($item.Length) bytes)"
+          Get-FileHash $exe -Algorithm SHA256 | Format-List
+          .\tools\release-smoke.ps1 -ExePath $exe -LogPath build\windows\runtime.log
 
       - name: Install Inno Setup
         shell: powershell
