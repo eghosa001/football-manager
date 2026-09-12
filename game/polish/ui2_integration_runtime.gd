@@ -20,6 +20,7 @@ func _process(_delta: float) -> void:
 	_scan()
 
 func _scan() -> void:
+	_guard_polish_audio(get_tree().root)
 	_scan_node(get_tree().root)
 
 func _scan_node(node: Node) -> void:
@@ -71,6 +72,7 @@ func _force_ui2(tabs: TabContainer) -> void:
 	UI2ExtendedRuntime.call("_build_schedule", _page(tabs, "Schedule"), tabs, session)
 
 	_style_visible_shell(tabs, app)
+	_guard_polish_audio(tabs)
 
 func _style_visible_shell(tabs: TabContainer, app: Node) -> void:
 	var shell: Node = tabs.get_parent()
@@ -207,6 +209,19 @@ func _save_current(app: Node) -> void:
 		app.call("_save_to_slot", slot)
 	else:
 		app.call("_show_save_as")
+
+# PolishRuntime scans repeatedly and some controls (for example the Audio tab's
+# test button) are intentionally connected to its click cue before the scanner
+# sees them. Mark those existing connections as already wired so a later scan
+# never attempts the same signal connection twice.
+func _guard_polish_audio(node: Node) -> void:
+	var click: Callable = Callable(PolishRuntime, "_play_ui_click")
+	if node is Button:
+		var button: Button = node as Button
+		if button.pressed.is_connected(click):
+			button.set_meta("polish_audio", true)
+	for child_node: Node in node.get_children():
+		_guard_polish_audio(child_node)
 
 func _career_app(node: Node) -> Node:
 	var current: Node = node
