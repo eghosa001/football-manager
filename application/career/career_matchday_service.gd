@@ -196,7 +196,9 @@ func _suspension_map(world: Dictionary) -> Dictionary:
 	for row in world.get("suspensions", []):
 		bans[String(row.get("player_id", ""))] = int(row.get("until_day", 0))
 	for row in world.get("discipline_bans", []):
-		bans[String(row.get("player_id", ""))] = maxi(int(bans.get(String(row.get("player_id", ""))), 0), int(row.get("until_day", row.get("matches", 1)) * 7 + int(world.get("day_index", 0))))
+		var player_id := String(row.get("player_id", ""))
+		var fallback_until := int(world.get("day_index", 0)) + int(row.get("matches", 1)) * 7
+		bans[player_id] = maxi(int(bans.get(player_id, 0)), int(row.get("until_day", fallback_until)))
 	return bans
 
 func _apply_dressing_room_result(world: Dictionary, home: Dictionary, away: Dictionary, result: Dictionary) -> void:
