@@ -19,11 +19,40 @@ func load_seed(path: String = "res://data/seed/launch_database.json", expanded: 
 			parsed.league_systems.append({"country_id":country.id,"tiers":[{"name":"Premier Division","template":"league-18","promotion":0,"relegation":3},{"name":"Second Division","template":"league-18","promotion":3,"relegation":0}],"cup":{"name":"National Cup","template":"cup-32"}})
 	return parsed
 
+func club_profile(country: Dictionary, index: int, tier: int) -> Dictionary:
+	var by_tier: Dictionary = country.get("club_profiles", {})
+	var profiles: Array = by_tier.get(str(tier), [])
+	if index >= 0 and index < profiles.size() and profiles[index] is Dictionary:
+		return (profiles[index] as Dictionary).duplicate(true)
+	return {}
+
 func club_name(country: Dictionary, index: int, tier: int) -> String:
+	var profile := club_profile(country, index, tier)
+	if not profile.is_empty() and String(profile.get("name", "")) != "":
+		return String(profile.name)
 	var words := ["United","City","Athletic","Rovers","Stars","Dynamos","Warriors","Sporting","Rangers","Lions"]
 	var cities: Array = country.get("cities", [])
 	if not cities.is_empty(): return "%s %s" % [cities[index % cities.size()], words[(index / cities.size() + (tier - 1) * 2) % words.size()]]
 	return "%s %s %d" % [String(country.name), words[index % words.size()], index + 1]
+
+func name_pool(data: Dictionary, country_id: String) -> Dictionary:
+	for pool in data.get("name_pools", []):
+		if String(pool.get("country_id", "")) == country_id:
+			return pool
+	return {}
+
+func registration_rules_for_country(data: Dictionary, country_id: String) -> Dictionary:
+	var defaults: Dictionary = data.get("registration_defaults", {}).duplicate(true)
+	var system := league_system(data, country_id)
+	var override: Dictionary = system.get("registration", {})
+	for key in override.keys(): defaults[key] = override[key]
+	return defaults
+
+func transfer_windows_for_country(data: Dictionary, country_id: String) -> Array:
+	var system := league_system(data, country_id)
+	var windows: Array = system.get("transfer_windows", [])
+	if not windows.is_empty(): return windows.duplicate(true)
+	return data.get("registration_defaults", {}).get("transfer_windows", []).duplicate(true)
 
 func validate_seed(data: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
@@ -37,6 +66,16 @@ func validate_seed(data: Dictionary) -> Array[String]:
 			errors.append("youth rating out of range for %s" % id)
 		if int(country.get("population", 1_000_000)) <= 0:
 			errors.append("population must be positive for %s" % id)
+		var profiles: Dictionary = country.get("club_profiles", {})
+		for tier_key in profiles.keys():
+			var seen_names := {}
+			for profile in profiles[tier_key]:
+				var club_name_value := String(profile.get("name", ""))
+				if club_name_value == "" or seen_names.has(club_name_value):
+					errors.append("invalid/duplicate club profile for %s tier %s: %s" % [id, tier_key, club_name_value])
+				seen_names[club_name_value] = true
+				var rep := int(profile.get("reputation", 50))
+				if rep < 1 or rep > 100: errors.append("club reputation out of range: %s" % club_name_value)
 	var city_ids := {}
 	for city in data.get("cities", []):
 		var city_id := String(city.get("id", ""))
@@ -58,16 +97,27 @@ func validate_seed(data: Dictionary) -> Array[String]:
 		if not country_ids.has(country_id):
 			errors.append("league system references unknown country: %s" % country_id)
 		var tier_names := {}
-		for tier in system.get("tiers", []):
+		for tier_index in range(system.get("tiers", []).size()):
+			var tier: Dictionary = system.tiers[tier_index]
 			var name := String(tier.get("name", ""))
 			if name == "" or tier_names.has(name):
 				errors.append("invalid/duplicate tier name for %s: %s" % [country_id, name])
 			tier_names[name] = true
-			if not templates.has(String(tier.get("template", ""))):
-				errors.append("tier references unknown template: %s" % String(tier.get("template", "")))
+			var template_id := String(tier.get("template", ""))
+			if not templates.has(template_id):
+				errors.append("tier references unknown template: %s" % template_id)
+			else:
+				var country := _country(data, country_id)
+				var profiles: Array = country.get("club_profiles", {}).get(str(tier_index + 1), [])
+				var expected := int((templates[template_id] as Dictionary).get("teams", 0))
+				if not profiles.is_empty() and profiles.size() != expected:
+					errors.append("club profile count mismatch for %s tier %d: expected %d got %d" % [country_id, tier_index + 1, expected, profiles.size()])
 		var cup: Dictionary = system.get("cup", {})
 		if not cup.is_empty() and not templates.has(String(cup.get("template", ""))):
 			errors.append("cup references unknown template: %s" % String(cup.get("template", "")))
+		var league_cup: Dictionary = system.get("league_cup", {})
+		if not league_cup.is_empty() and not templates.has(String(league_cup.get("template", ""))):
+			errors.append("league cup references unknown template: %s" % String(league_cup.get("template", "")))
 	var registration: Dictionary = data.get("registration_defaults", {})
 	if int(registration.get("max_squad", 0)) < int(registration.get("homegrown_required", 0)):
 		errors.append("homegrown requirement exceeds maximum squad size")
@@ -129,9 +179,7 @@ func featured_country_ids(data: Dictionary) -> Array:
 	return result
 
 func has_country(data: Dictionary, country_id: String) -> bool:
-	for country in data.get("countries", []):
-		if String(country.get("id", "")) == country_id: return true
-	return false
+	return not _country(data, country_id).is_empty()
 
 func ordered_countries(data: Dictionary) -> Array:
 	var featured := featured_country_ids(data)
@@ -146,4 +194,9 @@ func ordered_countries(data: Dictionary) -> Array:
 func league_system(data: Dictionary, country_id: String) -> Dictionary:
 	for system in data.get("league_systems", []):
 		if String(system.get("country_id", "")) == country_id: return system
+	return {}
+
+func _country(data: Dictionary, country_id: String) -> Dictionary:
+	for country in data.get("countries", []):
+		if String(country.get("id", "")) == country_id: return country
 	return {}
