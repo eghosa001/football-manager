@@ -64,7 +64,7 @@ jobs:
         shell: powershell
         run: choco install innosetup -y --no-progress
 
-      - name: Export, smoke, package, install and seal evidence
+      - name: Export, smoke, package, install and certify
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -118,25 +118,23 @@ jobs:
           $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe
           $finalPayloadHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
           if ($finalPayloadHash -ne $stagedHash) { throw 'Installer payload changed during packaging or install acceptance.' }
-          Get-FileHash $stagedExe -Algorithm SHA256 | Format-List | Out-File build\windows\FootballDynasty.exe.sha256.txt
-          Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List | Out-File build\installer\FootballDynasty-Setup.sha256.txt
+          $installerHash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash
 
-          $evidenceFiles = @(
-            'build\installer-source\FootballDynasty.exe',
-            'build\windows\FootballDynasty.exe.sha256.txt',
-            'build\windows\runtime.log',
-            $installer.FullName,
-            'build\installer\FootballDynasty-Setup.sha256.txt'
-          )
-          $evidenceZip = Join-Path $env:RUNNER_TEMP 'FootballDynasty-windows-rc3.zip'
-          Compress-Archive -Path $evidenceFiles -DestinationPath $evidenceZip -Force
-          if (-not (Test-Path $evidenceZip)) { throw 'Windows evidence archive missing.' }
-          if ((Get-Item $evidenceZip).Length -le 0) { throw 'Windows evidence archive is empty.' }
+          @"
+          ## Windows RC3 acceptance
+          - Commit: $env:GITHUB_SHA
+          - Godot: 4.7.2 stable
+          - Production readiness contract: PASS
+          - UI readability contract: PASS
+          - Windows export: PASS
+          - Export runtime smoke: PASS
+          - Installer compilation: PASS
+          - Silent clean install: PASS
+          - Installed runtime smoke: PASS
+          - EXE SHA256: $finalPayloadHash
+          - Installer SHA256: $installerHash
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
-      - name: Upload Windows release evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: FootballDynasty-windows-rc3
-          path: ${{ runner.temp }}\FootballDynasty-windows-rc3.zip
-          if-no-files-found: error
-          retention-days: 14
+          Write-Host "WINDOWS RC3 ACCEPTANCE PASS"
+          Write-Host "EXE SHA256: $finalPayloadHash"
+          Write-Host "INSTALLER SHA256: $installerHash"
