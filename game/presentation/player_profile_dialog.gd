@@ -3,6 +3,7 @@ extends AcceptDialog
 
 const PlayerStats = preload("res://application/career/player_stats_service.gd")
 const Medical = preload("res://simulation/players/medical_system.gd")
+const SpecialAbilityServiceClass = preload("res://simulation/players/special_ability_service.gd")
 
 var world: Dictionary
 var player_id: String
@@ -36,6 +37,8 @@ func _add_overview(tabs: TabContainer, player: Dictionary) -> void:
 	_label(box, "Current ability %d   Potential %d   Reputation %d" % [int(player.get("current_ability",0)),int(player.get("potential",0)),int(player.get("reputation",0))])
 	var traits: Array = player.get("traits", [])
 	_label(box, "Traits: %s" % (", ".join(traits) if not traits.is_empty() else "None"))
+	var ability_labels: Array = SpecialAbilityServiceClass.new().labels_for(player)
+	_label(box, "Special abilities: %s" % (", ".join(ability_labels) if not ability_labels.is_empty() else "None"))
 
 func _add_attributes(tabs: TabContainer, player: Dictionary) -> void:
 	var box := _tab(tabs, "Attributes")
@@ -59,6 +62,9 @@ func _add_performance(tabs: TabContainer, player: Dictionary) -> void:
 func _add_development(tabs: TabContainer, player: Dictionary) -> void:
 	var box := _tab(tabs, "Development")
 	_label(box, "Training focus: %s" % String(player.get("training_focus","balanced")).capitalize())
+	var ability_service = SpecialAbilityServiceClass.new()
+	if ability_service.has(player, SpecialAbilityServiceClass.PRODIGY):
+		_label(box, "Prodigy: accelerated development while young; potential ceiling is unchanged.")
 	_heading(box, "Development history")
 	var history: Array = player.get("development_history", [])
 	if history.is_empty(): _label(box, "No annual development record yet.")
@@ -80,6 +86,8 @@ func _add_medical(tabs: TabContainer, player: Dictionary) -> void:
 	var box := _tab(tabs, "Medical")
 	var report: Dictionary = Medical.new().report(player)
 	for key in report.keys(): _label(box, "%s: %s" % [String(key).replace("_"," ").capitalize(),str(report[key])])
+	if SpecialAbilityServiceClass.new().has(player, SpecialAbilityServiceClass.INJURY_PRONE):
+		_label(box, "Medical trait: Injury Prone — elevated injury probability under equivalent workload.")
 	_heading(box, "Injury history")
 	var history: Array = player.get("injury_history", [])
 	if history.is_empty(): _label(box, "No recorded injuries.")
@@ -120,6 +128,10 @@ func _add_reports(tabs: TabContainer, player: Dictionary) -> void:
 	if int(hidden.get("important_matches",50)) >= 75: descriptions.append("Enjoys important matches")
 	if int(hidden.get("injury_proneness",50)) >= 70: descriptions.append("May be susceptible to injuries")
 	if int(hidden.get("adaptability",50)) <= 30: descriptions.append("May need time to adapt")
+	var ability_service = SpecialAbilityServiceClass.new()
+	if ability_service.has(player, SpecialAbilityServiceClass.TEMPERAMENTAL): descriptions.append("Temperamental; increased disciplinary risk")
+	if ability_service.has(player, SpecialAbilityServiceClass.INCONSISTENT): descriptions.append("Performance level can vary significantly from match to match")
+	if ability_service.has(player, SpecialAbilityServiceClass.CONSISTENT): descriptions.append("Delivers a stable performance level")
 	if not descriptions.is_empty(): _label(box, "Scout observations: %s" % "; ".join(descriptions))
 
 func _tab(tabs: TabContainer, name: String) -> VBoxContainer:
