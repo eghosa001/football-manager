@@ -1,5 +1,5 @@
 #define MyAppName "Football Dynasty"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.0-rc3"
 #define MyAppPublisher "Football Dynasty"
 #define MyAppExeName "FootballDynasty.exe"
 
@@ -20,7 +20,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
-VersionInfoVersion={#MyAppVersion}
+VersionInfoVersion=1.0.0.3
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Installer
 VersionInfoProductName={#MyAppName}
