@@ -52,6 +52,9 @@ jobs:
       - name: UI readability contract
         run: bash tools/test-headless.sh tests/ui_readability_test.gd 300
 
+      - name: Responsive navigation contract
+        run: bash tools/test-headless.sh tests/navigation_responsive_test.gd 300
+
       - name: Performance baseline
         run: bash tools/test-headless.sh tests/performance_baseline_test.gd 1200
 
