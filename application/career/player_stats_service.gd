@@ -1,6 +1,11 @@
 class_name PlayerStatsService
 extends RefCounted
 
+var _cached_player_index: Dictionary = {}
+var _cached_player_signature := ""
+var _history_index: Dictionary = {}
+var _history_indexed_size := -1
+
 func record_match(world: Dictionary, fixture: Dictionary, result: Dictionary) -> void:
 	if result.has("error"):
 		return
@@ -12,9 +17,7 @@ func record_match(world: Dictionary, fixture: Dictionary, result: Dictionary) ->
 	for side in ["home","away"]:
 		for player_id in starters.get(side,[]):
 			starter_ids[side][String(player_id)] = true
-	var player_index: Dictionary = {}
-	for player in world.get("players", []):
-		player_index[String(player.get("id", ""))] = player
+	var player_index := _player_index(world)
 	var match_rows: Dictionary = {}
 	for side in ["home", "away"]:
 		for player_id in participants.get(side, []):
@@ -92,13 +95,18 @@ func season_totals(world: Dictionary, player_id: String, season_year: int = -1) 
 
 func _update_season_history(world: Dictionary, fixture: Dictionary, result: Dictionary, match_rows: Dictionary, starter_ids: Dictionary) -> void:
 	var year := int(world.get("season_year", 2026))
+	_ensure_history_index(world)
 	for side in ["home", "away"]:
 		var club_id := String(fixture.get("home_club_id", "")) if side == "home" else String(fixture.get("away_club_id", ""))
+		var competition_id := String(fixture.get("competition_id", ""))
 		for player_id in result.get("participants", result.get("lineups", {})).get(side, []):
-			var row := _history_row(world.player_history, String(player_id), year, club_id, String(fixture.get("competition_id", "")))
+			var key := _history_key(String(player_id), year, club_id, competition_id)
+			var row: Dictionary = _history_index.get(key, {})
 			if row.is_empty():
-				row = {"player_id":String(player_id),"season_year":year,"club_id":club_id,"competition_id":String(fixture.get("competition_id", "")),"appearances":0,"starts":0,"goals":0,"assists":0,"xg":0.0,"rating_sum":0.0,"rating":0.0}
+				row = {"player_id":String(player_id),"season_year":year,"club_id":club_id,"competition_id":competition_id,"appearances":0,"starts":0,"goals":0,"assists":0,"xg":0.0,"rating_sum":0.0,"rating":0.0}
 				world.player_history.append(row)
+				_history_index[key] = row
+				_history_indexed_size = world.player_history.size()
 			row.appearances = int(row.appearances) + 1
 			if starter_ids[side].has(String(player_id)):
 				row.starts = int(row.get("starts",0)) + 1
@@ -135,7 +143,39 @@ func _rating(row: Dictionary) -> float:
 		score -= minf(0.35,float(shots)*0.04)
 	return snappedf(clampf(score,4.0,10.0),0.1)
 
+func _player_index(world: Dictionary) -> Dictionary:
+	var players: Array = world.get("players", [])
+	var signature := _player_signature(players)
+	if signature == _cached_player_signature and not _cached_player_index.is_empty():
+		return _cached_player_index
+	_cached_player_index = {}
+	for player in players:
+		var player_id := String(player.get("id", ""))
+		if player_id != "":
+			_cached_player_index[player_id] = player
+	_cached_player_signature = signature
+	return _cached_player_index
+
+func _player_signature(players: Array) -> String:
+	if players.is_empty():
+		return "0"
+	return "%d:%s:%s" % [players.size(), String(players[0].get("id", "")), String(players[players.size() - 1].get("id", ""))]
+
+func _ensure_history_index(world: Dictionary) -> void:
+	var rows: Array = world.get("player_history", [])
+	if _history_indexed_size == rows.size() and (_history_indexed_size == 0 or not _history_index.is_empty()):
+		return
+	_history_index = {}
+	for row in rows:
+		var key := _history_key(String(row.get("player_id", "")), int(row.get("season_year", 0)), String(row.get("club_id", "")), String(row.get("competition_id", "")))
+		_history_index[key] = row
+	_history_indexed_size = rows.size()
+
+func _history_key(player_id: String, year: int, club_id: String, competition_id: String) -> String:
+	return "%s|%d|%s|%s" % [player_id, year, club_id, competition_id]
+
 func _history_row(rows: Array, player_id: String, year: int, club_id: String, competition_id: String) -> Dictionary:
+	# Kept for compatibility with direct callers; record_match uses the indexed path.
 	for row in rows:
 		if String(row.get("player_id", "")) == player_id and int(row.get("season_year", 0)) == year and String(row.get("club_id", "")) == club_id and String(row.get("competition_id", "")) == competition_id:
 			return row

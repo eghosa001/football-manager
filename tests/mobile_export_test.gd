@@ -1,7 +1,7 @@
 extends SceneTree
 
 # Validates Android + Apple (iOS/macOS) export integration without requiring
-# SDKs, Xcode, or signing identities. Full binary exports remain manual/CI steps.
+# SDKs, Xcode, or signing identities. Full binary exports remain CI/device steps.
 # Run: godot --headless --path . --script res://tests/mobile_export_test.gd
 
 func _init() -> void:
@@ -37,17 +37,27 @@ func _run() -> void:
 			_fail("missing export preset platform: " + required)
 			return
 
-	# Android must be a store-ready bundle target, not an unsigned debug stub.
+	# Android must be a current store-ready bundle target, not an unsigned debug stub.
 	var android: Dictionary = found["Android"]
 	if not String(android["path"]).ends_with(".aab"):
 		_fail("Android export_path should target .aab, got: " + String(android["path"]))
 		return
 	var android_section: String = String(android["section"])
-	if String(presets.get_value(android_section + ".options", "package/unique_name", "")) == "":
+	var android_options := android_section + ".options"
+	if String(presets.get_value(android_options, "package/unique_name", "")) == "":
 		_fail("Android package/unique_name empty")
 		return
-	if not bool(presets.get_value(android_section + ".options", "architectures/arm64-v8a", false)):
+	if not bool(presets.get_value(android_options, "architectures/arm64-v8a", false)):
 		_fail("Android must enable architectures/arm64-v8a")
+		return
+	if int(String(presets.get_value(android_options, "gradle_build/target_sdk", "0"))) < 36:
+		_fail("Android target SDK must be API 36 or newer for current Play submission requirements")
+		return
+	if int(presets.get_value(android_options, "version/code", 0)) < 10003:
+		_fail("Android version/code must be RC3 or newer")
+		return
+	if String(presets.get_value(android_options, "version/name", "")) != "1.0.0-rc3":
+		_fail("Android version/name must match RC3")
 		return
 
 	# iOS exports an Xcode project; signing stays outside version control.
@@ -84,5 +94,5 @@ func _run() -> void:
 		_fail("display/window/size/resizable should be true")
 		return
 
-	print("[TEST] MOBILE EXPORT PASS: Android+iOS+macOS presets and mobile display settings valid")
+	print("[TEST] MOBILE EXPORT PASS: Android API36+AAB and Apple/mobile settings valid")
 	quit(0)

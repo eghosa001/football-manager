@@ -1,6 +1,8 @@
 class_name DressingRoom
 extends RefCounted
 
+var _player_index: Dictionary = {}
+
 func ensure_world(world: Dictionary) -> void:
 	world["dressing_rooms"] = world.get("dressing_rooms", {})
 
@@ -35,7 +37,14 @@ func influence_score(player: Dictionary) -> float:
 	return float(attrs.get("leadership", 50)) * 0.35 + float(player.get("age", 24)) * 1.0 + float(player.get("current_ability", 50)) * 0.25 + float(hidden.get("professionalism", 50)) * 0.15
 
 func apply_event(world: Dictionary, club_id: String, event: String, subject_id: String = "") -> Dictionary:
-	var room: Dictionary = world.get("dressing_rooms", {}).get(club_id, rebuild(world, club_id))
+	ensure_world(world)
+	# Do not pass rebuild() as Dictionary.get's fallback value: function
+	# arguments are evaluated before the get call, which used to rebuild the
+	# room even when it already existed. Matchdays can emit many dressing-room
+	# events, so that eager fallback repeatedly scanned the full player world.
+	var room: Dictionary = world.dressing_rooms.get(club_id, {})
+	if room.is_empty():
+		room = rebuild(world, club_id)
 	var delta := 0.0
 	match event:
 		"captain_sold": delta = -8.0
@@ -58,16 +67,29 @@ func apply_event(world: Dictionary, club_id: String, event: String, subject_id: 
 	return room
 
 func _propagate_mood(world: Dictionary, club_id: String, room: Dictionary, delta: float) -> void:
-	# Leaders amplify atmosphere shifts; young players follow. Selling a
-	# captain upsets his social group first, then the wider squad.
+	# Leaders amplify atmosphere shifts; young players follow. Matchday code can
+	# apply multiple events through the same DressingRoom instance, so build one
+	# lazy index and then touch only the members of this room instead of scanning
+	# the entire world once per event.
 	if is_zero_approx(delta):
 		return
+	if _player_index.is_empty():
+		for player in world.get("players", []):
+			var player_id := String(player.get("id", ""))
+			if player_id != "":
+				_player_index[player_id] = player
 	var leaders: Array = room.get("leaders", []) + room.get("highly_influential", [])
+	var member_ids: Array = []
+	member_ids.append_array(room.get("leaders", []))
+	member_ids.append_array(room.get("highly_influential", []))
+	member_ids.append_array(room.get("influential", []))
+	member_ids.append_array(room.get("others", []))
 	var weight := clampf(absf(delta) / 8.0, 0.25, 1.0)
-	for player in world.get("players", []):
-		if String(player.get("club_id", "")) != club_id or bool(player.get("retired", false)):
+	for member_id in member_ids:
+		var id := String(member_id)
+		var player: Dictionary = _player_index.get(id, {})
+		if player.is_empty() or String(player.get("club_id", "")) != club_id or bool(player.get("retired", false)):
 			continue
-		var id := String(player.get("id", ""))
 		var factor := 1.0
 		if id in leaders:
 			factor = 0.6

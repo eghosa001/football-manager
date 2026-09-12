@@ -68,7 +68,7 @@ func _test_polish_and_release_contracts() -> void:
 		"autosave_rolling_count":5
 	})
 	assert(float(settings.ui_scale) == 2.0)
-	assert(float(settings.font_scale) == 0.8)
+	assert(float(settings.font_scale) == 0.9)
 	assert(String(settings.autosave_mode) == "manual")
 	assert(int(settings.autosave_interval_days) == 30)
 	assert(int(settings.autosave_rolling_count) == 5)
@@ -81,7 +81,9 @@ func _test_polish_and_release_contracts() -> void:
 	var registry = CareerScreenRegistryClass.new()
 	var registry_result: Dictionary = registry.validate_registry()
 	assert(bool(registry_result.get("ok", false)))
-	assert(int(registry_result.get("tab_count", 0)) == 14)
+	assert(int(registry_result.get("tab_count", 0)) == 15)
+	var tab_ids: Array = registry.tab_plan().map(func(row): return String(row.get("id", "")))
+	assert("youth" in tab_ids)
 
 	var performance: Dictionary = MatchdayProfilerClass.check(MatchdayProfilerClass.BASELINE.matchday_162_ms, "matchday_162_ms")
 	assert(bool(performance.get("pass", false)))

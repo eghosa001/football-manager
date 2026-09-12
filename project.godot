@@ -4,7 +4,7 @@ config_version=5
 
 [application]
 config/name="Football Dynasty"
-config/version="1.0.0-rc2-dev"
+config/version="1.0.0-rc3"
 config/unique_name="com.footballdynasty.game"
 run/main_scene="res://game/scenes/career_app.tscn"
 config/features=PackedStringArray("4.7")
@@ -24,6 +24,7 @@ DashboardRuntime="*res://game/polish/dashboard_runtime.gd"
 NavigationRuntime="*res://game/polish/navigation_runtime.gd"
 TrainingRuntime="*res://game/polish/training_runtime.gd"
 HappinessRuntime="*res://game/polish/happiness_runtime.gd"
+UIReadabilityRuntime="*res://game/polish/ui_readability_runtime.gd"
 
 [display]
 window/size/viewport_width=1280

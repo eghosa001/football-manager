@@ -1,72 +1,71 @@
 # Mobile + Apple export — Football Dynasty
 
-`export_presets.cfg` now defines five runnable targets:
+`export_presets.cfg` defines five runnable targets:
 
 - `Windows Desktop` → `build/windows/FootballDynasty.exe`
 - `Linux/X11` → `build/linux/FootballDynasty.x86_64`
-- `Android` → `build/android/FootballDynasty.aab` (Play store bundle, `arm64-v8a`, min SDK 24, target SDK 34)
+- `Android` → `build/android/FootballDynasty.aab` (Play bundle, `arm64-v8a`, min SDK 24, target SDK 36)
 - `iOS` → `build/ios/FootballDynasty.xcodeproj` (Xcode project, min iOS 15, iPhone+iPad)
 - `macOS` → `build/macos/FootballDynasty.app` (universal Apple Silicon + Intel)
 
-Bundle IDs default to `com.footballdynasty.game`. Change them in the Export dialog
-before store submission if you own a different reverse-DNS namespace.
+Bundle IDs default to `com.footballdynasty.game`. Change them before store submission if the project will use a different owned reverse-DNS namespace.
 
-`project.godot` sets the mobile baseline: `canvas_items/expand` stretch,
-landscape orientation, resizable window, HiDPI allowed, and touch emulation so the
-1280×720 management UI scales to phones/tablets.
+`project.godot` sets the mobile baseline: `canvas_items/expand` stretch, landscape orientation, resizable window, HiDPI, touch/mouse emulation and the global UI-readability runtime. Mobile career navigation collapses the desktop sidebar into a single 48 px-high selector so the management surface keeps the full screen width.
 
-## Fast validation (no SDK required)
+## Fast validation
 
 ```bash
 godot --headless --path . --script res://tests/mobile_export_test.gd
-# or
-bash tools/test-headless.sh tests/mobile_export_test.gd
+godot --headless --path . --script res://tests/ui_readability_test.gd
+godot --headless --path . --script res://tests/navigation_responsive_test.gd
 ```
 
-This checks preset presence, Android `.aab` + package + `arm64-v8a`, iOS
-`.xcodeproj` + bundle ID, macOS `.app`, and stretch/orientation settings.
+The export contract verifies preset presence, Android AAB + package + ARM64 + API 36 + RC3 versioning, iOS Xcode project/bundle ID, macOS app bundle and the required stretch/orientation settings.
 
-## Android full build
+## Android device-test APK
 
-1. Install JDK 17, Android Studio/SDK Platform 34, build-tools, and Godot 4.7.2
-   export templates (`Editor → Manage Export Templates`).
-2. In Godot: `Editor → Editor Settings → Export → Android` — set `Android Sdk Path`,
-   `Debug Keystore`, and (for release) your keystore. Never commit
-   `*.keystore`, passwords, or `.godot/export_credentials.cfg`.
-3. For a local APK (sideload/test): duplicate the `Android` preset or set
-   `gradle_build/export_format=0` and export to `build/android/FootballDynasty.apk`.
-   For Play submission keep `export_format=1` (AAB).
-4. Install to device via `adb install`, create career, advance a day, save/reload,
-   view a match in the 2D viewer. Background sim must stay on the tactical tier —
-   do not run the detailed spatial engine per-fixture on mobile.
+`.github/workflows/debug-apk.yml` runs for mobile-relevant pull requests and main changes. It installs Godot 4.7.2 export templates, validates the mobile/readability contracts, builds a real debug APK and uploads both the APK and SHA-256. Use that exact artifact for sideload/device acceptance so testers are not validating a different local build.
+
+## Android signed Play AAB
+
+`.github/workflows/android-release.yml` is the release-signing path. Configure these GitHub Actions secrets:
+
+- `ANDROID_RELEASE_KEYSTORE_BASE64` — base64 of the release keystore file;
+- `ANDROID_RELEASE_KEYSTORE_USER` — key alias;
+- `ANDROID_RELEASE_KEYSTORE_PASSWORD` — keystore/key password.
+
+The workflow materializes the keystore only in the ephemeral runner, supplies Godot's Android release-keystore environment variables, installs the Gradle build template, exports the signed `FootballDynasty.aab`, records SHA-256 and deletes the temporary keystore in an `always()` cleanup step. Never commit keystores, passwords or `.godot/export_credentials.cfg`.
+
+The Android target SDK is API 36. Keep this gate current with Google Play policy before promotion; `tests/mobile_export_test.gd` intentionally fails if the configured target falls below 36.
+
+## Local Android build
+
+1. Install JDK 17, the current Android SDK/platform required by the preset, and Godot 4.7.2 export templates.
+2. For AAB/Gradle builds run `godot --headless --editor --path . --install-android-build-template --quit` once in the project checkout.
+3. Configure the release keystore through Godot or the documented `GODOT_ANDROID_KEYSTORE_RELEASE_*` environment variables; do not store credentials in source.
+4. Export the `Android` preset for Play AAB. For a local sideload APK use the debug workflow/artifact or a duplicated APK-format preset.
+5. On device validate career creation, compact navigation, day progression, save/reload, process termination/relaunch and the 2D viewer.
 
 ## iOS full build
 
-1. Export from Godot on any OS to generate `build/ios/FootballDynasty.xcodeproj`.
-2. Open the project in Xcode 15+ on macOS, select your Team, bundle ID, and
-   provisioning profiles (Debug + Release). Build to simulator/device.
-3. Archive for TestFlight/App Store. Privacy manifests default to no tracking;
-   update `privacy/*` preset options if you add analytics.
+1. Export from Godot to generate `build/ios/FootballDynasty.xcodeproj`.
+2. Open the project in Xcode on macOS, select your Team, bundle ID and provisioning profiles. Build to device/TestFlight.
+3. Privacy settings default to no tracking; update the export privacy options if analytics or tracking are later added.
 
 ## macOS full build
 
-1. Export `macOS` preset from Godot 4.7.2 with templates installed.
-2. On macOS: codesign with your Developer ID (`codesign/identity`, `apple_team_id`
-   in the preset — leave blank for ad-hoc local builds), then notarize:
-   `xcrun notarytool submit ... --wait`, then `xcrun stapler staple`.
-3. Without signing, Gatekeeper will block the app on other machines. Ad-hoc builds
-   are for local testing only.
+1. Export the `macOS` preset from Godot 4.7.2 with templates installed.
+2. On macOS sign with Developer ID, notarize with `notarytool`, then staple the ticket.
+3. Ad-hoc unsigned builds are local-test artifacts only and are not release candidates.
 
 ## Performance contract (mobile)
 
-Observed desktop full-world cost: ~7.4 s creation, ~120–140 ms ordinary days,
-~3.5 s weekly, ~15.4 s for a 162-fixture matchday. Mobile must use the cheap
-tactical engine for background fixtures; the spatial engine is a viewed-match-only
-tier. If matchday time regresses on device, profile fixture grouping, world
-indexes, save serialization, and UI refreshes before growing the world.
+Background fixtures must remain on cheaper simulation tiers; the continuous spatial engine is a viewed-match tier. `tests/performance_baseline_test.gd` protects career creation/day/week/matchday/detailed-match budgets, while the final device record in `docs/RELEASE_ACCEPTANCE_TEMPLATE.md` captures actual phone memory, battery, thermal and long-session behavior.
 
-## CI
+## CI summary
 
-`.github/workflows/mobile.yml` runs `mobile_export_test.gd` on every push/PR and,
-when Android SDK + templates are present, attempts a debug Android export to catch
-preset/SDK drift. iOS/macOS binary signing remains a maintainer-side Xcode step.
+- `.github/workflows/mobile.yml` — lightweight preset/config regression.
+- `.github/workflows/debug-apk.yml` — installable APK and SHA-256 on relevant code changes.
+- `.github/workflows/android-release.yml` — signed Play AAB and SHA-256 when release secrets are configured.
+
+Physical Android device acceptance remains mandatory before advertising Android as supported; iOS/macOS remain non-promoted targets until their signing/device/notarization evidence is completed.

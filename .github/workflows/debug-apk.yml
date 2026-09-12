@@ -5,7 +5,34 @@ on:
   push:
     branches: [main]
     paths:
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - 'application/**'
+      - 'game/**'
+      - 'persistence/**'
+      - 'simulation/**'
+      - 'ui/**'
+      - 'tests/mobile_export_test.gd'
+      - 'tests/ui_readability_test.gd'
+      - 'tools/**'
       - '.github/workflows/debug-apk.yml'
+  pull_request:
+    paths:
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - 'application/**'
+      - 'game/**'
+      - 'persistence/**'
+      - 'simulation/**'
+      - 'ui/**'
+      - 'tests/mobile_export_test.gd'
+      - 'tests/ui_readability_test.gd'
+      - 'tools/**'
+      - '.github/workflows/debug-apk.yml'
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -13,10 +40,12 @@ permissions:
 jobs:
   debug-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
-      - name: Checkout
+      - name: Checkout clean source
         uses: actions/checkout@v4
+        with:
+          clean: true
 
       - name: Setup Godot 4.7.2
         uses: chickensoft-games/setup-godot@v2
@@ -38,10 +67,14 @@ jobs:
       - name: Validate Android preset
         run: bash tools/test-headless.sh tests/mobile_export_test.gd 600
 
+      - name: Validate mobile readability contract
+        run: bash tools/test-headless.sh tests/ui_readability_test.gd 300
+
       - name: Configure direct debug APK export
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           preset = Path('export_presets.cfg')
           s = preset.read_text()
@@ -51,8 +84,10 @@ jobs:
           block = block.replace('export_path="build/android/FootballDynasty.aab"', 'export_path="build/android/FootballDynasty-debug.apk"')
           block = block.replace('gradle_build/use_gradle_build=true', 'gradle_build/use_gradle_build=false')
           block = block.replace('gradle_build/export_format=1', 'gradle_build/export_format=0')
-          block = block.replace('gradle_build/min_sdk="24"\n', '')
-          block = block.replace('gradle_build/target_sdk="34"\n', '')
+          # Direct Godot APK export must not carry Gradle-only SDK overrides.
+          # Strip both fields regardless of their configured values so future
+          # store-target SDK changes cannot break this device-test path.
+          block = re.sub(r'^gradle_build/(?:min_sdk|target_sdk)=.*\n', '', block, flags=re.MULTILINE)
           preset.write_text(s[:start] + block + s[end:])
 
           project = Path('project.godot')
@@ -64,8 +99,6 @@ jobs:
               project.write_text(p)
           PY
           mkdir -p build/android
-          sed -n '/\[preset.2\]/,/\[preset.3\]/p' export_presets.cfg | grep -E 'name=|export_path=|use_gradle_build=|export_format=|arm64-v8a='
-          grep 'import_etc2_astc' project.godot
 
       - name: Re-import Android textures
         run: godot --headless --editor --path . --import --quit
@@ -77,7 +110,6 @@ jobs:
         run: |
           test -s build/android/FootballDynasty-debug.apk
           file build/android/FootballDynasty-debug.apk
-          ls -lh build/android/FootballDynasty-debug.apk
           sha256sum build/android/FootballDynasty-debug.apk | tee build/android/FootballDynasty-debug.apk.sha256
 
       - name: Upload debug APK

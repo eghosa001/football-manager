@@ -1,0 +1,140 @@
+name: Fresh Windows Release Acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - 'game/**'
+      - 'application/**'
+      - 'persistence/**'
+      - 'simulation/**'
+      - 'tools/windows/**'
+      - '.github/workflows/fresh-windows-release.yml'
+
+concurrency:
+  group: fresh-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  installer-acceptance:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout clean source
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Setup Godot 4.7.2 with export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Resolve concrete Godot executable
+        shell: powershell
+        run: |
+          $candidate = Get-ChildItem -Path (Join-Path $env:USERPROFILE 'godot') -Filter 'Godot*.exe' -File -Recurse -ErrorAction Stop |
+            Where-Object { $_.Name -match '4\.7\.2' } |
+            Select-Object -First 1
+          if (-not $candidate) { throw 'Concrete Godot 4.7.2 executable not found.' }
+          "GODOT_EXE=$($candidate.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $candidate.FullName --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Import project
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
+
+      - name: Production readiness contract
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/production_readiness_contract_test.gd
+
+      - name: UI readability contract
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/ui_readability_test.gd
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup -y --no-progress
+
+      - name: Export, smoke, package, install and certify
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force build\windows | Out-Null
+          New-Item -ItemType Directory -Force build\installer-source | Out-Null
+          New-Item -ItemType Directory -Force build\installer | Out-Null
+
+          & $env:GODOT_EXE --headless --path . --export-release 'Windows Desktop' build\windows\FootballDynasty.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exportedExe = Resolve-Path build\windows\FootballDynasty.exe
+          $exportItem = Get-Item $exportedExe
+          if ($exportItem.Length -le 0) { throw 'Windows export is empty.' }
+
+          Copy-Item build\windows\* build\installer-source -Recurse -Force
+          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe
+          $exportHash = (Get-FileHash $exportedExe -Algorithm SHA256).Hash
+          $stagedHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
+          if ($exportHash -ne $stagedHash) { throw 'Installer staging hash mismatch.' }
+          Write-Host "Exported and staged $($exportItem.Length) bytes with SHA256 $stagedHash"
+
+          .\tools\release-smoke.ps1 -ExePath $stagedExe -LogPath build\windows\runtime.log
+          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe
+          $postSmokeHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
+          if ($postSmokeHash -ne $stagedHash) { throw 'Installer payload changed during runtime smoke.' }
+
+          $command = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+          $iscc = if ($command) { $command.Source } else { $null }
+          if (-not $iscc) {
+            $candidates = @(
+              "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+              "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+            ) | Where-Object { $_ -and (Test-Path $_) }
+            if ($env:ChocolateyInstall) {
+              $chocoRoot = Join-Path $env:ChocolateyInstall 'lib\innosetup'
+              if (Test-Path $chocoRoot) {
+                $candidates += Get-ChildItem -Path $chocoRoot -Filter 'ISCC.exe' -File -Recurse -ErrorAction SilentlyContinue |
+                  ForEach-Object { $_.FullName }
+              }
+            }
+            $iscc = $candidates | Select-Object -First 1
+          }
+          if (-not $iscc) { throw 'ISCC.exe not found after Inno Setup installation.' }
+          Write-Host "Using Inno Setup compiler: $iscc"
+          & $iscc tools\windows\FootballDynasty.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $installer = Get-ChildItem build\installer\FootballDynasty-Setup-*.exe | Select-Object -First 1
+          if (-not $installer) { throw 'Installer not produced.' }
+          .\tools\windows\installer-smoke.ps1 -InstallerPath $installer.FullName
+
+          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe
+          $finalPayloadHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
+          if ($finalPayloadHash -ne $stagedHash) { throw 'Installer payload changed during packaging or install acceptance.' }
+          $installerHash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash
+
+          @"
+          ## Windows RC3 acceptance
+          - Commit: $env:GITHUB_SHA
+          - Godot: 4.7.2 stable
+          - Production readiness contract: PASS
+          - UI readability contract: PASS
+          - Windows export: PASS
+          - Export runtime smoke: PASS
+          - Installer compilation: PASS
+          - Silent clean install: PASS
+          - Installed runtime smoke: PASS
+          - EXE SHA256: $finalPayloadHash
+          - Installer SHA256: $installerHash
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+          Write-Host "WINDOWS RC3 ACCEPTANCE PASS"
+          Write-Host "EXE SHA256: $finalPayloadHash"
+          Write-Host "INSTALLER SHA256: $installerHash"
