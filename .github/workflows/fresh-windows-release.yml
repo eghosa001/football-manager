@@ -71,7 +71,6 @@ jobs:
           New-Item -ItemType Directory -Force build\windows | Out-Null
           New-Item -ItemType Directory -Force build\installer-source | Out-Null
           New-Item -ItemType Directory -Force build\installer | Out-Null
-          New-Item -ItemType Directory -Force build\evidence | Out-Null
 
           & $env:GODOT_EXE --headless --path . --export-release 'Windows Desktop' build\windows\FootballDynasty.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -129,14 +128,16 @@ jobs:
             $installer.FullName,
             'build\installer\FootballDynasty-Setup.sha256.txt'
           )
-          Compress-Archive -Path $evidenceFiles -DestinationPath build\evidence\FootballDynasty-windows-rc3.zip -Force
-          if (-not (Test-Path build\evidence\FootballDynasty-windows-rc3.zip)) { throw 'Windows evidence archive missing.' }
-          if ((Get-Item build\evidence\FootballDynasty-windows-rc3.zip).Length -le 0) { throw 'Windows evidence archive is empty.' }
+          $evidenceZip = Join-Path $env:RUNNER_TEMP 'FootballDynasty-windows-rc3.zip'
+          Compress-Archive -Path $evidenceFiles -DestinationPath $evidenceZip -Force
+          if (-not (Test-Path $evidenceZip)) { throw 'Windows evidence archive missing.' }
+          if ((Get-Item $evidenceZip).Length -le 0) { throw 'Windows evidence archive is empty.' }
+          "WINDOWS_EVIDENCE_ZIP=$evidenceZip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload Windows release evidence
         uses: actions/upload-artifact@v4
         with:
           name: FootballDynasty-windows-rc3
-          path: build/evidence/FootballDynasty-windows-rc3.zip
+          path: ${{ env.WINDOWS_EVIDENCE_ZIP }}
           if-no-files-found: error
           retention-days: 14
