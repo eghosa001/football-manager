@@ -31,6 +31,11 @@ func _init() -> void:
 	runtime._sync_active(target, tabs)
 	assert(String(selector.get_item_metadata(selector.selected)) == "Match Analysis")
 
-	mobile_shell.queue_free()
+	# These nodes are deliberately created outside the SceneTree. queue_free()
+	# would never be processed before this SceneTree exits, so free the owned
+	# hierarchy and standalone runtime immediately to keep the regression test
+	# leak-free under strict CI error detection.
+	parent.free()
+	runtime.free()
 	print("[TEST] RESPONSIVE NAVIGATION PASS")
 	quit(0)
