@@ -8,7 +8,7 @@ on:
       - '.github/rc3-heavy-gate-trigger'
 
 concurrency:
-  group: rc3-heavy-acceptance
+  group: rc3-heavy-acceptance-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -19,16 +19,26 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 720
     steps:
-      - name: Checkout
+      - name: Checkout exact requested ref
         uses: actions/checkout@v4
         with:
-          ref: release/rc3-convergence
           fetch-depth: 1
-          clean: false
+          clean: true
+
+      - name: Record certification commit
+        shell: powershell
+        run: |
+          $sha = git rev-parse HEAD
+          Write-Host "Certifying commit $sha"
+          "CERTIFIED_SHA=$sha" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Import project
         shell: powershell
         run: .\tools\test-headless.ps1 -Script import
+
+      - name: Production readiness contract
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/production_readiness_contract_test.gd
 
       - name: Continuous 100k distribution gate
         shell: powershell
@@ -42,6 +52,14 @@ jobs:
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/full_career_soak.gd -TimeoutSeconds 21600
 
+      - name: Long-session memory gate
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/long_session_memory_test.gd -TimeoutSeconds 7200
+
+      - name: Long-save growth and recovery gate
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/long_save_growth_test.gd -TimeoutSeconds 1800
+
       - name: Verify source stayed clean
         shell: powershell
         run: |
@@ -50,3 +68,26 @@ jobs:
             git diff -- .
             throw 'Heavy acceptance modified tracked source files.'
           }
+
+      - name: Write certification manifest
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force build\acceptance | Out-Null
+          @{
+            commit = $env:CERTIFIED_SHA
+            godot = '4.7.2'
+            continuous_100k = 'pass'
+            cross_tier = 'pass'
+            career_100_season = 'pass'
+            long_session_memory = 'pass'
+            long_save_growth = 'pass'
+            source_clean = 'pass'
+          } | ConvertTo-Json | Set-Content build\acceptance\rc3-heavy-acceptance.json
+
+      - name: Upload certification manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc3-heavy-acceptance-${{ github.sha }}
+          path: build/acceptance/rc3-heavy-acceptance.json
+          if-no-files-found: error
+          retention-days: 30
