@@ -35,7 +35,14 @@ func influence_score(player: Dictionary) -> float:
 	return float(attrs.get("leadership", 50)) * 0.35 + float(player.get("age", 24)) * 1.0 + float(player.get("current_ability", 50)) * 0.25 + float(hidden.get("professionalism", 50)) * 0.15
 
 func apply_event(world: Dictionary, club_id: String, event: String, subject_id: String = "") -> Dictionary:
-	var room: Dictionary = world.get("dressing_rooms", {}).get(club_id, rebuild(world, club_id))
+	ensure_world(world)
+	# Do not pass rebuild() as Dictionary.get's fallback value: function
+	# arguments are evaluated before the get call, which used to rebuild the
+	# room even when it already existed. Matchdays can emit many dressing-room
+	# events, so that eager fallback repeatedly scanned the full player world.
+	var room: Dictionary = world.dressing_rooms.get(club_id, {})
+	if room.is_empty():
+		room = rebuild(world, club_id)
 	var delta := 0.0
 	match event:
 		"captain_sold": delta = -8.0
