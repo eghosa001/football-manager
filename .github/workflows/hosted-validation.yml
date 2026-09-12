@@ -37,6 +37,9 @@ jobs:
       - name: Architecture convergence
         run: bash tools/test-headless.sh tests/architecture_convergence_test.gd 300
 
+      - name: Finance insolvency regression
+        run: bash tools/test-headless.sh tests/club_economy_service_test.gd 300
+
       - name: Core simulation smoke
         run: bash tools/test-headless.sh tests/test_runner.gd 1200
 
