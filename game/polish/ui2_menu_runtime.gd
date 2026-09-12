@@ -27,8 +27,9 @@ func _try_style_page(box: VBoxContainer) -> void:
 	if title not in ["FOOTBALL DYNASTY", "Settings", "Your first season", "Load Career", "New Career"]:
 		return
 	box.set_meta("ui2_menu_styled", true)
-	box.add_theme_constant_override("separation", 12)
+	box.add_theme_constant_override("separation", 14)
 	var width := 760.0 if title in ["Settings", "New Career"] else 560.0
+	var seen_buttons: Dictionary = {}
 	for child in box.get_children():
 		if not child is Control:
 			continue
@@ -40,6 +41,11 @@ func _try_style_page(box: VBoxContainer) -> void:
 			label.custom_minimum_size.x = width
 		elif child is Button:
 			var button := child as Button
+			var key := String(button.text).strip_edges()
+			if key != "" and seen_buttons.has(key):
+				button.visible = false
+				continue
+			seen_buttons[key] = true
 			button.custom_minimum_size = Vector2(440 if title == "FOOTBALL DYNASTY" else width, 46)
 			button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		elif child is HBoxContainer or child is GridContainer or child is MarginContainer:
@@ -52,7 +58,7 @@ func _style_named_page(box: VBoxContainer, title: String) -> void:
 	var first_label := _first_label(box)
 	if first_label != null:
 		first_label.add_theme_color_override("font_color", UI.TEXT)
-		first_label.add_theme_font_size_override("font_size", 30 if title == "FOOTBALL DYNASTY" else 26)
+		first_label.add_theme_font_size_override("font_size", 32 if title == "FOOTBALL DYNASTY" else 26)
 	if title == "FOOTBALL DYNASTY":
 		for child in box.get_children():
 			if child is Button:
