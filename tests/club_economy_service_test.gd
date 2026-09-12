@@ -7,7 +7,7 @@ func _init() -> void:
 
 func _run() -> void:
 	var economy = EconomyClass.new()
-	var club := {
+	var club: Dictionary = {
 		"id": "club-regression",
 		"name": "Regression FC",
 		"reputation": 50,
@@ -19,14 +19,14 @@ func _run() -> void:
 		"stadium": {},
 		"facilities": {}
 	}
-	var world := {"clubs": [club], "players": [], "staff": [], "ledger": [], "domain_events": []}
+	var world: Dictionary = {"clubs": [club], "players": [], "staff": [], "ledger": [], "domain_events": []}
 	economy.ensure_world(world)
 	economy._apply_insolvency(world, club, 2040)
 	assert(int(club.debt) == 20_000_000)
 	assert(bool(club.get("insolvent", false)))
 	assert(String(club.get("financial_status", "")) == "insecure")
-	var administration_events := world.domain_events.filter(func(event): return String(event.get("type", "")) == "CLUB_ADMINISTRATION")
-	var insolvency_events := world.domain_events.filter(func(event): return String(event.get("type", "")) == "CLUB_INSOLVENT")
+	var administration_events: Array = world.domain_events.filter(func(event): return String(event.get("type", "")) == "CLUB_ADMINISTRATION")
+	var insolvency_events: Array = world.domain_events.filter(func(event): return String(event.get("type", "")) == "CLUB_INSOLVENT")
 	assert(administration_events.size() == 1)
 	assert(insolvency_events.size() == 1)
 	assert(int(administration_events[0].payload.get("write_down", 0)) == 20_000_000)
