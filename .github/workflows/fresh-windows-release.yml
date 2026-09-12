@@ -60,42 +60,37 @@ jobs:
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/ui_readability_test.gd
 
-      - name: Build and stage Windows release candidate
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force build\windows | Out-Null
-          New-Item -ItemType Directory -Force build\installer-source | Out-Null
-          & $env:GODOT_EXE --headless --path . --export-release 'Windows Desktop' build\windows\FootballDynasty.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $exe = Resolve-Path build\windows\FootballDynasty.exe -ErrorAction Stop
-          $item = Get-Item $exe
-          if ($item.Length -le 0) { throw 'Windows export is empty.' }
-          Copy-Item build\windows\* build\installer-source -Recurse -Force
-          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe -ErrorAction Stop
-          $exportHash = (Get-FileHash $exe -Algorithm SHA256).Hash
-          $stagedHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
-          if ($exportHash -ne $stagedHash) { throw 'Installer staging hash mismatch.' }
-          "STAGED_EXE_HASH=$stagedHash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Exported and staged $($item.Length) bytes with SHA256 $stagedHash"
-
-      - name: Execute staged release smoke
-        shell: powershell
-        run: |
-          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe -ErrorAction Stop
-          $beforeHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
-          if ($beforeHash -ne $env:STAGED_EXE_HASH) { throw 'Installer payload hash mismatch before runtime smoke.' }
-          .\tools\release-smoke.ps1 -ExePath $stagedExe -LogPath build\windows\runtime.log
-          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe -ErrorAction Stop
-          $afterHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
-          if ($afterHash -ne $env:STAGED_EXE_HASH) { throw 'Installer payload changed during runtime smoke.' }
-
       - name: Install Inno Setup
         shell: powershell
         run: choco install innosetup -y --no-progress
 
-      - name: Build installer
+      - name: Export, smoke, package, install and seal evidence
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force build\windows | Out-Null
+          New-Item -ItemType Directory -Force build\installer-source | Out-Null
+          New-Item -ItemType Directory -Force build\installer | Out-Null
+          New-Item -ItemType Directory -Force build\evidence | Out-Null
+
+          & $env:GODOT_EXE --headless --path . --export-release 'Windows Desktop' build\windows\FootballDynasty.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exportedExe = Resolve-Path build\windows\FootballDynasty.exe
+          $exportItem = Get-Item $exportedExe
+          if ($exportItem.Length -le 0) { throw 'Windows export is empty.' }
+
+          Copy-Item build\windows\* build\installer-source -Recurse -Force
+          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe
+          $exportHash = (Get-FileHash $exportedExe -Algorithm SHA256).Hash
+          $stagedHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
+          if ($exportHash -ne $stagedHash) { throw 'Installer staging hash mismatch.' }
+          Write-Host "Exported and staged $($exportItem.Length) bytes with SHA256 $stagedHash"
+
+          .\tools\release-smoke.ps1 -ExePath $stagedExe -LogPath build\windows\runtime.log
+          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe
+          $postSmokeHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
+          if ($postSmokeHash -ne $stagedHash) { throw 'Installer payload changed during runtime smoke.' }
+
           $command = Get-Command ISCC.exe -ErrorAction SilentlyContinue
           $iscc = if ($command) { $command.Source } else { $null }
           if (-not $iscc) {
@@ -113,35 +108,35 @@ jobs:
             $iscc = $candidates | Select-Object -First 1
           }
           if (-not $iscc) { throw 'ISCC.exe not found after Inno Setup installation.' }
-          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe -ErrorAction Stop
-          $stagedHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
-          if ($stagedHash -ne $env:STAGED_EXE_HASH) { throw 'Installer payload hash mismatch before compilation.' }
           Write-Host "Using Inno Setup compiler: $iscc"
           & $iscc tools\windows\FootballDynasty.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           $installer = Get-ChildItem build\installer\FootballDynasty-Setup-*.exe | Select-Object -First 1
-          if (-not $installer) { throw 'Installer not produced' }
-          "INSTALLER_PATH=$($installer.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          if (-not $installer) { throw 'Installer not produced.' }
+          .\tools\windows\installer-smoke.ps1 -InstallerPath $installer.FullName
 
-      - name: Silent clean-install acceptance
-        shell: powershell
-        run: .\tools\windows\installer-smoke.ps1 -InstallerPath $env:INSTALLER_PATH
+          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe
+          $finalPayloadHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
+          if ($finalPayloadHash -ne $stagedHash) { throw 'Installer payload changed during packaging or install acceptance.' }
+          Get-FileHash $stagedExe -Algorithm SHA256 | Format-List | Out-File build\windows\FootballDynasty.exe.sha256.txt
+          Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List | Out-File build\installer\FootballDynasty-Setup.sha256.txt
 
-      - name: Generate release hashes
-        shell: powershell
-        run: |
-          Get-FileHash build\installer-source\FootballDynasty.exe -Algorithm SHA256 | Format-List | Out-File build\windows\FootballDynasty.exe.sha256.txt
-          Get-FileHash $env:INSTALLER_PATH -Algorithm SHA256 | Format-List | Out-File build\installer\FootballDynasty-Setup.sha256.txt
+          $evidenceFiles = @(
+            'build\installer-source\FootballDynasty.exe',
+            'build\windows\FootballDynasty.exe.sha256.txt',
+            'build\windows\runtime.log',
+            $installer.FullName,
+            'build\installer\FootballDynasty-Setup.sha256.txt'
+          )
+          Compress-Archive -Path $evidenceFiles -DestinationPath build\evidence\FootballDynasty-windows-rc3.zip -Force
+          if (-not (Test-Path build\evidence\FootballDynasty-windows-rc3.zip)) { throw 'Windows evidence archive missing.' }
+          if ((Get-Item build\evidence\FootballDynasty-windows-rc3.zip).Length -le 0) { throw 'Windows evidence archive is empty.' }
 
       - name: Upload Windows release evidence
         uses: actions/upload-artifact@v4
         with:
           name: FootballDynasty-windows-rc3
-          path: |
-            build/installer-source/FootballDynasty.exe
-            build/windows/FootballDynasty.exe.sha256.txt
-            build/windows/runtime.log
-            build/installer/FootballDynasty-Setup-*.exe
-            build/installer/FootballDynasty-Setup.sha256.txt
+          path: build/evidence/FootballDynasty-windows-rc3.zip
           if-no-files-found: error
           retention-days: 14
