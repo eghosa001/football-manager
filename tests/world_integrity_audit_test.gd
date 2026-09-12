@@ -24,6 +24,7 @@ func _init() -> void:
 	if failures == 0:
 		print("[TEST] WORLD INTEGRITY PASS: references, rules, fixtures, registrations, finances, transfers and contracts verified")
 		quit(0)
+		return
 	push_error("[TEST] WORLD INTEGRITY FAIL: %d failures across %d checks" % [failures,checks])
 	quit(1)
 
