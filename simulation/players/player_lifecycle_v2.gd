@@ -2,6 +2,7 @@ class_name PlayerLifecycleV2
 extends "res://simulation/players/player_lifecycle.gd"
 
 const SpecialAbilityServiceClass = preload("res://simulation/players/special_ability_service.gd")
+const NewgenFactoryClass = preload("res://simulation/players/newgen_factory.gd")
 const STAFF_ROLES := ["manager","assistant_manager","coach","scout","director","agent"]
 
 func _roll_injury_days(_player: Dictionary, _seed: int) -> int:
@@ -27,6 +28,7 @@ func train_player(player: Dictionary, focus: String, intensity: float, seed: int
 func _apply_development(player: Dictionary, world: Dictionary, seed: int) -> Dictionary:
 	var before: int = int(player.get("current_ability", 50))
 	var record: Dictionary = super._apply_development(player, world, seed)
+	NewgenFactoryClass.new().mature_physical(player, seed)
 	var abilities = SpecialAbilityServiceClass.new()
 	var multiplier: float = abilities.development_multiplier(player)
 	if multiplier <= 1.0: return record
@@ -51,22 +53,20 @@ func _apply_development(player: Dictionary, world: Dictionary, seed: int) -> Dic
 func _generate_youth_intake(world: Dictionary, seed: int, per_club: int) -> Array:
 	var created: Array = []
 	var season_year: int = int(world.get("season_year", 2026))
-	var abilities = SpecialAbilityServiceClass.new()
+	var factory = NewgenFactoryClass.new()
 	for club in world.clubs:
-		var academy: int = int(club.get("youth_facilities", club.get("training_facilities", 50)))
-		var recruitment: int = int(club.get("youth_recruitment", 50))
 		for i in range(per_club):
 			var player_id: String = "youth-%s-%d-%d" % [String(club.id), season_year, i]
 			if _has_player(world.players, player_id): continue
-			var key: int = _stable_key(player_id)
-			var ca: int = clampi(_rand_int(seed, key + 1, 24, 44) + academy / 12, 25, 60)
-			var potential: int = clampi(ca + _rand_int(seed, key + 2, 12, 35) + recruitment / 10, ca, 98)
-			var player: Dictionary = {"id":player_id,"club_id":String(club.id),"country_id":String(club.get("country_id", "")),"first_name":"Youth","last_name":str(i + 1),"age":16,"position":POSITIONS[_rand_int(seed,key+3,0,POSITIONS.size()-1)],"current_ability":ca,"potential":potential,"fitness":100,"morale":70,"retired":false,"season_appearances":0}
+			var player: Dictionary = factory.create(world, club, seed, player_id, i, 16)
+			player["squad_status"] = "academy"
 			ensure_player_state(player, seed)
-			player["special_abilities"] = abilities.assign_for_player(player, seed, key + 55_000)
-			player["special_ability_labels"] = abilities.labels_for(player)
 			world.players.append(player)
+			var key: int = _stable_key(player_id)
 			world.contracts.append({"id":"contract-"+player_id,"player_id":player_id,"club_id":String(club.id),"start_year":season_year,"end_year":season_year+3,"weekly_wage":_rand_int(seed,key+4,250,1200)})
+			if club.has("academy"):
+				club.academy["prospects"] = club.academy.get("prospects", [])
+				if player_id not in club.academy.prospects: club.academy.prospects.append(player_id)
 			created.append(player_id)
 	return created
 
