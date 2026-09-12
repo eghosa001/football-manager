@@ -7,17 +7,21 @@ const LeagueTableClass = preload("res://simulation/competitions/league_table.gd"
 const CalendarClass = preload("res://core/calendar/calendar_service.gd")
 const LeagueSystemClass = preload("res://application/season/league_system.gd")
 const KnockoutSeasonClass = preload("res://application/season/knockout_season.gd")
+const ContinentalLeaguePhaseClass = preload("res://application/season/continental_league_phase.gd")
+const ContinentalCompetitionsClass = preload("res://application/season/continental_competitions.gd")
 
 var _abstract_match_engine = AbstractMatchEngineClass.new()
 var _tactical_match_engine = TacticalMatchEngineClass.new()
 var _league_system = LeagueSystemClass.new()
 var _knockout = KnockoutSeasonClass.new()
+var _continental_phase = ContinentalLeaguePhaseClass.new()
 
 func play_next_fixture(world: Dictionary, competition_id: String, season_seed: int) -> Dictionary:
 	for fixture in world.fixtures:
 		if String(fixture.get("competition_id", "")) != competition_id or bool(fixture.get("played", false)): continue
 		var row := _play_fixture(world, fixture, season_seed)
-		_knockout.advance_ready(world, competition_id, String(fixture.get("date", world.get("date", "2026-07-01"))))
+		var date := String(fixture.get("date", world.get("date", "2026-07-01")))
+		_advance_competition(world,competition_id,date)
 		return row
 	return {}
 
@@ -29,7 +33,7 @@ func play_date(world: Dictionary, date_string: String, season_seed: int, player_
 		if bool(fixture.get("played", false)) or String(fixture.get("date", "")) != date_string: continue
 		results.append(_play_fixture(world, fixture, season_seed, player_index))
 		touched[String(fixture.get("competition_id", ""))] = true
-	for competition_id in touched.keys(): _knockout.advance_ready(world, String(competition_id), date_string)
+	for competition_id in touched.keys(): _advance_competition(world,String(competition_id),date_string)
 	world["date"] = date_string
 	return results
 
@@ -71,14 +75,19 @@ func complete_and_rollover(world: Dictionary, history: Array, season_seed: int, 
 	for record in records: history.append(record.duplicate(true))
 	var movements: Array = _league_system.apply_promotion_relegation(world, records, promotion_places)
 	var current_year: int = int(world.get("season_year", _year_from_date(String(world.get("date", "2026-07-01")))))
-	_league_system.rollover(world, current_year + 1)
-	preload("res://application/season/continental_competitions.gd").new().prepare(world, records)
-	_knockout.initialize_all(world, current_year + 1)
-	return {"records":records,"movements":movements,"next_season_year":current_year+1}
+	var next_year := current_year + 1
+	_league_system.rollover(world, next_year)
+	var continental = ContinentalCompetitionsClass.new()
+	continental.prepare(world, records)
+	continental.initialize_formats(world,next_year,true)
+	_knockout.initialize_all(world, next_year)
+	return {"records":records,"movements":movements,"next_season_year":next_year}
 
 func build_season_record(world: Dictionary, competition_id: String) -> Dictionary:
 	var competition: Dictionary = _find_competition(world.competitions, competition_id)
-	if String(competition.get("competition_type", "league")) == "knockout": return _knockout.record(world, competition)
+	var competition_type := String(competition.get("competition_type", "league"))
+	if competition_type == "knockout": return _knockout.record(world, competition)
+	if competition_type == "continental_league_phase": return _continental_phase.record(world,competition)
 	var fixtures: Array = []
 	for fixture in world.fixtures:
 		if String(fixture.get("competition_id", "")) == competition_id: fixtures.append(fixture)
@@ -96,20 +105,35 @@ func _play_fixture(world: Dictionary, fixture: Dictionary, season_seed: int, pla
 	var match_players: Array = world.players
 	if not player_index.is_empty():
 		match_players = []
-		match_players.append_array(player_index.get(String(home_club.id), []))
-		match_players.append_array(player_index.get(String(away_club.id), []))
-	var result: Dictionary = engine.simulate_match(home_club, away_club, match_players, match_seed)
+		match_players.append_array(player_index.get(String(home_club.id), [])); match_players.append_array(player_index.get(String(away_club.id), []))
+	var competition := _find_competition(world.competitions,String(fixture.get("competition_id","")))
+	var context := {"importance":_importance(competition,fixture),"stage":String(fixture.get("stage","")),"knockout":bool(fixture.get("knockout",false)) or bool(fixture.get("continental_knockout",false))}
+	var result: Dictionary = engine.simulate_match(home_club, away_club, match_players, match_seed, context)
 	engine.apply_to_fixture(fixture, result)
+	fixture["match_seed"] = match_seed
+	fixture["regulation_result"] = {"home_goals":int(result.get("home_goals",0)),"away_goals":int(result.get("away_goals",0))}
 	return {"fixture":fixture,"result":result,"match_seed":match_seed}
+
+func _advance_competition(world: Dictionary, competition_id: String, date_string: String) -> void:
+	var competition := _find_competition(world.get("competitions",[]),competition_id)
+	match String(competition.get("competition_type","league")):
+		"knockout": _knockout.advance_ready(world,competition_id,date_string)
+		"continental_league_phase": _continental_phase.advance_ready(world,competition_id,date_string)
+
+func _importance(competition: Dictionary, fixture: Dictionary) -> float:
+	var stage := String(fixture.get("stage",""))
+	if stage == "final": return 1.0
+	if stage in ["semifinal","quarterfinal","round_of_16","knockout_playoff"]: return 0.90
+	if bool(competition.get("continental",false)): return 0.82
+	if bool(fixture.get("knockout",false)): return 0.78
+	return 0.55
 
 func _index_players_by_club(players: Array) -> Dictionary:
 	var index := {}
 	for player in players:
 		var club_id := String(player.get("club_id", ""))
-		if club_id == "":
-			continue
-		if not index.has(club_id):
-			index[club_id] = []
+		if club_id == "": continue
+		if not index.has(club_id): index[club_id] = []
 		index[club_id].append(player)
 	return index
 
