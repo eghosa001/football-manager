@@ -132,12 +132,11 @@ jobs:
           Compress-Archive -Path $evidenceFiles -DestinationPath $evidenceZip -Force
           if (-not (Test-Path $evidenceZip)) { throw 'Windows evidence archive missing.' }
           if ((Get-Item $evidenceZip).Length -le 0) { throw 'Windows evidence archive is empty.' }
-          "WINDOWS_EVIDENCE_ZIP=$evidenceZip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload Windows release evidence
         uses: actions/upload-artifact@v4
         with:
           name: FootballDynasty-windows-rc3
-          path: ${{ env.WINDOWS_EVIDENCE_ZIP }}
+          path: ${{ runner.temp }}\FootballDynasty-windows-rc3.zip
           if-no-files-found: error
           retention-days: 14
