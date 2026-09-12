@@ -60,18 +60,31 @@ jobs:
         shell: powershell
         run: .\tools\test-headless.ps1 -Script tests/ui_readability_test.gd
 
-      - name: Build and smoke-test Windows release candidate
+      - name: Build and stage Windows release candidate
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force build\windows | Out-Null
+          New-Item -ItemType Directory -Force build\installer-source | Out-Null
           & $env:GODOT_EXE --headless --path . --export-release 'Windows Desktop' build\windows\FootballDynasty.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $exe = Resolve-Path build\windows\FootballDynasty.exe -ErrorAction Stop
           $item = Get-Item $exe
           if ($item.Length -le 0) { throw 'Windows export is empty.' }
-          Write-Host "Exported $($item.FullName) ($($item.Length) bytes)"
-          Get-FileHash $exe -Algorithm SHA256 | Format-List
-          .\tools\release-smoke.ps1 -ExePath $exe -LogPath build\windows\runtime.log
+          Copy-Item build\windows\* build\installer-source -Recurse -Force
+          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe -ErrorAction Stop
+          $exportHash = (Get-FileHash $exe -Algorithm SHA256).Hash
+          $stagedHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
+          if ($exportHash -ne $stagedHash) { throw 'Installer staging hash mismatch.' }
+          "STAGED_EXE_HASH=$stagedHash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Exported and staged $($item.Length) bytes with SHA256 $stagedHash"
+
+      - name: Execute unpackaged release smoke
+        shell: powershell
+        run: |
+          .\tools\release-smoke.ps1 -ExePath build\windows\FootballDynasty.exe -LogPath build\windows\runtime.log
+          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe -ErrorAction Stop
+          $afterHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
+          if ($afterHash -ne $env:STAGED_EXE_HASH) { throw 'Installer payload changed during runtime smoke.' }
 
       - name: Install Inno Setup
         shell: powershell
@@ -97,6 +110,9 @@ jobs:
             $iscc = $candidates | Select-Object -First 1
           }
           if (-not $iscc) { throw 'ISCC.exe not found after Inno Setup installation.' }
+          $stagedExe = Resolve-Path build\installer-source\FootballDynasty.exe -ErrorAction Stop
+          $stagedHash = (Get-FileHash $stagedExe -Algorithm SHA256).Hash
+          if ($stagedHash -ne $env:STAGED_EXE_HASH) { throw 'Installer payload hash mismatch before compilation.' }
           Write-Host "Using Inno Setup compiler: $iscc"
           & $iscc tools\windows\FootballDynasty.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -111,7 +127,7 @@ jobs:
       - name: Generate release hashes
         shell: powershell
         run: |
-          Get-FileHash build\windows\FootballDynasty.exe -Algorithm SHA256 | Format-List | Out-File build\windows\FootballDynasty.exe.sha256.txt
+          Get-FileHash build\installer-source\FootballDynasty.exe -Algorithm SHA256 | Format-List | Out-File build\windows\FootballDynasty.exe.sha256.txt
           Get-FileHash $env:INSTALLER_PATH -Algorithm SHA256 | Format-List | Out-File build\installer\FootballDynasty-Setup.sha256.txt
 
       - name: Upload Windows release evidence
@@ -119,7 +135,7 @@ jobs:
         with:
           name: FootballDynasty-windows-rc3
           path: |
-            build/windows/FootballDynasty.exe
+            build/installer-source/FootballDynasty.exe
             build/windows/FootballDynasty.exe.sha256.txt
             build/windows/runtime.log
             build/installer/FootballDynasty-Setup-*.exe
