@@ -1,4 +1,3 @@
-class_name UIReadabilityRuntime
 extends Node
 
 const DESKTOP_TARGET_HEIGHT := 38.0
