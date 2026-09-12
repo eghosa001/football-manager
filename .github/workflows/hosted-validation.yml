@@ -43,6 +43,9 @@ jobs:
       - name: Modern football rules contract
         run: bash tools/test-headless.sh tests/modern_football_rules_test.gd 600
 
+      - name: Competition system depth contract
+        run: bash tools/test-headless.sh tests/competition_system_depth_test.gd 600
+
       - name: World integrity contract
         run: bash tools/test-headless.sh tests/world_integrity_audit_test.gd 600
 
