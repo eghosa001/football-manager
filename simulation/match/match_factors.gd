@@ -1,18 +1,21 @@
 class_name MatchFactors
 extends RefCounted
 
+const SpecialAbilityServiceClass = preload("res://simulation/players/special_ability_service.gd")
+
 # Explicit causal weights for match simulation. All computations are
 # deterministic functions of (home, away, players, context, seed-tiebreaks);
 # randomness enters only through the engine RNG draws, never through weights.
 const WEIGHTS := {
-	"team_quality": 0.34,
+	"team_quality": 0.30,
 	"form": 0.10,
 	"home_advantage": 0.08,
 	"morale": 0.08,
 	"manager_ability": 0.07,
-	"tactical_matchup": 0.12,
-	"fitness_availability": 0.12,
-	"pressure": 0.09,
+	"tactical_matchup": 0.11,
+	"fitness_availability": 0.11,
+	"pressure": 0.07,
+	"special_abilities": 0.08,
 }
 
 const FORMATION_COUNTERS := {
@@ -40,6 +43,8 @@ func breakdown(home_club: Dictionary, away_club: Dictionary, players: Array, con
 	var tactics := _tactical_edge(home_club, away_club)
 	var fitness := _fitness_value(home_club, home_best, home_ids) - _fitness_value(away_club, away_best, away_ids)
 	var pressure := _pressure_edge(home_club, away_club, context)
+	var abilities = SpecialAbilityServiceClass.new()
+	var special := abilities.pregame_team_edge(players, String(home_club.get("id", "")), context) - abilities.pregame_team_edge(players, String(away_club.get("id", "")), context)
 	var weighted := (
 		quality * WEIGHTS.team_quality
 		+ form * WEIGHTS.form
@@ -49,6 +54,7 @@ func breakdown(home_club: Dictionary, away_club: Dictionary, players: Array, con
 		+ tactics * WEIGHTS.tactical_matchup
 		+ fitness * WEIGHTS.fitness_availability
 		+ pressure * WEIGHTS.pressure
+		+ special * WEIGHTS.special_abilities * 10.0
 	)
 	return {
 		"team_quality": snappedf(quality, 0.01),
@@ -59,12 +65,12 @@ func breakdown(home_club: Dictionary, away_club: Dictionary, players: Array, con
 		"tactical_matchup": snappedf(tactics, 0.01),
 		"fitness_availability": snappedf(fitness, 0.01),
 		"pressure": snappedf(pressure, 0.01),
+		"special_abilities": snappedf(special, 0.01),
 		"total_home_edge": snappedf(weighted, 0.01),
 		"weights": WEIGHTS.duplicate(true),
 	}
 
 func home_strength_adjustment(home_club: Dictionary, away_club: Dictionary, players: Array, context: Dictionary = {}) -> float:
-	# Additive strength points applied to the home side (negative favors away).
 	return float(breakdown(home_club, away_club, players, context).total_home_edge)
 
 func importance_for(competition: Dictionary, fixture: Dictionary = {}) -> Dictionary:
@@ -98,7 +104,6 @@ func _avg_morale(lineup: Array) -> float:
 	return (total / float(lineup.size())) - 50.0
 
 func _form_value(club: Dictionary) -> float:
-	# 0-15 recent-points scale mapped to +/-6 strength points.
 	if club.has("form_points"): return (clampf(float(club.get("form_points", 7.5)), 0.0, 15.0) - 7.5) * 0.8
 	var recent: Array = club.get("recent_results", [])
 	if recent.is_empty(): return 0.0
@@ -119,7 +124,6 @@ func _home_value(home_club: Dictionary, context: Dictionary) -> float:
 func _manager_value(club: Dictionary) -> float:
 	var ability := float(club.get("manager_ability", 50))
 	if club.has("manager_profile"): ability = float(club.get("manager_profile", {}).get("ability", ability))
-	# Staff-backed ability lives on staff records; clubs cache it at world init.
 	return (ability - 50.0) * 0.12
 
 func _tactical_edge(home_club: Dictionary, away_club: Dictionary) -> float:
@@ -138,7 +142,6 @@ func _mentality_edge(home_mentality: String, away_mentality: String) -> float:
 	var order := {"very_cautious": 0, "cautious": 1, "balanced": 2, "positive": 3, "attacking": 4}
 	var h := int(order.get(home_mentality, 2))
 	var a := int(order.get(away_mentality, 2))
-	# Attacking beats cautious, cautious absorbs attacking; balanced is neutral.
 	if h == 4 and a <= 1: return 1.2
 	if h <= 1 and a == 4: return -1.2
 	return float(h - a) * 0.15
@@ -154,7 +157,6 @@ func _fitness_value(club: Dictionary, best: Array, ids: Array) -> float:
 		var player := _player_by_id(best, String(id))
 		if player.is_empty(): continue
 		if int(player.get("injured_days", 0)) <= 0 and not bool(player.get("retired", false)): available += 1
-	# Missing depth hurts: fewer than 18 available is a thin squad.
 	var depth := clampf((float(mini(available, 25)) - 18.0) * 0.3, -3.0, 2.0)
 	var injured_penalty := 0.0
 	if club.has("injured_count"): injured_penalty = -clampf(float(club.get("injured_count", 0)) * 0.25, 0.0, 2.5)
@@ -164,10 +166,7 @@ func _pressure_edge(home_club: Dictionary, away_club: Dictionary, context: Dicti
 	var importance := float(context.get("importance", 0.5))
 	var home_rep := float(home_club.get("reputation", 50))
 	var away_rep := float(away_club.get("reputation", 50))
-	# Big occasions slightly favor experienced (high-reputation) sides; the
-	# effect is small and symmetric so underdogs still win through quality.
 	var experience := (home_rep - away_rep) * 0.03 * importance
-	# Home crowd pressure: slight home penalty in the very biggest finals.
 	var finals_penalty := 0.0
 	if String(context.get("stage", "")) in ["final", "semi_final"] and importance >= 0.9:
 		finals_penalty = -0.6
