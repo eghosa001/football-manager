@@ -7,7 +7,7 @@ const DEFAULTS := {
 	"ui_scale": 1.0,
 	"high_contrast": false,
 	"reduce_motion": false,
-	"font_scale": 1.0,
+	"font_scale": 1.1,
 	"screen_reader_labels": true,
 	"autosave": true,
 	"autosave_interval_days": 7,
@@ -21,10 +21,10 @@ func defaults() -> Dictionary:
 func sanitize(input: Dictionary) -> Dictionary:
 	var value := DEFAULTS.duplicate(true)
 	value.language = String(input.get("language", value.language))
-	value.ui_scale = clampf(float(input.get("ui_scale", value.ui_scale)), 0.75, 2.0)
+	value.ui_scale = clampf(float(input.get("ui_scale", value.ui_scale)), 0.85, 2.0)
 	value.high_contrast = bool(input.get("high_contrast", value.high_contrast))
 	value.reduce_motion = bool(input.get("reduce_motion", value.reduce_motion))
-	value.font_scale = clampf(float(input.get("font_scale", value.font_scale)), 0.8, 2.0)
+	value.font_scale = clampf(float(input.get("font_scale", value.font_scale)), 0.9, 2.0)
 	value.screen_reader_labels = bool(input.get("screen_reader_labels", value.screen_reader_labels))
 	value.autosave = bool(input.get("autosave", value.autosave))
 	value.autosave_interval_days = clampi(int(input.get("autosave_interval_days", value.autosave_interval_days)), 1, 30)
