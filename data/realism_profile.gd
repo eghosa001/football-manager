@@ -8,8 +8,8 @@ const FALLBACK_FIRST := ["Daniel","Victor","Samuel","David","Ibrahim","Michael",
 const FALLBACK_LAST := ["Okoro","Mensah","Diallo","Banda","Mokoena","Abdullahi","Adeyemi","Kamara","Ndlovu","Boateng","Ibrahim","Dlamini","Osei","Eze","Sow","Yusuf"]
 
 func club_profile(country: Dictionary, index: int, tier: int, seed: int, club_id: String) -> Dictionary:
-	var configured := Loader.new().club_profile(country, index, tier)
-	var fallback_rep := _range(seed, _key(club_id), 34 + maxi(0, 2 - (tier - 1)) * 5, 79 - (tier - 1) * 5)
+	var configured: Dictionary = Loader.new().club_profile(country, index, tier)
+	var fallback_rep: int = _range(seed, _key(club_id), 34 + maxi(0, 2 - (tier - 1)) * 5, 79 - (tier - 1) * 5)
 	var cities: Array = country.get("cities", [])
 	return {
 		"name": Loader.new().club_name(country, index, tier),
@@ -20,21 +20,42 @@ func club_profile(country: Dictionary, index: int, tier: int, seed: int, club_id
 	}
 
 func generated_name(data: Dictionary, country_id: String, seed: int, key: int, used: Dictionary, unique_key: String) -> Dictionary:
-	var pool := Loader.new().name_pool(data, country_id)
+	var pool: Dictionary = Loader.new().name_pool(data, country_id)
 	var first_names: Array = pool.get("first_names", FALLBACK_FIRST)
 	var last_names: Array = pool.get("last_names", FALLBACK_LAST)
 	if first_names.is_empty(): first_names = FALLBACK_FIRST
 	if last_names.is_empty(): last_names = FALLBACK_LAST
-	for attempt in range(8):
-		var first := String(first_names[_range(seed, key + attempt * 2, 0, first_names.size() - 1)])
-		var last := String(last_names[_range(seed, key + attempt * 2 + 1, 0, last_names.size() - 1)])
-		var full := "%s %s" % [first, last]
+
+	# First try ordinary first-name + surname combinations.
+	for attempt in range(16):
+		var first: String = String(first_names[_range(seed, key + attempt * 3, 0, first_names.size() - 1)])
+		var last: String = String(last_names[_range(seed, key + attempt * 3 + 1, 0, last_names.size() - 1)])
+		var full: String = "%s %s" % [first, last]
 		if not used.has(full):
 			used[full] = true
 			return {"first_name":first,"last_name":last,"full_name":full}
-	var first := String(first_names[_range(seed, key, 0, first_names.size() - 1)])
-	var suffix := unique_key.substr(maxi(0, unique_key.length() - 4)).to_upper()
-	var last := "%s-%s" % [String(last_names[_range(seed, key + 1, 0, last_names.size() - 1)]), suffix]
+
+	# Large leagues exhaust simple combinations. Use natural-looking compound
+	# surnames instead of numeric/ID suffixes, giving thousands more unique names.
+	for attempt in range(last_names.size() * 2):
+		var first: String = String(first_names[_range(seed, key + 100 + attempt * 3, 0, first_names.size() - 1)])
+		var left: String = String(last_names[_range(seed, key + 101 + attempt * 3, 0, last_names.size() - 1)])
+		var right: String = String(last_names[_range(seed, key + 102 + attempt * 3, 0, last_names.size() - 1)])
+		if left == right:
+			right = String(last_names[(last_names.find(right) + 1) % last_names.size()])
+		var last: String = "%s-%s" % [left, right]
+		var full: String = "%s %s" % [first, last]
+		if not used.has(full):
+			used[full] = true
+			return {"first_name":first,"last_name":last,"full_name":full}
+
+	# Extremely large custom databases may still exhaust the supplied pool. A
+	# deterministic alphabetic suffix keeps the identity readable and fictional.
+	var first: String = String(first_names[_range(seed, key, 0, first_names.size() - 1)])
+	var base_last: String = String(last_names[_range(seed, key + 1, 0, last_names.size() - 1)])
+	var token: int = posmod(_key(unique_key), 26 * 26 * 26)
+	var suffix := String.chr(65 + token / 676) + String.chr(65 + (token / 26) % 26) + String.chr(65 + token % 26)
+	var last := "%s-%s" % [base_last, suffix]
 	var full := "%s %s" % [first, last]
 	used[full] = true
 	return {"first_name":first,"last_name":last,"full_name":full}
