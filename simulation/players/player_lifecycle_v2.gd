@@ -5,6 +5,13 @@ const SpecialAbilityServiceClass = preload("res://simulation/players/special_abi
 const NewgenFactoryClass = preload("res://simulation/players/newgen_factory.gd")
 const STAFF_ROLES := ["manager","assistant_manager","coach","scout","director","agent"]
 
+func advance_year(world: Dictionary, season_seed: int, youth_per_club: int = 2) -> Dictionary:
+	var result: Dictionary = super.advance_year(world, season_seed, youth_per_club)
+	result["country_evolution"] = _evolve_country_youth_strength(world, season_seed)
+	result["mentored"] = _apply_youth_mentoring(world, season_seed)
+	result["academy_decisions"] = _manage_ai_academies(world, season_seed)
+	return result
+
 func _roll_injury_days(_player: Dictionary, _seed: int) -> int:
 	return 0
 
@@ -63,12 +70,117 @@ func _generate_youth_intake(world: Dictionary, seed: int, per_club: int) -> Arra
 			ensure_player_state(player, seed)
 			world.players.append(player)
 			var key: int = _stable_key(player_id)
-			world.contracts.append({"id":"contract-"+player_id,"player_id":player_id,"club_id":String(club.id),"start_year":season_year,"end_year":season_year+3,"weekly_wage":_rand_int(seed,key+4,250,1200)})
-			if club.has("academy"):
-				club.academy["prospects"] = club.academy.get("prospects", [])
-				if player_id not in club.academy.prospects: club.academy.prospects.append(player_id)
+			world.contracts.append({"id":"contract-"+player_id,"player_id":player_id,"club_id":String(club.id),"start_year":season_year,"end_year":season_year+3,"weekly_wage":_rand_int(seed,key+4,250,1200),"contract_type":"scholarship"})
+			club["academy"] = club.get("academy", {"prospects":[],"recruitment":50,"coaching":50,"reputation":40,"region_knowledge":50,"intake_variance":2})
+			club.academy["prospects"] = club.academy.get("prospects", [])
+			if player_id not in club.academy.prospects: club.academy.prospects.append(player_id)
 			created.append(player_id)
 	return created
+
+func _evolve_country_youth_strength(world: Dictionary, seed: int) -> Array:
+	var changes: Array = []
+	for country in world.get("countries", []):
+		var country_id := String(country.get("id", ""))
+		var club_count := 0
+		var facilities_total := 0.0
+		var rep_total := 0.0
+		for club in world.get("clubs", []):
+			if String(club.get("country_id", "")) != country_id: continue
+			club_count += 1
+			facilities_total += float(club.get("youth_facilities", club.get("training_facilities",50)))
+			rep_total += float(club.get("reputation",50))
+		if club_count == 0: continue
+		var avg_facilities := facilities_total / float(club_count)
+		var avg_rep := rep_total / float(club_count)
+		var success := float(country.get("national_success",50))
+		var target := avg_facilities*0.42 + avg_rep*0.28 + success*0.30
+		var youth_before := float(country.get("youth_rating",50))
+		var infrastructure_before := float(country.get("youth_infrastructure", country.get("infrastructure",50)))
+		var random_drift := (SeededRngClass.unit_for(seed,_stable_key(country_id)+700001)-0.5)*1.2
+		var youth_after := clampf(youth_before + clampf((target-youth_before)*0.035,-1.2,1.2)+random_drift,15.0,95.0)
+		var infrastructure_after := clampf(infrastructure_before + clampf((avg_facilities-infrastructure_before)*0.025,-0.8,0.8),15.0,95.0)
+		country["youth_rating"] = snappedf(youth_after,0.1)
+		country["youth_infrastructure"] = snappedf(infrastructure_after,0.1)
+		changes.append({"country_id":country_id,"youth_before":youth_before,"youth_after":youth_after,"infrastructure_after":infrastructure_after})
+	return changes
+
+func _apply_youth_mentoring(world: Dictionary, seed: int) -> Array:
+	var affected: Array = []
+	for club in world.get("clubs", []):
+		var club_id := String(club.get("id", ""))
+		var mentors: Array = []
+		var youngsters: Array = []
+		for player in world.get("players", []):
+			if String(player.get("club_id", "")) != club_id or bool(player.get("retired",false)): continue
+			if int(player.get("age",25)) >= 27 and int(player.get("current_ability",50)) >= 60:
+				mentors.append(player)
+			elif int(player.get("age",25)) <= 21:
+				youngsters.append(player)
+		if mentors.is_empty() or youngsters.is_empty(): continue
+		mentors.sort_custom(func(a: Dictionary,b: Dictionary): return int(a.get("hidden_attributes",{}).get("professionalism",50)) > int(b.get("hidden_attributes",{}).get("professionalism",50)))
+		var mentor: Dictionary = mentors[0]
+		var mentor_hidden: Dictionary = mentor.get("hidden_attributes",{})
+		for young in youngsters:
+			var key := _stable_key(String(young.get("id",""))) + int(world.get("season_year",2026))*53
+			if SeededRngClass.unit_for(seed,key) > 0.45: continue
+			var hidden: Dictionary = young.get("hidden_attributes",{})
+			for name in ["professionalism","determination","pressure","sportsmanship"]:
+				if name == "determination":
+					var attrs: Dictionary = young.get("attributes",{})
+					if attrs.has(name): attrs[name] = mini(100,int(attrs[name])+1)
+				elif hidden.has(name) and int(mentor_hidden.get(name,50)) > int(hidden[name]):
+					hidden[name] = mini(100,int(hidden[name])+1)
+			young["mentored_by"] = String(mentor.get("id",""))
+			affected.append(String(young.get("id","")))
+	return affected
+
+func _manage_ai_academies(world: Dictionary, seed: int) -> Dictionary:
+	var promoted: Array = []
+	var development_listed: Array = []
+	var released: Array = []
+	var human_club := String(world.get("managed_club_id", ""))
+	for club in world.get("clubs", []):
+		var club_id := String(club.get("id", ""))
+		if club_id == human_club or bool(club.get("human_managed",false)): continue
+		var academy: Dictionary = club.get("academy",{})
+		var prospects: Array = academy.get("prospects",[]).duplicate()
+		if prospects.is_empty(): continue
+		var senior_threshold := _senior_threshold(world, club_id)
+		for player_id in prospects:
+			var player := _player_in(world, String(player_id))
+			if player.is_empty(): continue
+			var age := int(player.get("age",16))
+			var ca := int(player.get("current_ability",40))
+			var pa := int(player.get("potential",ca))
+			if ca >= senior_threshold-7 or (age >= 18 and pa >= senior_threshold+10):
+				player["squad_status"] = "first_team"
+				academy.prospects.erase(player_id)
+				promoted.append(String(player_id))
+			elif age >= 18 and pa >= senior_threshold and ca < senior_threshold-8:
+				player["squad_status"] = "development_list"
+				player["loan_candidate"] = true
+				development_listed.append(String(player_id))
+			elif age >= 20 and pa < senior_threshold-4:
+				player["club_id"] = ""
+				player["squad_status"] = "free_agent"
+				academy.prospects.erase(player_id)
+				released.append(String(player_id))
+		club["academy"] = academy
+	return {"promoted":promoted,"development_listed":development_listed,"released":released}
+
+func _senior_threshold(world: Dictionary, club_id: String) -> int:
+	var values: Array = []
+	for player in world.get("players", []):
+		if String(player.get("club_id", "")) == club_id and String(player.get("squad_status","")) != "academy" and not bool(player.get("retired",false)):
+			values.append(int(player.get("current_ability",50)))
+	if values.is_empty(): return 50
+	values.sort()
+	return int(values[maxi(0,values.size()/2)])
+
+func _player_in(world: Dictionary, player_id: String) -> Dictionary:
+	for player in world.get("players", []):
+		if String(player.get("id", "")) == player_id: return player
+	return {}
 
 func _should_retire(player: Dictionary, seed: int) -> bool:
 	var age: int = int(player.get("age", 25))
