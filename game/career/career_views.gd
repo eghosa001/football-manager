@@ -34,6 +34,21 @@ func add_dashboard(tabs: TabContainer) -> void:
 		_button(box, tr("Open last match analysis"), func(): _focus_tab(tabs, "Match Analysis"))
 	else:
 		_label(box, tr("No managed match played yet — match analysis will appear here after your first fixture."))
+	_heading(box, tr("Manager actions"), 18)
+	var actions := HBoxContainer.new(); box.add_child(actions)
+	_button(actions, tr("Team talk: passionate"), func(): _report_command_text(command.deliver_team_talk(session.world, session.managed_club_id, "passionate", "pre_match", {}, session.seed).get("error", OK)))
+	_button(actions, tr("Team talk: calm"), func(): _report_command_text(command.deliver_team_talk(session.world, session.managed_club_id, "calm", "pre_match", {}, session.seed).get("error", OK)))
+	_button(actions, tr("Pre-match press"), func(): _report_command_text(command.hold_press_conference(session.world, session.managed_club_id, "pre_match", {}, session.seed).get("error", OK)))
+	_button(box, tr("Opposition report (next fixture)"), func():
+		var upcoming: Dictionary = query.dashboard(session.world, session.managed_club_id).get("next_fixture", {})
+		if upcoming.is_empty():
+			app.call("_show_error", "No upcoming fixture to scout.")
+			return
+		var opp := String(upcoming.get("away_club_id", "")) if String(upcoming.get("home_club_id", "")) == session.managed_club_id else String(upcoming.get("home_club_id", ""))
+		var report: Dictionary = command.request_opposition_report(session.world, session.managed_club_id, opp, session.seed)
+		app.call("_show_career")
+		app.call("_show_error", "Report: %s (%s). Plan: %s." % [String(report.get("opponent_name", "")), String(report.get("formation", "")), String(report.get("suggested_plan", ""))] if not report.has("error") else "Report unavailable.")
+	)
 
 func add_squad(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Squad")
@@ -343,6 +358,9 @@ func _report_command(error: Error) -> void:
 	app.call("_show_career")
 	app.call("_show_error", "Change applied." if error == OK else "The change could not be applied (%d). Check your funds and the request." % error)
 
+func _report_command_text(error: Variant) -> void:
+	_report_command(int(error) if error is int else FAILED)
+
 func _toggle_instruction(phase: String, key: String, current: bool) -> void:
 	command.set_tactical_instruction(session.world, session.managed_club_id, phase, key, not current)
 	app.call("_show_career")
@@ -516,3 +534,83 @@ func _competition_qualification_text(competition: Dictionary) -> String:
 	if String(competition.get("competition_type", "")) == "knockout":
 		return "Single-elimination domestic cup."
 	return "Double round-robin league with promotion and relegation."
+
+func add_data_hub(tabs: TabContainer) -> void:
+	var box := _tab(tabs, "Data Hub")
+	var year := int(session.world.get("season_year", 2026))
+	_heading(box, tr("Golden Boot race"), 18)
+	var scorers := _season_leaders(session.world, year, "goals", 8)
+	if scorers.is_empty():
+		_label(box, tr("No goals recorded yet this season."))
+	for row in scorers:
+		_button(box, "%s (%s) — %d goals, %d assists, %.2f xG, %.1f rating" % [String(row.get("name", "?")), String(row.get("position", "?")), int(row.get("goals", 0)), int(row.get("assists", 0)), float(row.get("xg", 0.0)), float(row.get("rating", 0.0))], _show_player.bind(String(row.get("player_id", ""))))
+	_heading(box, tr("Top rated (5+ apps)"), 18)
+	for row in _season_leaders(session.world, year, "rating", 5):
+		_label(box, "%s (%s) — %.1f avg over %d apps" % [String(row.get("name", "?")), String(row.get("position", "?")), float(row.get("rating", 0.0)), int(row.get("appearances", 0))])
+	_heading(box, tr("Team attack"), 18)
+	for row in _team_attack_table(session.world).slice(0, 8):
+		_label(box, "%s — %d GF, %.2f xG, %d wins" % [String(row.get("name", "?")), int(row.get("goals_for", 0)), float(row.get("xg", 0.0)), int(row.get("won", 0))])
+
+func _season_leaders(world: Dictionary, year: int, key: String, limit: int) -> Array:
+	var totals := {}
+	for row in world.get("player_history", []):
+		if int(row.get("season_year", 0)) != year:
+			continue
+		var pid := String(row.get("player_id", ""))
+		if not totals.has(pid):
+			var player := _player(pid)
+			totals[pid] = {"player_id": pid, "name": _player_name(player), "position": String(player.get("position", "?")), "goals": 0, "assists": 0, "xg": 0.0, "rating_sum": 0.0, "rating_n": 0, "appearances": 0, "rating": 0.0}
+		var agg: Dictionary = totals[pid]
+		agg.goals = int(agg.goals) + int(row.get("goals", 0))
+		agg.assists = int(agg.assists) + int(row.get("assists", 0))
+		agg.xg = float(agg.xg) + float(row.get("xg", 0.0))
+		agg.rating_sum = float(agg.rating_sum) + float(row.get("rating", 0.0)) * float(row.get("appearances", 0))
+		agg.rating_n = int(agg.rating_n) + int(row.get("appearances", 0))
+		agg.appearances = int(agg.appearances) + int(row.get("appearances", 0))
+	var rows: Array = totals.values()
+	for agg in rows:
+		agg.rating = snappedf(float(agg.rating_sum) / maxf(1.0, float(agg.rating_n)), 0.01)
+		agg.xg = snappedf(float(agg.xg), 0.01)
+	rows.sort_custom(func(a: Dictionary, b: Dictionary):
+		if key == "rating":
+			var af := a if int(a.get("appearances", 0)) >= 5 else {"rating": -1.0, "goals": -1}
+			var bf := b if int(b.get("appearances", 0)) >= 5 else {"rating": -1.0, "goals": -1}
+			if not is_equal_approx(float(af.get("rating", 0.0)), float(bf.get("rating", 0.0))):
+				return float(af.get("rating", 0.0)) > float(bf.get("rating", 0.0))
+			return int(a.get("goals", 0)) > int(b.get("goals", 0))
+		if int(a.get(key, 0)) == int(b.get(key, 0)):
+			return float(a.get("rating", 0.0)) > float(b.get("rating", 0.0))
+		return int(a.get(key, 0)) > int(b.get(key, 0))
+	)
+	if key == "rating":
+		rows = rows.filter(func(r: Dictionary): return int(r.get("appearances", 0)) >= 5)
+	return rows.slice(0, mini(limit, rows.size()))
+
+func _team_attack_table(world: Dictionary) -> Array:
+	var agg := {}
+	for fixture in world.get("fixtures", []):
+		if not bool(fixture.get("played", false)):
+			continue
+		for side in ["home", "away"]:
+			var club_id := String(fixture.get("home_club_id", "")) if side == "home" else String(fixture.get("away_club_id", ""))
+			if not agg.has(club_id):
+				agg[club_id] = {"name": _club_name(club_id), "goals_for": 0, "xg": 0.0, "won": 0}
+			var gf := int(fixture.get("home_goals", 0)) if side == "home" else int(fixture.get("away_goals", 0))
+			var ga := int(fixture.get("away_goals", 0)) if side == "home" else int(fixture.get("home_goals", 0))
+			agg[club_id].goals_for = int(agg[club_id].goals_for) + gf
+			if gf > ga:
+				agg[club_id].won = int(agg[club_id].won) + 1
+	for row in world.get("player_history", []):
+		var player := _player(String(row.get("player_id", "")))
+		var club_id := String(player.get("club_id", ""))
+		if agg.has(club_id):
+			agg[club_id].xg = float(agg[club_id].xg) + float(row.get("xg", 0.0))
+	var rows: Array = agg.values()
+	for row in rows:
+		row.xg = snappedf(float(row.xg), 0.01)
+	rows.sort_custom(func(a: Dictionary, b: Dictionary):
+		if int(a.get("goals_for", 0)) == int(b.get("goals_for", 0)):
+			return float(a.get("xg", 0.0)) > float(b.get("xg", 0.0))
+		return int(a.get("goals_for", 0)) > int(b.get("goals_for", 0))
+	)
+	return rows

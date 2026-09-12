@@ -76,6 +76,9 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	var manager_market_result: Dictionary = _process_ai_manager_market(world, season_result.records, completed_year)
 	var next_year: int = int(season_result.next_season_year)
 	var stadium_projects: Array = _stadiums.advance_projects(world, next_year)
+	var loans_settled: Dictionary = _market.settle_loan_terms(world, next_year, season_seed + 700_006)
+	for signing in loans_settled.get("bought", []):
+		_events.emit(world, "LOAN_BUY_ACTIVATED", {"season_year": next_year, "player_id": String(signing.get("player_id", "")), "buyer_id": String(signing.get("buyer_id", "")), "fee": int(signing.get("fee", 0))}, "transfer_market")
 	var loans_returned: int = _market.return_expired_loans(world, next_year)
 	var lifecycle_result: Dictionary = _lifecycle.advance_year(world, season_seed + 700_001, 2)
 	for player_id in lifecycle_result.get("retired", []):
@@ -110,7 +113,7 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	var reputation_result: Dictionary = _reputation.advance_year(world, season_result.records)
 	var happiness_result: Dictionary = _happiness.update_week(world)
 	_events.emit(world, "SEASON_ENDED", {"completed_year":completed_year,"next_year":next_year,"competition_records":season_result.records.duplicate(true),"promotion_movements":season_result.get("movements", []).duplicate(true),"international_champion":String(international_result.get("champion", ""))}, "career_cycle")
-	return {"season":season_result,"history_archive":history_result,"economy":economy_result,"board":board_result,"stadium_projects":stadium_projects,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"staff_development":staff_development_result,"squads":squad_result,"ai_transfer_market":ai_market_result,"registrations":registration_result,"living_world":living_result,"living_world_depth":living_depth_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
+	return {"season":season_result,"history_archive":history_result,"economy":economy_result,"board":board_result,"stadium_projects":stadium_projects,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"staff_development":staff_development_result,"squads":squad_result,"ai_transfer_market":ai_market_result,"loans_settled":loans_settled,"registrations":registration_result,"living_world":living_result,"living_world_depth":living_depth_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
 
 func _process_ai_manager_market(world: Dictionary, records: Array, year: int) -> Dictionary:
 	var human_club_id := String(world.get("human_manager", {}).get("club_id", ""))

@@ -276,6 +276,7 @@ func _show_career() -> void:
 	views.add_staff(tabs)
 	views.add_finances(tabs)
 	views.add_board(tabs)
+	views.add_data_hub(tabs)
 	views.add_search(tabs)
 	views.add_match_analysis(tabs)
 

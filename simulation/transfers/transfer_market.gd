@@ -77,7 +77,7 @@ func execute_transfer(world: Dictionary, player_id: String, buyer_id: String, fe
 	_events.emit(world, "CONTRACT_SIGNED", {"player_id":player_id,"club_id":buyer_id,"start_year":season_year,"end_year":season_year+years,"weekly_wage":wage,"renewal":false}, "transfer_market")
 	return OK
 
-func execute_loan(world: Dictionary, player_id: String, borrower_id: String, fee: int, season_year: int) -> Error:
+func execute_loan(world: Dictionary, player_id: String, borrower_id: String, fee: int, season_year: int, terms: Dictionary = {}) -> Error:
 	_ledger.ensure(world)
 	_events.ensure_world(world)
 	var player: Dictionary = _find_player(world.players, player_id)
@@ -92,9 +92,53 @@ func execute_loan(world: Dictionary, player_id: String, borrower_id: String, fee
 	_ledger.post(world, parent_id, fee, "loan_fee", reference, season_year)
 	player.loan_parent_club_id = parent_id
 	player.loan_end_year = season_year + 1
+	player.loan_fee = fee
+	player.loan_wage_contribution_pct = clampf(float(terms.get("wage_contribution_pct", 0.0)), 0.0, 1.0)
+	player.loan_buy_option = maxi(0, int(terms.get("buy_option", 0)))
+	player.loan_buy_obligation = bool(terms.get("buy_obligation", false))
+	player.loan_appearances_start = int(player.get("career_appearances", 0))
 	player.club_id = borrower_id
-	_events.emit(world, "PLAYER_SIGNED", {"player_id":player_id,"buyer_id":borrower_id,"seller_id":parent_id,"fee":fee,"transfer_type":"loan","loan_end_year":season_year+1}, "transfer_market")
+	_events.emit(world, "PLAYER_SIGNED", {"player_id":player_id,"buyer_id":borrower_id,"seller_id":parent_id,"fee":fee,"transfer_type":"loan","loan_end_year":season_year+1,"buy_option":int(player.loan_buy_option),"buy_obligation":bool(player.loan_buy_obligation)}, "transfer_market")
 	return OK
+
+func settle_loan_terms(world: Dictionary, season_year: int, seed: int) -> Dictionary:
+	_ledger.ensure(world)
+	_events.ensure_world(world)
+	var bought: Array = []
+	var returned: Array = []
+	var lapsed: Array = []
+	for player in world.players:
+		var parent_id := String(player.get("loan_parent_club_id", ""))
+		if parent_id == "" or int(player.get("loan_end_year", 9999)) > season_year:
+			continue
+		var borrower_id := String(player.get("club_id", ""))
+		var borrower := _find_club(world.clubs, borrower_id)
+		var buy_option := int(player.get("loan_buy_option", 0))
+		var obligation := bool(player.get("loan_buy_obligation", false))
+		var apps := int(player.get("career_appearances", 0)) - int(player.get("loan_appearances_start", 0))
+		var should_buy := false
+		if buy_option > 0 and not borrower.is_empty():
+			if obligation:
+				should_buy = int(borrower.get("transfer_budget", 0)) >= buy_option
+			else:
+				should_buy = apps >= 12 and int(player.get("current_ability", 0)) >= 52 and int(borrower.get("transfer_budget", 0)) >= buy_option
+		if should_buy:
+			var reference := "loan-buy-%s-%d" % [String(player.get("id", "")), season_year]
+			_ledger.post(world, borrower_id, -buy_option, "transfer_fee", reference, season_year)
+			_ledger.post(world, parent_id, buy_option, "transfer_fee", reference, season_year)
+			_upsert_contract(world, String(player.get("id", "")), borrower_id, season_year, season_year + 3, recommended_wage(player))
+			_clear_loan_fields(player)
+			bought.append({"player_id": String(player.get("id", "")), "buyer_id": borrower_id, "seller_id": parent_id, "fee": buy_option, "appearances": apps, "obligation": obligation})
+			_events.emit(world, "PLAYER_SIGNED", {"player_id": String(player.get("id", "")), "buyer_id": borrower_id, "seller_id": parent_id, "fee": buy_option, "transfer_type": "loan_to_permanent", "season_year": season_year}, "transfer_market")
+		elif obligation and buy_option > 0:
+			lapsed.append({"player_id": String(player.get("id", "")), "buyer_id": borrower_id, "reason": "obligation_unaffordable"})
+		else:
+			returned.append(String(player.get("id", "")))
+	return {"bought": bought, "returned_pending": returned, "lapsed_obligations": lapsed}
+
+func _clear_loan_fields(player: Dictionary) -> void:
+	for key in ["loan_parent_club_id", "loan_end_year", "loan_fee", "loan_wage_contribution_pct", "loan_buy_option", "loan_buy_obligation", "loan_appearances_start"]:
+		player.erase(key)
 
 func return_expired_loans(world: Dictionary, season_year: int) -> int:
 	var count := 0

@@ -12,6 +12,9 @@ const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const PlayerPromisesClass = preload("res://simulation/players/player_promises.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
 const BoardServiceClass = preload("res://application/career/board_service.gd")
+const TeamTalkServiceClass = preload("res://simulation/match/team_talk_service.gd")
+const PressServiceClass = preload("res://application/career/press_service.gd")
+const OppositionReportClass = preload("res://simulation/scouting/opposition_report.gd")
 
 func set_training(world: Dictionary, club_id: String, sessions: Array, intensity: float) -> Error:
 	var club := _club(world, club_id)
@@ -136,14 +139,16 @@ func complete_transfer(world: Dictionary, offer_id: String, weekly_wage: int, si
 	InboxServiceClass.new().add_message(world, "transfers", "%s signs" % _player_name(player), "%s has completed a transfer for %d and signed a %d-year contract." % [_player_name(player), int(offer.fee), years])
 	return {"error":OK,"offer":offer,"contract":contract,"agent":agent_result}
 
-func execute_loan(world: Dictionary, club_id: String, player_id: String, fee: int, seed: int = 1) -> Dictionary:
+func execute_loan(world: Dictionary, club_id: String, player_id: String, fee: int, seed: int = 1, terms: Dictionary = {}) -> Dictionary:
 	var player := _player(world, player_id); var club := _club(world, club_id)
 	if player.is_empty() or club.is_empty(): return {"error":ERR_DOES_NOT_EXIST}
 	_ensure_finance_defaults(club)
 	if not TransferNegotiationClass.new().is_window_open(world, String(world.get("date", ""))): return {"error":ERR_UNAVAILABLE,"reason":"transfer_window_closed"}
-	var err := TransferMarketClass.new().execute_loan(world, player_id, club_id, fee, int(world.get("season_year", 2026)))
-	if err == OK: InboxServiceClass.new().add_message(world, "transfers", "Loan completed", "%s has joined on loan." % _player_name(player))
-	return {"error":err,"player_id":player_id,"fee":fee}
+	var normalized := TransferNegotiationClass.new()._normalized_clauses(fee, terms)
+	var loan_terms := preload("res://simulation/transfers/negotiation_depth.gd").new().loan_terms(int(normalized.get("loan_fee", fee)), float(normalized.get("wage_contribution_pct", 0.0)), int(normalized.get("buy_option", 0)), bool(normalized.get("buy_obligation", false)))
+	var err := TransferMarketClass.new().execute_loan(world, player_id, club_id, fee, int(world.get("season_year", 2026)), loan_terms)
+	if err == OK: InboxServiceClass.new().add_message(world, "transfers", "Loan completed", "%s has joined on loan%s." % [_player_name(player), " with a buy option of %d" % int(loan_terms.get("buy_option", 0)) if int(loan_terms.get("buy_option", 0)) > 0 else ""])
+	return {"error":err,"player_id":player_id,"fee":fee,"terms":loan_terms}
 
 func renew_contract(world: Dictionary, club_id: String, player_id: String, weekly_wage: int, signing_bonus: int, years: int, seed: int = 1) -> Dictionary:
 	var player := _player(world, player_id); var club := _club(world, club_id)
@@ -214,6 +219,26 @@ func job_security_report(world: Dictionary, club_id: String) -> Dictionary:
 
 func supporter_report(world: Dictionary, club_id: String) -> Dictionary:
 	return BoardServiceClass.new().supporter_report(world, club_id)
+
+func deliver_team_talk(world: Dictionary, club_id: String, tone: String, moment: String, context: Dictionary = {}, seed: int = 1) -> Dictionary:
+	if _club(world, club_id).is_empty():
+		return {"error": ERR_DOES_NOT_EXIST}
+	return TeamTalkServiceClass.new().deliver_talk(world, club_id, tone, moment, context, seed)
+
+func touchline_shout(world: Dictionary, club_id: String, shout: String, context: Dictionary = {}, seed: int = 1) -> Dictionary:
+	if _club(world, club_id).is_empty():
+		return {"error": ERR_DOES_NOT_EXIST}
+	return TeamTalkServiceClass.new().touchline_shout(world, club_id, shout, context, seed)
+
+func hold_press_conference(world: Dictionary, club_id: String, kind: String, answers: Dictionary = {}, seed: int = 1) -> Dictionary:
+	if _club(world, club_id).is_empty():
+		return {"error": ERR_DOES_NOT_EXIST}
+	return PressServiceClass.new().hold_press_conference(world, club_id, kind, answers, seed)
+
+func request_opposition_report(world: Dictionary, club_id: String, opponent_club_id: String, seed: int = 1) -> Dictionary:
+	if _club(world, club_id).is_empty():
+		return {"error": ERR_DOES_NOT_EXIST}
+	return OppositionReportClass.new().build(world, club_id, opponent_club_id, seed)
 
 func _ensure_finance_defaults(club: Dictionary) -> void:
 	club["cash"] = int(club.get("cash", 20_000_000))
