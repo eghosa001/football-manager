@@ -34,7 +34,7 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 			var club_ids: Array = []
 			for club_index in range(team_count):
 				var club_id := "%s-t%d-c%02d" % [country_id, tier_index + 1, club_index + 1]
-				var profile := realism.club_profile(raw_country, club_index, tier_index + 1, seed, club_id)
+				var profile: Dictionary = realism.club_profile(raw_country, club_index, tier_index + 1, seed, club_id)
 				var club: Dictionary = DomainModelsClass.club(club_id, country_id, String(profile.name), int(profile.reputation))
 				club["city"] = String(profile.city)
 				club["tier"] = tier_index + 1
@@ -97,18 +97,18 @@ func _transfer_windows(data: Dictionary, country_id: String) -> Array:
 		elif String(value) == "winter": result.append({"start_month":1,"start_day":1,"end_month":1,"end_day":31})
 	return result
 
-func _generate_staff(world: Dictionary, club: Dictionary, country_id: String, data: Dictionary, seed: int, used_names: Dictionary, realism: RefCounted) -> void:
+func _generate_staff(world: Dictionary, club: Dictionary, country_id: String, data: Dictionary, seed: int, used_names: Dictionary, realism: RealismProfile) -> void:
 	var band: Vector2i = realism.staff_ability_band(int(club.reputation))
 	for role_index in range(STAFF_ROLES.size()):
 		var id := "staff-%s-%d" % [String(club.id), role_index]
 		var key := _key(id)
 		var generated: Dictionary = realism.generated_name(data, country_id, seed, key + 1, used_names, id)
-		var member := DomainModelsClass.staff(id, String(club.id), String(generated.full_name), STAFF_ROLES[role_index], _range(seed,key+3,band.x,band.y))
+		var member: Dictionary = DomainModelsClass.staff(id, String(club.id), String(generated.full_name), STAFF_ROLES[role_index], _range(seed,key+3,band.x,band.y))
 		member["country_id"] = country_id
 		member["fictional_identity"] = true
 		world.staff.append(member)
 
-func _generate_players(world: Dictionary, club: Dictionary, country_id: String, loaded_country_ids: Array, data: Dictionary, count: int, seed: int, used_names: Dictionary, realism: RefCounted) -> void:
+func _generate_players(world: Dictionary, club: Dictionary, country_id: String, loaded_country_ids: Array, data: Dictionary, count: int, seed: int, used_names: Dictionary, realism: RealismProfile) -> void:
 	var club_rep := int(club.reputation)
 	var band: Vector2i = realism.ability_band(club_rep)
 	var wage_band: Vector2i = realism.wage_band(club_rep)
@@ -121,7 +121,7 @@ func _generate_players(world: Dictionary, club: Dictionary, country_id: String, 
 		var growth_cap := 34 if age <= 21 else (18 if age <= 25 else 8)
 		var pa := mini(100, ca + _range(seed,key+2,0,growth_cap))
 		var generated: Dictionary = realism.generated_name(data, nationality, seed, key + 3, used_names, id)
-		var position := POSITIONS[i % POSITIONS.size()]
+		var position: String = String(POSITIONS[i % POSITIONS.size()])
 		var player: Dictionary = DomainModelsClass.player(id, String(club.id), String(generated.first_name), String(generated.last_name), age, position, ca, pa)
 		player["country_id"] = nationality
 		player["homegrown"] = nationality == country_id and age <= 24
