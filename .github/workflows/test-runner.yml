@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout current CI harness
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 1
@@ -41,7 +41,7 @@ jobs:
         run: Copy-Item .\tools\test-headless.ps1 (Join-Path $env:RUNNER_TEMP 'test-headless.ps1') -Force
 
       - name: Checkout revision under test
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
           fetch-depth: 1
