@@ -74,6 +74,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           preset = Path('export_presets.cfg')
           s = preset.read_text()
@@ -83,8 +84,10 @@ jobs:
           block = block.replace('export_path="build/android/FootballDynasty.aab"', 'export_path="build/android/FootballDynasty-debug.apk"')
           block = block.replace('gradle_build/use_gradle_build=true', 'gradle_build/use_gradle_build=false')
           block = block.replace('gradle_build/export_format=1', 'gradle_build/export_format=0')
-          block = block.replace('gradle_build/min_sdk="24"\n', '')
-          block = block.replace('gradle_build/target_sdk="34"\n', '')
+          # Direct Godot APK export must not carry Gradle-only SDK overrides.
+          # Strip both fields regardless of their configured values so future
+          # store-target SDK changes cannot break this device-test path.
+          block = re.sub(r'^gradle_build/(?:min_sdk|target_sdk)=.*\n', '', block, flags=re.MULTILINE)
           preset.write_text(s[:start] + block + s[end:])
 
           project = Path('project.godot')
