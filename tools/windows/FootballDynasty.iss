@@ -2,6 +2,7 @@
 #define MyAppVersion "1.0.0-rc3"
 #define MyAppPublisher "Football Dynasty"
 #define MyAppExeName "FootballDynasty.exe"
+#define MyAppNumericVersion "1.0.0.3"
 
 [Setup]
 AppId={{D736C7B7-69B2-46B9-B25C-1C4790AF8A42}
@@ -20,11 +21,11 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
-VersionInfoVersion=1.0.0.3
+VersionInfoVersion={#MyAppNumericVersion}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Installer
 VersionInfoProductName={#MyAppName}
-VersionInfoProductVersion={#MyAppVersion}
+VersionInfoProductVersion={#MyAppNumericVersion}
 
 [Files]
 Source: "..\..\build\windows\FootballDynasty.exe"; DestDir: "{app}"; Flags: ignoreversion
