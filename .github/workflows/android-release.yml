@@ -1,0 +1,83 @@
+name: Android Signed Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-signed-aab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout clean source
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Verify Android signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_USER: ${{ secrets.ANDROID_RELEASE_KEYSTORE_USER }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_B64"
+          test -n "$KEYSTORE_USER"
+          test -n "$KEYSTORE_PASSWORD"
+
+      - name: Materialize release keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/football-dynasty-release.keystore"
+          test -s "$RUNNER_TEMP/football-dynasty-release.keystore"
+
+      - name: Configure Godot Android signing environment
+        env:
+          KEYSTORE_USER: ${{ secrets.ANDROID_RELEASE_KEYSTORE_USER }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+        run: |
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$RUNNER_TEMP/football-dynasty-release.keystore" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$KEYSTORE_USER" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Import and validate production contracts
+        run: |
+          godot --version
+          bash tools/test-headless.sh import 600
+          bash tools/test-headless.sh tests/mobile_export_test.gd 600
+          bash tools/test-headless.sh tests/ui_readability_test.gd 300
+          bash tools/test-headless.sh tests/navigation_responsive_test.gd 300
+          bash tools/test-headless.sh tests/production_readiness_contract_test.gd 300
+
+      - name: Install Android Gradle build template
+        run: godot --headless --editor --path . --install-android-build-template --quit
+
+      - name: Export signed Play AAB
+        run: |
+          mkdir -p build/android
+          godot --headless --path . --export-release "Android" build/android/FootballDynasty.aab
+          test -s build/android/FootballDynasty.aab
+          sha256sum build/android/FootballDynasty.aab | tee build/android/FootballDynasty.aab.sha256
+
+      - name: Upload signed Android release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: FootballDynasty-android-rc3-aab
+          path: |
+            build/android/FootballDynasty.aab
+            build/android/FootballDynasty.aab.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove release keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/football-dynasty-release.keystore"
