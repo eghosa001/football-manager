@@ -68,7 +68,7 @@ func _test_polish_and_release_contracts() -> void:
 		"autosave_rolling_count":5
 	})
 	assert(float(settings.ui_scale) == 2.0)
-	assert(float(settings.font_scale) == 0.8)
+	assert(float(settings.font_scale) == 0.9)
 	assert(String(settings.autosave_mode) == "manual")
 	assert(int(settings.autosave_interval_days) == 30)
 	assert(int(settings.autosave_rolling_count) == 5)
