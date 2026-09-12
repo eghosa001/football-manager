@@ -1,0 +1,106 @@
+name: Fresh Windows Release Acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - 'game/**'
+      - 'application/**'
+      - 'persistence/**'
+      - 'tools/windows/**'
+      - '.github/workflows/fresh-windows-release.yml'
+
+concurrency:
+  group: fresh-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  installer-acceptance:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout clean source
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Setup Godot 4.7.2 with export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Verify engine
+        shell: powershell
+        run: godot --version
+
+      - name: Import project
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script import
+
+      - name: Production readiness contract
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/production_readiness_contract_test.gd
+
+      - name: UI readability contract
+        shell: powershell
+        run: .\tools\test-headless.ps1 -Script tests/ui_readability_test.gd
+
+      - name: Build Windows release candidate
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force build\windows | Out-Null
+          godot --headless --path . --export-release 'Windows Desktop' build\windows\FootballDynasty.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path build\windows\FootballDynasty.exe)) { throw 'Windows export missing' }
+
+      - name: Execute unpackaged release smoke
+        shell: powershell
+        run: .\tools\release-smoke.ps1 -ExePath build\windows\FootballDynasty.exe -LogPath build\windows\runtime.log
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: powershell
+        run: |
+          $iscc = @(
+            "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) { throw 'ISCC.exe not found' }
+          & $iscc tools\windows\FootballDynasty.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installer = Get-ChildItem build\installer\FootballDynasty-Setup-*.exe | Select-Object -First 1
+          if (-not $installer) { throw 'Installer not produced' }
+          "INSTALLER_PATH=$($installer.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Silent clean-install acceptance
+        shell: powershell
+        run: .\tools\windows\installer-smoke.ps1 -InstallerPath $env:INSTALLER_PATH
+
+      - name: Generate release hashes
+        shell: powershell
+        run: |
+          Get-FileHash build\windows\FootballDynasty.exe -Algorithm SHA256 | Format-List | Out-File build\windows\FootballDynasty.exe.sha256.txt
+          Get-FileHash $env:INSTALLER_PATH -Algorithm SHA256 | Format-List | Out-File build\installer\FootballDynasty-Setup.sha256.txt
+
+      - name: Upload Windows release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: FootballDynasty-windows-rc3
+          path: |
+            build/windows/FootballDynasty.exe
+            build/windows/FootballDynasty.exe.sha256.txt
+            build/windows/runtime.log
+            build/installer/FootballDynasty-Setup-*.exe
+            build/installer/FootballDynasty-Setup.sha256.txt
+          if-no-files-found: error
+          retention-days: 14
