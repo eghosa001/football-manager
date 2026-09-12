@@ -122,7 +122,21 @@ static func action(text: String, accent := CYAN) -> Button:
 	button.add_theme_stylebox_override("hover", hover)
 	return button
 
-static func progress(parent: Control, value: float, accent := GREEN, width := 120.0) -> ProgressBar:
+# Supports both progress(parent, value, accent) and a detached progress(value, accent)
+# for compact composition code. Fractions in the 0..1 range are promoted to %.
+static func progress(parent_or_value: Variant, value_or_accent: Variant = 0.0, accent := GREEN, width := 120.0) -> ProgressBar:
+	var parent: Control = null
+	var value := 0.0
+	var fill_color := accent
+	if parent_or_value is Control:
+		parent = parent_or_value as Control
+		value = float(value_or_accent)
+	else:
+		value = float(parent_or_value)
+		if value_or_accent is Color:
+			fill_color = value_or_accent
+	if value >= 0.0 and value <= 1.0:
+		value *= 100.0
 	var bar := ProgressBar.new()
 	bar.min_value = 0
 	bar.max_value = 100
@@ -130,10 +144,11 @@ static func progress(parent: Control, value: float, accent := GREEN, width := 12
 	bar.show_percentage = false
 	bar.custom_minimum_size = Vector2(width, 8)
 	var bg := StyleBoxFlat.new(); bg.bg_color = Color(0.02,0.025,0.045,1); bg.set_corner_radius_all(4)
-	var fill := StyleBoxFlat.new(); fill.bg_color = accent; fill.set_corner_radius_all(4)
+	var fill := StyleBoxFlat.new(); fill.bg_color = fill_color; fill.set_corner_radius_all(4)
 	bar.add_theme_stylebox_override("background", bg)
 	bar.add_theme_stylebox_override("fill", fill)
-	parent.add_child(bar)
+	if parent != null:
+		parent.add_child(bar)
 	return bar
 
 static func table_header(parent: GridContainer, columns: Array[String]) -> void:
@@ -166,6 +181,10 @@ static func score_color(value: float) -> Color:
 	if value >= 75.0: return GREEN
 	if value >= 55.0: return AMBER
 	return RED
+
+static func stars(value: int) -> String:
+	var count := clampi(int(round(float(value) / 20.0)), 0, 5)
+	return "★".repeat(count) + "☆".repeat(5 - count)
 
 static func money(value: int) -> String:
 	if abs(value) >= 1000000000: return "£%.2fb" % (float(value) / 1000000000.0)
