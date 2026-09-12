@@ -4,17 +4,23 @@ extends RefCounted
 const AbstractMatchEngineClass = preload("res://simulation/match/abstract_match_engine.gd")
 const TacticalMatchEngineClass = preload("res://simulation/match/tactical_match_engine.gd")
 const LeagueTableClass = preload("res://simulation/competitions/league_table.gd")
+const DisciplineServiceClass = preload("res://simulation/competitions/discipline_service.gd")
+const ModernRulesClass = preload("res://simulation/competitions/modern_rules_catalog.gd")
 const CalendarClass = preload("res://core/calendar/calendar_service.gd")
 const LeagueSystemClass = preload("res://application/season/league_system.gd")
 const KnockoutSeasonClass = preload("res://application/season/knockout_season.gd")
 const ContinentalLeaguePhaseClass = preload("res://application/season/continental_league_phase.gd")
 const ContinentalCompetitionsClass = preload("res://application/season/continental_competitions.gd")
+const ClubWorldCupClass = preload("res://application/season/club_world_cup.gd")
 
 var _abstract_match_engine = AbstractMatchEngineClass.new()
 var _tactical_match_engine = TacticalMatchEngineClass.new()
 var _league_system = LeagueSystemClass.new()
 var _knockout = KnockoutSeasonClass.new()
 var _continental_phase = ContinentalLeaguePhaseClass.new()
+var _club_world_cup = ClubWorldCupClass.new()
+var _discipline = DisciplineServiceClass.new()
+var _modern_rules = ModernRulesClass.new()
 
 func play_next_fixture(world: Dictionary, competition_id: String, season_seed: int) -> Dictionary:
 	for fixture in world.fixtures:
@@ -77,6 +83,7 @@ func complete_and_rollover(world: Dictionary, history: Array, season_seed: int, 
 	var current_year: int = int(world.get("season_year", _year_from_date(String(world.get("date", "2026-07-01")))))
 	var next_year := current_year + 1
 	_league_system.rollover(world, next_year)
+	_discipline.reset_season(world,next_year,true)
 	var continental = ContinentalCompetitionsClass.new()
 	continental.prepare(world, records)
 	continental.initialize_formats(world,next_year,true)
@@ -88,10 +95,12 @@ func build_season_record(world: Dictionary, competition_id: String) -> Dictionar
 	var competition_type := String(competition.get("competition_type", "league"))
 	if competition_type == "knockout": return _knockout.record(world, competition)
 	if competition_type == "continental_league_phase": return _continental_phase.record(world,competition)
+	if competition_type == "club_world_cup": return _club_world_cup.record(world,competition)
 	var fixtures: Array = []
 	for fixture in world.fixtures:
 		if String(fixture.get("competition_id", "")) == competition_id: fixtures.append(fixture)
-	var table: Array = LeagueTableClass.build(competition.club_ids, fixtures, int(competition.get("points_win",3)), int(competition.get("points_draw",1)))
+	var tie_breakers: Array = competition.get("tie_breakers",["points","goal_difference","goals_scored","wins","head_to_head_points"])
+	var table: Array = LeagueTableClass.build(competition.club_ids, fixtures, int(competition.get("points_win",3)), int(competition.get("points_draw",1)),tie_breakers)
 	var complete := true
 	for fixture in fixtures:
 		if not bool(fixture.get("played", false)): complete = false; break
@@ -102,16 +111,22 @@ func _play_fixture(world: Dictionary, fixture: Dictionary, season_seed: int, pla
 	var match_seed: int = _fixture_seed(season_seed, fixture)
 	var home_club: Dictionary = _find_club(world.clubs, String(fixture.home_club_id)); var away_club: Dictionary = _find_club(world.clubs, String(fixture.away_club_id))
 	var engine = _tactical_match_engine if home_club.has("tactic") or away_club.has("tactic") else _abstract_match_engine
-	var match_players: Array = world.players
-	if not player_index.is_empty():
-		match_players = []
-		match_players.append_array(player_index.get(String(home_club.id), [])); match_players.append_array(player_index.get(String(away_club.id), []))
 	var competition := _find_competition(world.competitions,String(fixture.get("competition_id","")))
+	var competition_id := String(competition.get("id",""))
+	var home_suspended := _suspended_ids(world,competition_id,String(home_club.id),player_index)
+	var away_suspended := _suspended_ids(world,competition_id,String(away_club.id),player_index)
+	var match_players := _eligible_match_players(world,competition_id,String(home_club.id),String(away_club.id),player_index)
+	if _count_club_players(match_players,String(home_club.id)) < 11 or _count_club_players(match_players,String(away_club.id)) < 11:
+		fixture["emergency_selection"] = true
+		match_players = _emergency_match_players(world,String(home_club.id),String(away_club.id),player_index)
 	var context := {"importance":_importance(competition,fixture),"stage":String(fixture.get("stage","")),"knockout":bool(fixture.get("knockout",false)) or bool(fixture.get("continental_knockout",false))}
 	var result: Dictionary = engine.simulate_match(home_club, away_club, match_players, match_seed, context)
 	engine.apply_to_fixture(fixture, result)
 	fixture["match_seed"] = match_seed
 	fixture["regulation_result"] = {"home_goals":int(result.get("home_goals",0)),"away_goals":int(result.get("away_goals",0))}
+	_discipline.serve_fixture(world,competition_id,home_suspended,String(fixture.get("id","")))
+	_discipline.serve_fixture(world,competition_id,away_suspended,String(fixture.get("id","")))
+	_discipline.apply_match(world,competition_id,String(fixture.get("id","")),result.get("events",[]),_modern_rules.modern_rules_for(competition))
 	return {"fixture":fixture,"result":result,"match_seed":match_seed}
 
 func _advance_competition(world: Dictionary, competition_id: String, date_string: String) -> void:
@@ -119,6 +134,42 @@ func _advance_competition(world: Dictionary, competition_id: String, date_string
 	match String(competition.get("competition_type","league")):
 		"knockout": _knockout.advance_ready(world,competition_id,date_string)
 		"continental_league_phase": _continental_phase.advance_ready(world,competition_id,date_string)
+		"club_world_cup": _club_world_cup.advance_ready(world,competition_id,date_string)
+
+func _eligible_match_players(world: Dictionary, competition_id: String, home_id: String, away_id: String, player_index: Dictionary) -> Array:
+	var source: Array = world.get("players",[])
+	if not player_index.is_empty():
+		source=[]; source.append_array(player_index.get(home_id,[])); source.append_array(player_index.get(away_id,[]))
+	var result: Array=[]
+	for player in source:
+		var club_id := String(player.get("club_id",""))
+		if club_id not in [home_id,away_id]: continue
+		if bool(player.get("retired",false)) or int(player.get("injured_days",0)) > 0: continue
+		if _discipline.is_suspended(world,competition_id,String(player.get("id",""))): continue
+		result.append(player)
+	return result
+
+func _emergency_match_players(world: Dictionary, home_id: String, away_id: String, player_index: Dictionary) -> Array:
+	var source: Array = world.get("players",[])
+	if not player_index.is_empty():
+		source=[]; source.append_array(player_index.get(home_id,[])); source.append_array(player_index.get(away_id,[]))
+	var result: Array=[]
+	for player in source:
+		if String(player.get("club_id","")) in [home_id,away_id] and not bool(player.get("retired",false)): result.append(player)
+	return result
+
+func _suspended_ids(world: Dictionary, competition_id: String, club_id: String, player_index: Dictionary) -> Array:
+	var source: Array = player_index.get(club_id,[]) if not player_index.is_empty() else world.get("players",[])
+	var ids: Array=[]
+	for player in source:
+		if String(player.get("club_id","")) == club_id and _discipline.is_suspended(world,competition_id,String(player.get("id",""))): ids.append(String(player.get("id","")))
+	return ids
+
+func _count_club_players(players: Array, club_id: String) -> int:
+	var count:=0
+	for player in players:
+		if String(player.get("club_id","")) == club_id: count += 1
+	return count
 
 func _importance(competition: Dictionary, fixture: Dictionary) -> float:
 	var stage := String(fixture.get("stage",""))
