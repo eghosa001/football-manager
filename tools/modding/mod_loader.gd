@@ -2,13 +2,15 @@ class_name ModLoader
 extends RefCounted
 
 const SUPPORTED_API_VERSION := 3
-const ALLOWED_ROOT_KEYS := ["clubs", "players", "staff", "countries", "competitions"]
+const ALLOWED_ROOT_KEYS := ["clubs", "players", "staff", "countries", "competitions", "stadiums", "name_pools"]
 const ALLOWED_PATCH_KEYS := {
 	"clubs": ["name", "reputation", "ticket_price", "training_facilities", "stadium_capacity", "tier", "country_id", "facilities", "board", "supporters", "kit", "logo"],
 	"players": ["first_name", "last_name", "current_ability", "potential", "position", "country_id", "club_id", "preferred_foot", "weak_foot", "height_cm", "weight_kg", "traits", "position_familiarity", "attributes", "hidden_attributes"],
 	"staff": ["name", "role", "club_id", "ability", "reputation", "staff_attributes", "manager_profile"],
-	"countries": ["name", "code", "youth_rating"],
-	"competitions": ["name", "country_id", "competition_type", "club_ids", "points_win", "points_draw", "tier", "promotion_places", "relegation_places", "registration_rules", "rules"],
+	"countries": ["name", "code", "youth_rating", "football_popularity", "youth_infrastructure", "population", "language"],
+	"competitions": ["name", "country_id", "competition_type", "club_ids", "points_win", "points_draw", "tier", "promotion_places", "relegation_places", "registration_rules", "rules", "reputation", "continental", "continental_tier"],
+	"stadiums": ["name", "club_id", "capacity", "seated_capacity", "corporate_capacity", "pitch_quality", "condition", "location", "ownership", "annual_rent", "expansion_capacity"],
+	"name_pools": ["country_id", "first_names", "last_names"],
 }
 const GRAPHIC_KEYS := ["logo", "kit_home", "kit_away", "kit_third", "background"]
 const NamePoolServiceClass = preload("res://application/career/name_pool_service.gd")
@@ -131,45 +133,57 @@ func _normalize_addition(collection: String, row: Dictionary) -> Dictionary:
 	for key in value.keys():
 		if String(key)!="id": value[key]=_sanitize_value(collection,String(key),value[key])
 	match collection:
-		"countries": value["youth_rating"]=int(value.get("youth_rating",50))
-		"clubs": value.merge({"reputation":50,"tier":1,"ticket_price":20,"stadium_capacity":10000},false)
-		"players": value.merge({"current_ability":50,"potential":60,"preferred_foot":"right","weak_foot":50,"height_cm":180,"weight_kg":75,"traits":[],"attributes":{},"hidden_attributes":{}},false)
-		"staff": value.merge({"ability":50,"reputation":25,"staff_attributes":{}},false)
-		"competitions": value.merge({"competition_type":"league","club_ids":[],"points_win":3,"points_draw":1,"tier":1,"promotion_places":0,"relegation_places":0,"registration_rules":{},"rules":{}},false)
+		"countries": value["youth_rating"] = int(value.get("youth_rating", 50))
+		"clubs": value.merge({"reputation": 50, "tier": 1, "ticket_price": 20, "stadium_capacity": 10000}, false)
+		"players": value.merge({"current_ability": 50, "potential": 60, "preferred_foot": "right", "weak_foot": 50, "height_cm": 180, "weight_kg": 75, "traits": [], "attributes": {}, "hidden_attributes": {}}, false)
+		"staff": value.merge({"ability": 50, "reputation": 25, "staff_attributes": {}}, false)
+		"competitions": value.merge({"competition_type": "league", "club_ids": [], "points_win": 3, "points_draw": 1, "tier": 1, "promotion_places": 0, "relegation_places": 0, "registration_rules": {}, "rules": {}}, false)
+		"stadiums": value.merge({"capacity": 10000, "condition": 80, "pitch_quality": 75, "ownership": "owned", "annual_rent": 0}, false)
+		"name_pools": value.merge({"first_names": [], "last_names": []}, false)
 	return value
 
 func _required_addition_fields(collection: String, row: Dictionary) -> bool:
 	match collection:
-		"countries": return String(row.get("name","")).strip_edges()!="" and String(row.get("code","")).strip_edges()!=""
-		"clubs": return String(row.get("name","")).strip_edges()!="" and String(row.get("country_id","")).strip_edges()!=""
-		"players": return String(row.get("club_id","")).strip_edges()!="" and String(row.get("position","")).strip_edges()!="" and (String(row.get("first_name","")).strip_edges()!="" or String(row.get("last_name","")).strip_edges()!="")
-		"staff": return String(row.get("name","")).strip_edges()!="" and String(row.get("role","")).strip_edges()!=""
-		"competitions": return String(row.get("name","")).strip_edges()!=""
+		"countries": return String(row.get("name", "")).strip_edges() != "" and String(row.get("code", "")).strip_edges() != ""
+		"clubs": return String(row.get("name", "")).strip_edges() != "" and String(row.get("country_id", "")).strip_edges() != ""
+		"players": return String(row.get("club_id", "")).strip_edges() != "" and String(row.get("position", "")).strip_edges() != "" and (String(row.get("first_name", "")).strip_edges() != "" or String(row.get("last_name", "")).strip_edges() != "")
+		"staff": return String(row.get("name", "")).strip_edges() != "" and String(row.get("role", "")).strip_edges() != ""
+		"competitions": return String(row.get("name", "")).strip_edges() != ""
+		"stadiums": return String(row.get("name", "")).strip_edges() != "" and String(row.get("club_id", "")).strip_edges() != ""
+		"name_pools": return String(row.get("country_id", "")).strip_edges() != "" and (row.has("first_names") or row.has("last_names"))
 	return false
 
 func _references_valid(world: Dictionary, collection: String, value: Dictionary) -> bool:
-	if collection=="clubs": return not _find(world.get("countries",[]),String(value.get("country_id",""))).is_empty()
-	if collection=="players": return not _find(world.get("clubs",[]),String(value.get("club_id",""))).is_empty()
-	if collection=="staff" and String(value.get("club_id",""))!="": return not _find(world.get("clubs",[]),String(value.get("club_id",""))).is_empty()
-	if collection=="competitions":
+	if collection == "clubs": return not _find(world.get("countries", []), String(value.get("country_id", ""))).is_empty()
+	if collection == "players": return not _find(world.get("clubs", []), String(value.get("club_id", ""))).is_empty()
+	if collection == "staff" and String(value.get("club_id", "")) != "": return not _find(world.get("clubs", []), String(value.get("club_id", ""))).is_empty()
+	if collection == "stadiums": return not _find(world.get("clubs", []), String(value.get("club_id", ""))).is_empty()
+	if collection == "name_pools": return not _find(world.get("countries", []), String(value.get("country_id", ""))).is_empty()
+	if collection == "competitions":
 		for club_id in value.get("club_ids",[]):
 			if _find(world.get("clubs",[]),String(club_id)).is_empty(): return false
 	return true
 
 func _valid_value(key: String, value) -> bool:
-	if key in ["id","name","first_name","last_name","position","country_id","club_id","preferred_foot","role","code","competition_type","kit","logo"]: return value is String
-	if key in ["traits","club_ids"]:
+	if key in ["id", "name", "first_name", "last_name", "position", "country_id", "club_id", "preferred_foot", "role", "code", "competition_type", "kit", "logo", "location", "ownership", "language", "background"]:
+		return value is String
+	if key in ["traits", "club_ids", "first_names", "last_names"]:
 		if not value is Array: return false
 		for item in value:
 			if not item is String: return false
 		return true
-	if key in ["attributes","hidden_attributes","position_familiarity","staff_attributes"]:
+	if key in ["attributes", "hidden_attributes", "position_familiarity", "staff_attributes"]:
 		if not value is Dictionary: return false
 		for item in value.values():
-			if typeof(item) not in [TYPE_INT,TYPE_FLOAT] or not is_finite(float(item)): return false
+			if typeof(item) not in [TYPE_INT, TYPE_FLOAT] or not is_finite(float(item)): return false
 		return true
-	if key in ["facilities","board","supporters","manager_profile","registration_rules","rules"]: return value is Dictionary
-	return typeof(value) in [TYPE_INT,TYPE_FLOAT] and is_finite(float(value))
+	if key in ["facilities", "board", "supporters", "manager_profile", "registration_rules", "rules"]:
+		return value is Dictionary
+	if key in ["capacity", "seated_capacity", "corporate_capacity", "expansion_capacity", "annual_rent"]:
+		return typeof(value) in [TYPE_INT, TYPE_FLOAT] and int(value) >= 0
+	if key in ["pitch_quality", "condition"]:
+		return typeof(value) in [TYPE_INT, TYPE_FLOAT] and int(value) >= 1 and int(value) <= 100
+	return typeof(value) in [TYPE_INT, TYPE_FLOAT] and is_finite(float(value))
 
 func _sanitize_value(root_key: String, key: String, value):
 	if key in ["reputation","current_ability","potential","youth_rating","weak_foot","ability"]: return clampi(int(value),1,100)

@@ -6,18 +6,67 @@ func ensure_world(world: Dictionary) -> void:
 
 func calculate_season_awards(world: Dictionary, season_year: int, competition_id: String = "") -> Array:
 	ensure_world(world)
-	var stats := _aggregate(world,season_year,competition_id)
+	var stats := _aggregate(world, season_year, competition_id)
 	var awards: Array = []
 	if not stats.is_empty():
-		awards.append(_winner("player_of_the_year",stats,func(row): return _overall_score(row),season_year,competition_id))
-		awards.append(_winner("top_scorer",stats,func(row): return float(row.get("goals",0)),season_year,competition_id))
-		awards.append(_winner("playmaker",stats,func(row): return float(row.get("assists",0))*1.5+float(row.get("key_passes",0))*0.15+float(row.get("xa",0.0)),season_year,competition_id))
-		awards.append(_winner("young_player",stats.filter(func(row): return int(row.get("age",99))<=21),func(row): return _overall_score(row),season_year,competition_id))
-		awards.append(_winner("goalkeeper",stats.filter(func(row): return String(row.get("position",""))=="GK"),func(row): return float(row.get("clean_sheets",0))*2.0+float(row.get("saves",0))*0.12-float(row.get("goals_conceded",0))*0.25+float(row.get("rating_sum",0.0))*0.08,season_year,competition_id))
-	awards=awards.filter(func(row): return not row.is_empty())
+		awards.append(_winner("player_of_the_year", stats, func(row): return _overall_score(row), season_year, competition_id))
+		awards.append(_winner("top_scorer", stats, func(row): return float(row.get("goals", 0)), season_year, competition_id))
+		awards.append(_winner("playmaker", stats, func(row): return float(row.get("assists", 0)) * 1.5 + float(row.get("key_passes", 0)) * 0.15 + float(row.get("xa", 0.0)), season_year, competition_id))
+		awards.append(_winner("young_player", stats.filter(func(row): return int(row.get("age", 99)) <= 21), func(row): return _overall_score(row), season_year, competition_id))
+		awards.append(_winner("goalkeeper", stats.filter(func(row): return String(row.get("position", "")) == "GK"), func(row): return float(row.get("clean_sheets", 0)) * 2.0 + float(row.get("saves", 0)) * 0.12 - float(row.get("goals_conceded", 0)) * 0.25 + float(row.get("rating_sum", 0.0)) * 0.08, season_year, competition_id))
+		awards.append(_winner("defender_of_the_year", stats.filter(func(row): return String(row.get("position", "")) in ["DC", "DR", "DL", "WBR", "WBL", "DM"]), func(row): return float(row.get("clean_sheets", 0)) * 1.6 + float(row.get("rating_sum", 0.0)) * 0.10 + float(row.get("goals", 0)) * 0.8, season_year, competition_id))
+		awards.append(_winner("golden_glove", stats.filter(func(row): return String(row.get("position", "")) == "GK"), func(row): return float(row.get("clean_sheets", 0)) * 3.0 - float(row.get("goals_conceded", 0)) * 0.4, season_year, competition_id))
+		awards.append(_manager_of_the_year(world, season_year, competition_id))
+		var team := _team_of_the_season(stats)
+		if not team.is_empty():
+			awards.append({"type": "team_of_the_season", "season_year": season_year, "competition_id": competition_id, "player_ids": team, "reason_codes": ["season_statistics", "positional_performance"]})
+	awards = awards.filter(func(row): return not row.is_empty())
 	for award in awards:
 		world.awards.append(award)
 	return awards
+
+func _manager_of_the_year(world: Dictionary, season_year: int, competition_id: String) -> Dictionary:
+	var best := ""
+	var best_score := -INF
+	for row in world.get("history_archive", {}).get("clubs", []):
+		if int(row.get("year", 0)) != season_year:
+			continue
+		if competition_id != "" and String(row.get("competition_id", "")) != competition_id:
+			continue
+		var score := 30.0 - float(row.get("position", 20)) + float(row.get("points", 0)) * 0.04
+		if bool(row.get("champion", false)):
+			score += 12.0
+		if score > best_score:
+			best_score = score
+			best = String(row.get("manager_id", ""))
+	if best == "":
+		return {}
+	return {"type": "manager_of_the_year", "season_year": season_year, "competition_id": competition_id, "manager_id": best, "score": best_score, "reason_codes": ["league_finish", "points", "titles"]}
+
+func _team_of_the_season(stats: Array) -> Array:
+	var by_position := {"GK": [], "DEF": [], "MID": [], "FWD": []}
+	for row in stats:
+		if int(row.get("appearances", 0)) < 5:
+			continue
+		var group := _position_group(String(row.get("position", "")))
+		by_position[group].append(row)
+	for group in by_position.keys():
+		by_position[group].sort_custom(func(a: Dictionary, b: Dictionary): return _overall_score(a) > _overall_score(b))
+	var team: Array = []
+	for group in ["GK", "DEF", "MID", "FWD"]:
+		var count := 1 if group == "GK" else (4 if group == "DEF" else (3 if group == "MID" else 3))
+		for row in by_position[group].slice(0, count):
+			team.append(String(row.get("player_id", "")))
+	return team
+
+func _position_group(position: String) -> String:
+	if position == "GK":
+		return "GK"
+	if position in ["DR", "DC", "DL", "WBR", "WBL", "DM"]:
+		return "DEF"
+	if position in ["MC", "MR", "ML", "AMC", "AMR", "AML"]:
+		return "MID"
+	return "FWD"
 
 func _aggregate(world: Dictionary, season_year: int, competition_id: String) -> Array:
 	var rows := {}

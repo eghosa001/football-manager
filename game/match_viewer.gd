@@ -17,6 +17,10 @@ var show_condition_indicators := true
 var interpolated_position := 0.0
 var ball_trail: Array = []
 const MAX_TRAIL := 12
+var commentary_lines: Array = []
+var highlight_mode := "Full"
+var goal_flash := 0.0
+var last_goal_frame := -1
 
 func _ready() -> void:
 	set_process(true)
@@ -66,6 +70,24 @@ func set_overlays(pressing: bool, marking: bool, conditions: bool) -> void:
 	show_condition_indicators = conditions
 	queue_redraw()
 
+func set_commentary(lines: Array) -> void:
+	commentary_lines = lines.duplicate(true)
+	queue_redraw()
+
+func set_highlight_mode(mode: String) -> void:
+	highlight_mode = mode
+	queue_redraw()
+
+func commentary_at_frame(index: int) -> String:
+	if commentary_lines.is_empty():
+		return ""
+	return String(commentary_lines[clampi(index, 0, commentary_lines.size() - 1)])
+
+func trigger_goal_flash() -> void:
+	goal_flash = 1.0
+	last_goal_frame = frame_index
+	queue_redraw()
+
 func timeline_size() -> int:
 	return _frames().size()
 
@@ -92,7 +114,11 @@ func seek_minute(minute: int) -> void:
 	set_frame(best_index)
 
 func _process(delta: float) -> void:
-	if not playing: return
+	if goal_flash > 0.0:
+		goal_flash = maxf(0.0, goal_flash - delta * 1.4)
+		queue_redraw()
+	if not playing:
+		return
 	var frames := _frames()
 	if frames.is_empty():
 		playing = false
@@ -146,6 +172,14 @@ func _draw() -> void:
 		var ball_point := _to_screen(frame.ball, pitch)
 		draw_circle(ball_point, 4.0, Color.WHITE)
 		draw_circle(ball_point, 4.0, Color.BLACK, false, 1.0)
+	if goal_flash > 0.0:
+		var alpha := clampf(goal_flash, 0.0, 1.0)
+		draw_rect(Rect2(Vector2.ZERO, size), Color(1.0, 0.85, 0.2, alpha * 0.28), true)
+		draw_string(ThemeDB.fallback_font, Vector2(16, 28), "GOAL!", HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color(1.0, 0.9, 0.3, alpha))
+	if not commentary_lines.is_empty():
+		var line := commentary_at_frame(frame_index)
+		if line != "":
+			draw_string(ThemeDB.fallback_font, Vector2(16, size.y - 14), line.left(90), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.9))
 
 func _draw_penalty_boxes(pitch: Rect2) -> void:
 	var box_width := pitch.size.x * (16.5 / 105.0)

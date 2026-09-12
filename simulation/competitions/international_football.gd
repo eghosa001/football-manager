@@ -33,12 +33,20 @@ func commit_nationality(player: Dictionary, country_id: String) -> bool:
 	return true
 
 func select_squad(world: Dictionary, country_id: String, size: int = 23) -> Array:
+	return select_age_squad(world, country_id, size, 99)
+
+func select_age_squad(world: Dictionary, country_id: String, size: int, max_age: int) -> Array:
 	ensure_world(world)
 	var eligible: Array = []
 	for player in world.get("players", []):
-		if bool(player.get("retired", false)) or int(player.get("injured_days",0)) > 0: continue
-		if bool(player.get("international_committed",false)) and String(player.get("international_country_id","")) != country_id: continue
-		if country_id in eligible_countries(player): eligible.append(player)
+		if bool(player.get("retired", false)) or int(player.get("injured_days", 0)) > 0:
+			continue
+		if int(player.get("age", 25)) > max_age:
+			continue
+		if bool(player.get("international_committed", false)) and String(player.get("international_country_id", "")) != country_id:
+			continue
+		if country_id in eligible_countries(player):
+			eligible.append(player)
 	eligible.sort_custom(func(a: Dictionary, b: Dictionary):
 		var af := _selection_score(a); var bf := _selection_score(b)
 		if is_equal_approx(af,bf): return String(a.id) < String(b.id)
@@ -57,15 +65,49 @@ func select_squad(world: Dictionary, country_id: String, size: int = 23) -> Arra
 	return selected
 
 func register_callups(world: Dictionary, country_id: String, competition_id: String, size: int = 23, start_date: String = "", end_date: String = "") -> Dictionary:
+	return register_age_callups(world, country_id, competition_id, size, 99, start_date, end_date)
+
+func register_age_callups(world: Dictionary, country_id: String, competition_id: String, size: int, max_age: int, start_date: String = "", end_date: String = "") -> Dictionary:
 	ensure_world(world)
-	var record := {"country_id":country_id,"competition_id":competition_id,"player_ids":select_squad(world,country_id,size),"season_year":int(world.get("season_year",2026)),"start_date":start_date,"end_date":end_date}
+	var record := {"country_id": country_id, "competition_id": competition_id, "player_ids": select_age_squad(world, country_id, size, max_age), "season_year": int(world.get("season_year", 2026)), "start_date": start_date, "end_date": end_date, "max_age": max_age, "level": _level_for_age(max_age)}
 	world.international_callups.append(record)
 	for id in record.player_ids:
-		var player := _player(world.get("players",[]),String(id))
+		var player := _player(world.get("players", []), String(id))
 		if not player.is_empty():
 			player["on_international_duty"] = true
 			player["international_release_until"] = end_date
+			player["international_level"] = String(record.level)
 	return record
+
+func youth_pathway(world: Dictionary, country_id: String, season_year: int) -> Dictionary:
+	# U23 -> U20 -> U17 pathway feeds the senior team. Youngsters gain caps,
+	# development momentum and commitment without blocking senior selection.
+	ensure_world(world)
+	var u23 := register_age_callups(world, country_id, "youth-u23-%d" % season_year, 20, 23)
+	var u20 := register_age_callups(world, country_id, "youth-u20-%d" % season_year, 20, 20)
+	var u17 := register_age_callups(world, country_id, "youth-u17-%d" % season_year, 18, 17)
+	for player_id in u23.player_ids + u20.player_ids + u17.player_ids:
+		var player := _player(world.get("players", []), String(player_id))
+		if player.is_empty():
+			continue
+		player["youth_caps"] = int(player.get("youth_caps", 0)) + 1
+		player["development_trajectory"] = _boost_trajectory(player)
+	return {"u23": u23.player_ids.size(), "u20": u20.player_ids.size(), "u17": u17.player_ids.size()}
+
+func _level_for_age(max_age: int) -> String:
+	if max_age <= 17:
+		return "U17"
+	if max_age <= 20:
+		return "U20"
+	if max_age <= 23:
+		return "U23"
+	return "senior"
+
+func _boost_trajectory(player: Dictionary) -> Variant:
+	var current = player.get("development_trajectory", 0.5)
+	if current is String:
+		return "normal" if String(current) == "late" else current
+	return clampf(float(current) + 0.05, 0.0, 1.0)
 
 func release_callups(world: Dictionary, country_id: String, competition_id: String) -> void:
 	for record in world.get("international_callups",[]):

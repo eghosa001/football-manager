@@ -81,10 +81,12 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 		else:
 			result = _aggregate.simulate_match(home, away, [], match_seed)
 			_aggregate.apply_to_fixture(fixture, result)
-		if not result.has("error"):
-			_stats.record_match(world, fixture, result)
-			_apply_dressing_room_result(world, home, away, result)
-			_update_club_form(world, home, away, result)
+	if not result.has("error"):
+		_stats.record_match(world, fixture, result)
+		_apply_dressing_room_result(world, home, away, result)
+		_apply_match_load(world, result)
+		_apply_suspensions(world, fixture, result, date_string)
+		_update_club_form(world, home, away, result)
 			if tier != SimulationTierPolicyClass.INACTIVE_WORLD:
 				result["injuries"] = _apply_match_injuries(world, fixture, result, tier, match_seed, managed_club_id)
 			_emit_match_events(world, fixture, result, tier, detailed_model, date_string)
@@ -170,14 +172,36 @@ func _eligible_match_players(world: Dictionary, home_id: String, away_id: String
 			home_registered = _registration.registered_players(world, home_id, competition_id, season_year)
 			away_registered = _registration.registered_players(world, away_id, competition_id, season_year)
 	var combined: Array = []
-	combined.append_array(home_registered)
-	combined.append_array(away_registered)
+	combined.append_array(_available(home_registered, world))
+	combined.append_array(_available(away_registered, world))
 	return combined
+
+func _available(players: Array, world: Dictionary) -> Array:
+	var result: Array = []
+	var bans := _suspension_map(world)
+	for player in players:
+		if bool(player.get("retired", false)):
+			continue
+		if int(player.get("injured_days", 0)) > 0:
+			continue
+		if int(bans.get(String(player.get("id", "")), 0)) > int(world.get("day_index", 0)):
+			continue
+		result.append(player)
+	return result
+
+func _suspension_map(world: Dictionary) -> Dictionary:
+	var bans := {}
+	for row in world.get("suspensions", []):
+		bans[String(row.get("player_id", ""))] = int(row.get("until_day", 0))
+	for row in world.get("discipline_bans", []):
+		bans[String(row.get("player_id", ""))] = maxi(int(bans.get(String(row.get("player_id", ""))), 0), int(row.get("until_day", row.get("matches", 1)) * 7 + int(world.get("day_index", 0))))
+	return bans
 
 func _apply_dressing_room_result(world: Dictionary, home: Dictionary, away: Dictionary, result: Dictionary) -> void:
 	var room = DressingRoomClass.new()
 	var hg := int(result.get("home_goals", 0))
 	var ag := int(result.get("away_goals", 0))
+	var derby := bool(result.get("match_context", {}).get("derby", false))
 	if hg - ag >= 3:
 		room.apply_event(world, String(home.id), "big_win")
 	elif ag - hg >= 3:
@@ -186,6 +210,45 @@ func _apply_dressing_room_result(world: Dictionary, home: Dictionary, away: Dict
 		room.apply_event(world, String(away.id), "big_win")
 	elif hg - ag >= 3:
 		room.apply_event(world, String(away.id), "heavy_loss")
+	if derby:
+		if hg > ag:
+			room.apply_event(world, String(home.id), "derby_win")
+			room.apply_event(world, String(away.id), "derby_loss")
+		elif ag > hg:
+			room.apply_event(world, String(away.id), "derby_win")
+			room.apply_event(world, String(home.id), "derby_loss")
+
+func _apply_match_load(world: Dictionary, result: Dictionary) -> void:
+	var participants: Dictionary = result.get("participants", result.get("lineups", {}))
+	for side in ["home", "away"]:
+		for player_id in participants.get(side, []):
+			var player := _player(world, String(player_id))
+			if player.is_empty():
+				continue
+			var minutes := 90 if String(player_id) in result.get("final_lineups", {}).get(side, []) else 25
+			player["fatigue"] = clampi(int(player.get("fatigue", 0)) + int(minutes / 12), 0, 100)
+			player["fitness"] = clampi(int(player.get("fitness", 100)) - int(minutes / 30), 25, 100)
+			player["season_appearances"] = int(player.get("season_appearances", 0)) + 1
+			player["career_appearances"] = int(player.get("career_appearances", 0)) + 1
+
+func _apply_suspensions(world: Dictionary, fixture: Dictionary, result: Dictionary, date_string: String) -> void:
+	world["suspensions"] = world.get("suspensions", [])
+	var day := int(world.get("day_index", 0))
+	for event in result.get("events", []):
+		if String(event.get("type", "")) != "card":
+			continue
+		var player_id := String(event.get("player_id", ""))
+		if String(event.get("card", "")) == "red":
+			world.suspensions.append({"player_id": player_id, "from": date_string, "until_day": day + 7, "reason": "red_card", "competition_id": String(fixture.get("competition_id", ""))})
+		elif String(event.get("card", "")) == "yellow":
+			var count := 0
+			for row in world.get("suspensions", []):
+				if String(row.get("player_id", "")) == player_id and String(row.get("reason", "")) == "yellow_count":
+					count += 1
+			if count >= 4:
+				world.suspensions.append({"player_id": player_id, "from": date_string, "until_day": day + 7, "reason": "accumulation", "competition_id": String(fixture.get("competition_id", ""))})
+			else:
+				world.suspensions.append({"player_id": player_id, "from": date_string, "until_day": day, "reason": "yellow_count", "competition_id": String(fixture.get("competition_id", ""))})
 
 func _add_match_message(world: Dictionary, home: Dictionary, away: Dictionary, result: Dictionary, managed_club_id: String) -> void:
 	var managed_home := String(home.id) == managed_club_id
@@ -206,14 +269,58 @@ func _match_context(world: Dictionary, fixture: Dictionary, home: Dictionary, aw
 	if bool(fixture.get("knockout", false)):
 		var round_number := int(fixture.get("round", 1))
 		stage = "knockout_r%d" % round_number
+	var derby := _is_derby(world, home, away)
+	var travel := _travel_fatigue(world, home, away)
 	return {
 		"is_home": true,
 		"importance": float(importance.get("importance", 0.5)),
 		"competition_label": String(importance.get("label", "league")),
 		"stage": stage,
-		"derby": String(home.get("country_id", "")) != "" and String(home.get("country_id", "")) == String(away.get("country_id", "")),
+		"derby": derby,
+		"rivalry": derby,
+		"travel_fatigue": float(travel.get("away_fatigue", 0.0)),
+		"travel_km": float(travel.get("distance_km", 0.0)),
 		"competition_id": String(fixture.get("competition_id", "")),
 	}
+
+func _is_derby(world: Dictionary, home: Dictionary, away: Dictionary) -> bool:
+	if String(home.get("country_id", "")) != "" and String(home.get("country_id", "")) != String(away.get("country_id", "")):
+		return false
+	if String(home.get("city_id", "")) != "" and String(home.get("city_id", "")) == String(away.get("city_id", "")):
+		return true
+	for rivalry in world.get("rivalries", []):
+		var a := String(rivalry.get("club_a", ""))
+		var b := String(rivalry.get("club_b", ""))
+		if (a == String(home.get("id", "")) and b == String(away.get("id", ""))) or (a == String(away.get("id", "")) and b == String(home.get("id", ""))):
+			if int(rivalry.get("intensity", 0)) >= 25:
+				return true
+	return String(home.get("country_id", "")) != "" and String(home.get("country_id", "")) == String(away.get("country_id", "")) and abs(int(home.get("reputation", 50)) - int(away.get("reputation", 50))) <= 12
+
+func _travel_fatigue(world: Dictionary, home: Dictionary, away: Dictionary) -> Dictionary:
+	var home_city := String(home.get("city_id", ""))
+	var away_city := String(away.get("city_id", ""))
+	if home_city == "" or away_city == "" or home_city == away_city:
+		return {"away_fatigue": 0.0, "distance_km": 0.0}
+	var home_coords := _city_coords(world, home_city)
+	var away_coords := _city_coords(world, away_city)
+	if home_coords.is_empty() or away_coords.is_empty():
+		return {"away_fatigue": 0.0, "distance_km": 0.0}
+	var km := _haversine(home_coords, away_coords)
+	return {"away_fatigue": clampf(km / 4000.0, 0.0, 0.38), "distance_km": km}
+
+func _city_coords(world: Dictionary, city_id: String) -> Dictionary:
+	for city in world.get("cities", []):
+		if String(city.get("id", "")) == city_id:
+			return {"lat": float(city.get("latitude", city.get("lat", 0.0))), "lon": float(city.get("longitude", city.get("lon", 0.0)))}
+	return {}
+
+func _haversine(a: Dictionary, b: Dictionary) -> float:
+	var lat1 := deg_to_rad(float(a.get("lat", 0.0)))
+	var lat2 := deg_to_rad(float(b.get("lat", 0.0)))
+	var dlat := deg_to_rad(float(b.get("lat", 0.0)) - float(a.get("lat", 0.0)))
+	var dlon := deg_to_rad(float(b.get("lon", 0.0)) - float(a.get("lon", 0.0)))
+	var h := sin(dlat / 2.0) * sin(dlat / 2.0) + cos(lat1) * cos(lat2) * sin(dlon / 2.0) * sin(dlon / 2.0)
+	return 6371.0 * 2.0 * atan2(sqrt(h), sqrt(maxf(0.0, 1.0 - h)))
 
 func _update_club_form(world: Dictionary, home: Dictionary, away: Dictionary, result: Dictionary) -> void:
 	var hg := int(result.get("home_goals", 0))

@@ -35,7 +35,27 @@ func _scan_node(node: Node) -> void:
 	for child in node.get_children():
 		_scan_node(child)
 
-func _apply_accessibility(control: Control) -> void:
+func _apply_accessibility(node: Node) -> void:
+	if node is AnimatedSprite2D:
+		var settings_anim := _accessibility_settings()
+		if bool(settings_anim.get("reduced_motion", false)):
+			(node as AnimatedSprite2D).speed_scale = 0.5
+		return
+	if not (node is Control):
+		return
+	var control := node as Control
+	var settings := _accessibility_settings()
+	var ui_scale := float(settings.get("ui_scale", 1.0))
+	if ui_scale != 1.0:
+		control.scale = Vector2(ui_scale, ui_scale)
+	if bool(settings.get("large_text", false)) and control is Label:
+		(control as Label).add_theme_font_size_override("font_size", 20)
+	if bool(settings.get("high_contrast", false)):
+		control.add_theme_color_override("font_color", Color(1, 1, 1))
+		if control is Panel or control is Button:
+			control.add_theme_stylebox_override("normal", _high_contrast_style())
+	if bool(settings.get("screen_reader_labels", false)) and control.tooltip_text.is_empty():
+		control.tooltip_text = _screen_reader_label(control)
 	if control is BaseButton:
 		control.focus_mode = Control.FOCUS_ALL
 		if control.tooltip_text.is_empty() and not String(control.text).is_empty():
@@ -46,6 +66,28 @@ func _apply_accessibility(control: Control) -> void:
 			control.tooltip_text = control.placeholder_text
 	elif control is OptionButton or control is Range:
 		control.focus_mode = Control.FOCUS_ALL
+
+func _accessibility_settings() -> Dictionary:
+	var session = get_tree().root.get_meta("career_session", null) if get_tree().root.has_meta("career_session") else null
+	if session != null and session is Dictionary and session.has("settings"):
+		return session.settings
+	if get_tree().root.has_meta("accessibility_settings"):
+		return get_tree().root.get_meta("accessibility_settings")
+	return {"ui_scale": 1.0, "high_contrast": false, "large_text": false, "reduced_motion": false, "screen_reader_labels": true}
+
+func _high_contrast_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 1)
+	style.border_color = Color(1, 1, 0, 1)
+	style.set_border_width_all(2)
+	return style
+
+func _screen_reader_label(control: Control) -> String:
+	if control is BaseButton and not String((control as BaseButton).text).is_empty():
+		return String((control as BaseButton).text)
+	if control is Label and not String((control as Label).text).is_empty():
+		return String((control as Label).text)
+	return String(control.name).capitalize()
 
 func _complete_history_tab(tabs: TabContainer) -> void:
 	if tabs.has_meta("completion_history"):

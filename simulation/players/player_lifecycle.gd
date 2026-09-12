@@ -123,22 +123,54 @@ func _apply_development(player: Dictionary, world: Dictionary, seed: int) -> Dic
 
 func _apply_attribute_development(player: Dictionary, ability_delta: int, age: int, seed: int, key: int) -> void:
 	var attrs: Dictionary = player.attributes
+	var position := String(player.get("position", "MC"))
+	var is_keeper := position == "GK"
 	for name in attrs.keys():
 		var delta := ability_delta
+		var peak := _attribute_peak(String(name), is_keeper)
+		var age_curve := _age_curve_factor(age, peak)
 		if ability_delta < 0:
+			# Decline hits physical earliest, technical middle, mental slowest.
+			# Keepers peak and decline later.
 			if String(name) in PHYSICAL_ATTRIBUTES:
-				delta = mini(-1, ability_delta - (1 if age >= 33 else 0))
+				var extra := -1 if age >= peak + 4 else 0
+				delta = mini(-1, ability_delta + extra - (1 if age >= 33 and not is_keeper else 0))
 			elif String(name) in MENTAL_ATTRIBUTES:
-				delta = mini(0, int(round(float(ability_delta) * 0.35)))
+				delta = mini(0, int(round(float(ability_delta) * 0.35 * age_curve)))
 			else:
-				delta = mini(0, int(round(float(ability_delta) * 0.6)))
+				delta = mini(0, int(round(float(ability_delta) * 0.6 * age_curve)))
 		elif ability_delta > 0:
 			var focus := String(player.get("training_focus", "balanced"))
 			if _focus_matches(focus, String(name)):
 				delta += 1
 			elif _rand_int(seed, key + _stable_key(String(name)), 0, 3) == 0:
 				delta = maxi(0, delta - 1)
+			# Growth slows past the attribute-specific peak.
+			if age > peak:
+				delta = maxi(0, delta - (1 if age > peak + 2 else 0))
 		attrs[name] = clampi(int(attrs[name]) + clampi(delta, -6, 5), 1, 100)
+
+func _attribute_peak(attribute_name: String, is_keeper: bool) -> int:
+	if is_keeper:
+		return 31
+	if attribute_name in ["acceleration", "pace", "agility"]:
+		return 25
+	if attribute_name in ["stamina", "strength", "jumping", "balance", "natural_fitness"]:
+		return 27
+	if attribute_name in ["finishing", "dribbling", "first_touch", "technique", "heading", "long_shots", "crossing", "passing"]:
+		return 28
+	if attribute_name in ["anticipation", "decisions", "positioning", "composure", "concentration", "vision", "teamwork", "leadership"]:
+		return 31
+	return 29
+
+func _age_curve_factor(age: int, peak: int) -> float:
+	if age <= peak - 4:
+		return 1.0
+	if age <= peak:
+		return 0.85
+	if age <= peak + 3:
+		return 0.6
+	return 0.35
 
 func _focus_matches(focus: String, attribute_name: String) -> bool:
 	match focus:

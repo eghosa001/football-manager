@@ -67,16 +67,56 @@ func update_supporters(world: Dictionary, club_id: String, season: Dictionary) -
 	return weighted/maxf(0.01,total_size)
 
 func change_owner(world: Dictionary, club: Dictionary, new_owner_id: String, vision: Dictionary, investment: int = 0) -> Dictionary:
-	var board:=ensure_club(world,club)
-	var old_owner:=String(board.get("owner_id",""))
-	board.owner_id=new_owner_id
-	for key in ["results","youth","finance","style"]:
-		if vision.has(key): board.vision[key]=clampf(float(vision[key]),0.0,1.0)
-	club.cash=int(club.get("cash",0))+maxi(0,investment)
-	var event:={"club_id":String(club.get("id","")),"old_owner_id":old_owner,"new_owner_id":new_owner_id,"investment":maxi(0,investment),"season_year":int(world.get("season_year",2026))}
+	var board := ensure_club(world, club)
+	var old_owner := String(board.get("owner_id", ""))
+	board.owner_id = new_owner_id
+	for key in ["results", "youth", "finance", "style"]:
+		if vision.has(key):
+			board.vision[key] = clampf(float(vision[key]), 0.0, 1.0)
+	club.cash = int(club.get("cash", 0)) + maxi(0, investment)
+	var event := {"club_id": String(club.get("id", "")), "old_owner_id": old_owner, "new_owner_id": new_owner_id, "investment": maxi(0, investment), "season_year": int(world.get("season_year", 2026))}
 	world.ownership_history.append(event)
-	board.history.append({"type":"ownership_change","event":event.duplicate(true)})
+	board.history.append({"type": "ownership_change", "event": event.duplicate(true)})
 	return event
+
+func run_takeovers(world: Dictionary, year: int, seed: int) -> Array:
+	ensure_world(world)
+	var changed: Array = []
+	for club in world.get("clubs", []):
+		var club_id := String(club.get("id", ""))
+		var board := ensure_club(world, club)
+		var insolvent := bool(club.get("insolvent", false)) or String(club.get("financial_status", "secure")) == "insecure"
+		var roll := _roll(seed, club_id + str(year))
+		var takeover := false
+		var investment := 0
+		var vision := {}
+		if insolvent and roll < 0.55:
+			# Distressed sale: frugal investor clears some debt, demands finance-first.
+			investment = 1_500_000 + int(roll * 4_000_000)
+			vision = {"results": 0.55, "youth": 0.45, "finance": 0.9, "style": 0.35}
+			takeover = true
+		elif int(club.get("reputation", 50)) >= 72 and roll < 0.06:
+			# Consortium takeover of a big club: big money, results-first.
+			investment = 12_000_000 + int(roll * 60_000_000)
+			vision = {"results": 0.9, "youth": 0.35, "finance": 0.45, "style": 0.55}
+			takeover = true
+		elif int(club.get("reputation", 50)) <= 40 and roll < 0.04:
+			# Community takeover of a small club: youth + identity focus.
+			investment = 400_000 + int(roll * 1_200_000)
+			vision = {"results": 0.5, "youth": 0.85, "finance": 0.6, "style": 0.45}
+			takeover = true
+		if takeover:
+			var event := change_owner(world, club, "owner-%s-%d" % [club_id, year], vision, investment)
+			club["insolvent"] = false
+			club.erase("bankrupt")
+			changed.append(event)
+	return changed
+
+func _roll(seed: int, key: String) -> float:
+	var value := seed
+	for c in String(key).to_utf8_buffer():
+		value = posmod(value * 131 + int(c), 2_147_483_647)
+	return float(posmod(value, 1000)) / 1000.0
 
 func _has_supporters(groups:Array,club_id:String)->bool:
 	for group in groups:

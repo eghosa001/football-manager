@@ -19,6 +19,7 @@ func hold_press_conference(world: Dictionary, club_id: String, kind: String, ans
 	var club: Dictionary = _club(world.get("clubs", []), club_id)
 	if club.is_empty():
 		return {"error": ERR_DOES_NOT_EXIST}
+	_ensure_journalists(world, seed)
 	var questions: Array = PRE_MATCH_QUESTIONS.duplicate() if kind == "pre_match" else POST_MATCH_QUESTIONS.duplicate()
 	var context := _press_context(world, club_id, kind)
 	var outcomes: Array = []
@@ -26,20 +27,66 @@ func hold_press_conference(world: Dictionary, club_id: String, kind: String, ans
 	var pressure_shift := 0
 	for i in range(questions.size()):
 		var question := String(questions[i])
+		var journalist := _journalist_for(world, seed + i * 701)
 		var tone := String(answers.get(question, "respectful"))
 		if tone not in ANSWER_TONES:
 			tone = "respectful"
-		var outcome := _answer_outcome(world, club, question, tone, context, seed + i * 101)
+		var outcome := _answer_outcome(world, club, question, tone, context, journalist, seed + i * 101)
 		outcomes.append(outcome)
 		morale_shift += int(outcome.get("morale_shift", 0))
 		pressure_shift += int(outcome.get("pressure_shift", 0))
+	_update_journalist_relationships(world, club_id, outcomes)
 	_apply_squad_effects(world, club_id, morale_shift, pressure_shift)
 	_apply_board_effect(world, club, outcomes, seed)
 	_inbox(world, club, kind, outcomes)
 	return {"club_id": club_id, "kind": kind, "questions": outcomes, "morale_shift": morale_shift, "pressure_shift": pressure_shift}
 
-func _answer_outcome(world: Dictionary, club: Dictionary, question: String, tone: String, context: Dictionary, seed: int) -> Dictionary:
+func journalists(world: Dictionary) -> Array:
+	return world.get("journalists", [])
+
+func _ensure_journalists(world: Dictionary, seed: int) -> void:
+	if world.has("journalists") and (world.journalists as Array).size() >= 6:
+		return
+	var first := ["Maya", "Tomas", "Aisha", "Rui", "Chidi", "Lena", "Marco", "Sofia"]
+	var last := ["Okoro", "Silva", "Bianchi", "Costa", "Adeyemi", "Lund", "Rossi", "Pereira"]
+	var outlets := ["Daily Ledger", "Football Herald", "Continental Post", "Matchday FM", "The Touchline", "Goal Gazette"]
+	var clubs: Array = world.get("clubs", [])
+	world["journalists"] = []
+	for i in range(6):
+		var club_pref := ""
+		if not clubs.is_empty():
+			club_pref = String(clubs[int(SeededRngClass.value_for(seed, 500 + i * 37) % clubs.size())].get("id", ""))
+		world.journalists.append({
+			"id": "journalist-%d" % (i + 1),
+			"name": "%s %s" % [first[i % first.size()], last[int(SeededRngClass.value_for(seed, 600 + i * 53) % last.size())]],
+			"outlet": outlets[i % outlets.size()],
+			"reputation": 40 + int(SeededRngClass.value_for(seed, 700 + i * 29) % 51),
+			"sensationalism": 20 + int(SeededRngClass.value_for(seed, 800 + i * 41) % 71),
+			"club_preference": club_pref,
+			"manager_relationships": {},
+		})
+
+func _journalist_for(world: Dictionary, seed: int) -> Dictionary:
+	var reporters: Array = world.get("journalists", [])
+	if reporters.is_empty():
+		return {"id": "wire", "name": "Press Association", "outlet": "Wire", "reputation": 50, "sensationalism": 40, "club_preference": "", "manager_relationships": {}}
+	return reporters[int(SeededRngClass.value_for(seed, 900) % reporters.size())]
+
+func _update_journalist_relationships(world: Dictionary, club_id: String, outcomes: Array) -> void:
+	for outcome in outcomes:
+		var journalist_id := String(outcome.get("journalist_id", ""))
+		for reporter in world.get("journalists", []):
+			if String(reporter.get("id", "")) != journalist_id:
+				continue
+			var rels: Dictionary = reporter.get("manager_relationships", {})
+			var delta := int(outcome.get("morale_shift", 0))
+			rels[club_id] = clampi(int(rels.get(club_id, 50)) + delta * 2, 0, 100)
+			reporter["manager_relationships"] = rels
+
+func _answer_outcome(world: Dictionary, club: Dictionary, question: String, tone: String, context: Dictionary, journalist: Dictionary, seed: int) -> Dictionary:
 	var roll := int(SeededRngClass.value_for(seed, _stable_key(String(club.get("id", "")) + question + tone)) % 100)
+	var sensational := float(journalist.get("sensationalism", 40)) / 100.0
+	var favoured := String(journalist.get("club_preference", "")) == String(club.get("id", ""))
 	var morale_shift := 0
 	var pressure_shift := 0
 	var headline := ""
@@ -65,7 +112,12 @@ func _answer_outcome(world: Dictionary, club: Dictionary, question: String, tone
 			morale_shift = 0
 			pressure_shift = 1
 			headline = "Manager bats away %s question" % String(question).replace("_", " ")
-	return {"question": question, "tone": tone, "headline": headline, "morale_shift": morale_shift, "pressure_shift": pressure_shift}
+	if sensational > 0.62 and morale_shift <= 0:
+		headline = "PRESSURE MOUNTS: " + headline
+		pressure_shift += 1
+	if favoured:
+		morale_shift += 1
+	return {"question": question, "tone": tone, "headline": headline, "morale_shift": morale_shift, "pressure_shift": pressure_shift, "journalist_id": String(journalist.get("id", "wire")), "journalist": String(journalist.get("name", "Wire")), "outlet": String(journalist.get("outlet", "Wire"))}
 
 func _press_context(world: Dictionary, club_id: String, kind: String) -> Dictionary:
 	var club: Dictionary = _club(world.get("clubs", []), club_id)

@@ -2,10 +2,42 @@ class_name AdvancedMatchAnalytics
 extends RefCounted
 
 func analyze(events: Array, pitch_length: float = 105.0) -> Dictionary:
-	return {"home":_side(events,"home",pitch_length),"away":_side(events,"away",pitch_length)}
+	return {"home": _side(events, "home", pitch_length), "away": _side(events, "away", pitch_length)}
 
-func _side(events:Array,side:String,pitch_length:float)->Dictionary:
-	var out := {"xa":0.0,"xt":0.0,"chances_created":0,"progressive_passes":0,"progressive_carries":0,"pressures":0,"tackles":0,"crosses":0,"set_pieces":0,"turnovers_won":0,"final_third_actions":0,"field_tilt_actions":0,"passes_into_box":0,"box_entries":0,"shot_creating_actions":0}
+func team_summary(events: Array, side: String, pitch_length: float = 105.0) -> Dictionary:
+	var detail := _side(events, side, pitch_length)
+	var shots := 0
+	var shots_on_target := 0
+	var goals := 0
+	var xg := 0.0
+	var passes := 0
+	var completed := 0
+	for event in events:
+		if String(event.get("side", "")) != side:
+			continue
+		match String(event.get("type", "")):
+			"shot":
+				shots += 1
+				xg += float(event.get("xg", 0.0))
+				if String(event.get("outcome", "")) in ["goal", "saved"]:
+					shots_on_target += 1
+				if String(event.get("outcome", "")) == "goal":
+					goals += 1
+			"pass", "through_ball", "cross":
+				passes += 1
+				if bool(event.get("success", false)):
+					completed += 1
+	detail["shots"] = shots
+	detail["shots_on_target"] = shots_on_target
+	detail["goals"] = goals
+	detail["xg"] = snappedf(xg, 0.01)
+	detail["xg_per_shot"] = snappedf(xg / maxf(1.0, float(shots)), 0.01)
+	detail["pass_accuracy"] = snappedf(float(completed) / maxf(1.0, float(passes)) * 100.0, 0.1)
+	detail["cross_accuracy"] = snappedf(float(detail.get("crosses_completed", detail.get("crosses", 0))) / maxf(1.0, float(detail.get("crosses", 0))) * 100.0, 0.1) if int(detail.get("crosses", 0)) > 0 else 0.0
+	return detail
+
+func _side(events: Array, side: String, pitch_length: float) -> Dictionary:
+	var out := {"xa": 0.0, "xt": 0.0, "chances_created": 0, "progressive_passes": 0, "progressive_carries": 0, "pressures": 0, "tackles": 0, "crosses": 0, "crosses_completed": 0, "set_pieces": 0, "turnovers_won": 0, "final_third_actions": 0, "field_tilt_actions": 0, "passes_into_box": 0, "box_entries": 0, "shot_creating_actions": 0, "deep_completions": 0, "ppda_denominator": 0}
 	var previous: Dictionary = {}
 	for event in events:
 		if String(event.get("side","")) != side: continue
@@ -31,9 +63,18 @@ func _side(events:Array,side:String,pitch_length:float)->Dictionary:
 		elif kind in ["pressure","counter_press"]: out.pressures+=1
 		elif kind=="tackle": out.tackles+=1; out.turnovers_won+=1 if bool(event.get("success",false)) else 0
 		elif kind=="interception": out.turnovers_won+=1
-		elif kind=="cross": out.crosses+=1
-		elif kind in ["corner","free_kick","penalty_awarded","set_piece"]: out.set_pieces+=1
-		if attacking_x>=0.67*pitch_length: out.final_third_actions+=1
+		elif kind == "cross":
+			out.crosses += 1
+			if bool(event.get("success", false)):
+				out.crosses_completed += 1
+		elif kind in ["corner", "free_kick", "penalty_awarded", "set_piece"]:
+			out.set_pieces += 1
+		if attacking_x >= 0.67 * pitch_length:
+			out.final_third_actions += 1
+		if attacking_x >= 0.80 * pitch_length and start_attacking_x < 0.80 * pitch_length and kind in ["pass", "through_ball", "cross", "dribble"]:
+			out.deep_completions += 1
+		if kind in ["pass", "through_ball", "cross", "dribble"]:
+			out.ppda_denominator += 1
 		if attacking_x>=0.58*pitch_length: out.field_tilt_actions+=1
 		if kind=="shot":
 			if not previous.is_empty() and int(event.get("minute",0))-int(previous.get("minute",0))<=1: out.shot_creating_actions+=1
@@ -41,9 +82,18 @@ func _side(events:Array,side:String,pitch_length:float)->Dictionary:
 	out.xa=snappedf(float(out.xa),0.01); out.xt=snappedf(float(out.xt),0.01)
 	return out
 
-func field_tilt(analysis:Dictionary)->Dictionary:
-	var h:=float(analysis.get("home",{}).get("field_tilt_actions",0)); var a:=float(analysis.get("away",{}).get("field_tilt_actions",0)); var total:=maxf(1.0,h+a)
-	return {"home":snappedf(h/total*100.0,0.1),"away":snappedf(a/total*100.0,0.1)}
+func field_tilt(analysis: Dictionary) -> Dictionary:
+	var h := float(analysis.get("home", {}).get("field_tilt_actions", 0)); var a := float(analysis.get("away", {}).get("field_tilt_actions", 0)); var total := maxf(1.0, h + a)
+	return {"home": snappedf(h / total * 100.0, 0.1), "away": snappedf(a / total * 100.0, 0.1)}
+
+func ppda(analysis: Dictionary, opponent_passes: Dictionary) -> Dictionary:
+	# Passes per defensive action: lower = more intense press.
+	var result := {}
+	for side in ["home", "away"]:
+		var actions := float(analysis.get(side, {}).get("pressures", 0)) + float(analysis.get(side, {}).get("tackles", 0)) + float(analysis.get(side, {}).get("turnovers_won", 0))
+		var passes := float(opponent_passes.get("away" if side == "home" else "home", 100.0))
+		result[side] = snappedf(passes / maxf(1.0, actions), 0.1)
+	return result
 
 func _zone_value(progress:float)->float:
 	var p:=clampf(progress,0.0,1.0)

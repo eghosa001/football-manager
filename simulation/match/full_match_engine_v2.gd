@@ -14,9 +14,13 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	var away_tactic: Dictionary = away_club.get("tactic", _tactics.create_tactic("4-3-3"))
 	var home: Array = _tactics.select_lineup(players, String(home_club.id), home_tactic).duplicate(true)
 	var away: Array = _tactics.select_lineup(players, String(away_club.id), away_tactic).duplicate(true)
+	var travel_fatigue := clampf(float(context.get("travel_fatigue", 0.0)), 0.0, 0.38)
+	if travel_fatigue > 0.0:
+		for player in away:
+			player["fitness"] = clampi(int(player.get("fitness", 100)) - int(round(travel_fatigue * 22.0)), 25, 100)
 	if home.size() < 11 or away.size() < 11:
-		return {"error":ERR_UNAVAILABLE,"home_goals":0,"away_goals":0,"events":[],"stats":{}}
-	var starters := {"home":_ids(home),"away":_ids(away)}
+		return {"error": ERR_UNAVAILABLE, "home_goals": 0, "away_goals": 0, "events": [], "stats": {}}
+	var starters := {"home": _ids(home), "away": _ids(away)}
 	var participants: Dictionary = starters.duplicate(true)
 	var planned := _planned_substitutions(players, String(home_club.id), String(away_club.id), home, away)
 	var substitutions: Array = []
@@ -24,8 +28,17 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	var home_mod: Dictionary = _tactics.style_modifiers(home_tactic)
 	var away_mod: Dictionary = _tactics.style_modifiers(away_tactic)
 	var factor_edge := float(MatchFactorsClass.new().breakdown(home_club, away_club, players, context).total_home_edge)
+	var importance := float(context.get("importance", 0.5))
+	var weather := {"kind": "clear", "pass_factor": 1.0, "touch_factor": 1.0, "stamina_factor": 1.0, "shot_factor": 1.0, "attendance_factor": 1.0}
+	var weather_roll := SeededRngClass.unit_for(seed, 91001)
+	if weather_roll < 0.12:
+		weather = {"kind": "heavy_rain", "pass_factor": 0.90, "touch_factor": 0.86, "stamina_factor": 0.92, "shot_factor": 0.94, "attendance_factor": 0.88}
+	elif weather_roll < 0.30:
+		weather = {"kind": "rain", "pass_factor": 0.95, "touch_factor": 0.93, "stamina_factor": 0.96, "shot_factor": 0.97, "attendance_factor": 0.94}
+	elif weather_roll > 0.92:
+		weather = {"kind": "hot", "pass_factor": 0.99, "touch_factor": 0.98, "stamina_factor": 0.88, "shot_factor": 0.98, "attendance_factor": 0.96}
 	var events: Array = []
-	var possession_counts := {"home":0,"away":0}
+	var possession_counts := {"home": 0, "away": 0}
 	var frames: Array = []
 	var carry: Dictionary = {}
 	for possession_index in range(54):
@@ -59,6 +72,10 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 		possession_counts[starting_side] += 1
 		var sequence_factor := float(home_mod.sequence_multiplier) if starting_side == "home" else float(away_mod.sequence_multiplier)
 		var max_actions := clampi(int(round(18.0 * sequence_factor)), 14, 22)
+		carry["tactic_home"] = home_tactic
+		carry["tactic_away"] = away_tactic
+		carry["weather"] = weather
+		carry["match_importance"] = importance
 		var possession: Dictionary = _possession.simulate_possession(home, away, seed + possession_index * 7919, max_actions, starting_side, carry)
 		for frame_index in range(possession.frames.size()):
 			var frame: Dictionary = possession.frames[frame_index]
@@ -105,11 +122,11 @@ func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array
 	stats.away.possession = snappedf(100.0 - float(stats.home.possession), 0.1)
 	var factors := MatchFactorsClass.new().breakdown(home_club, away_club, players, context)
 	return {
-		"home_goals":int(goals.home),"away_goals":int(goals.away),"events":events,"stats":stats,
-		"lineups":starters,"participants":participants,"final_lineups":{"home":_ids(home),"away":_ids(away)},"substitutions":substitutions,
-		"spatial":{"pitch_length":105.0,"pitch_width":68.0,"frames":frames,"model":"persistent_action_2d"},
-		"tactics":{"home":home_tactic.duplicate(true),"away":away_tactic.duplicate(true)},"seed":seed,
-		"factors":factors,"match_context":context
+		"home_goals": int(goals.home), "away_goals": int(goals.away), "events": events, "stats": stats,
+		"lineups": starters, "participants": participants, "final_lineups": {"home": _ids(home), "away": _ids(away)}, "substitutions": substitutions,
+		"spatial": {"pitch_length": 105.0, "pitch_width": 68.0, "frames": frames, "model": "persistent_action_2d"},
+		"tactics": {"home": home_tactic.duplicate(true), "away": away_tactic.duplicate(true)}, "seed": seed,
+		"factors": factors, "match_context": context, "weather": weather, "importance": importance
 	}
 
 func apply_to_fixture(fixture: Dictionary, result: Dictionary) -> void:
@@ -122,19 +139,44 @@ func _possession_share(home: Array, away: Array, home_mod: Dictionary, away_mod:
 	return clampf(base, 0.30, 0.70)
 
 func _maybe_set_piece(events: Array, home: Array, away: Array, state: Dictionary, attacking_side: String, minute: int, seed: int, index: int) -> void:
-	if SeededRngClass.unit_for(seed, 40_000 + index) >= 0.105: return
+	if SeededRngClass.unit_for(seed, 40_000 + index) >= 0.145: return
 	var team := home if attacking_side == "home" else away
+	var defending := away if attacking_side == "home" else home
 	if team.is_empty(): return
-	var corner := SeededRngClass.unit_for(seed, 41_000 + index) < 0.55
-	var taker: Dictionary = _best_set_piece_taker(team)
-	var set_type := "corner" if corner else "free_kick"
-	events.append({"minute":minute,"type":set_type,"side":attacking_side,"player_id":String(taker.id),"success":true})
-	if SeededRngClass.unit_for(seed, 42_000 + index) < (0.28 if corner else 0.22):
-		var shooter := _best_shooter(team)
-		var xg := 0.08 + SeededRngClass.unit_for(seed, 43_000 + index) * (0.12 if corner else 0.10)
-		var scored := SeededRngClass.unit_for(seed, 44_000 + index) < xg * (0.75 + float(shooter.get("current_ability",50))/250.0)
-		var on_target := scored or SeededRngClass.unit_for(seed, 45_000 + index) < 0.42
-		var shot := {"minute":minute,"type":"shot","side":attacking_side,"player_id":String(shooter.id),"outcome":"goal" if scored else ("saved" if on_target else "missed"),"success":scored,"xg":xg,"set_piece":set_type,"position":{"x":90.0 if attacking_side=="home" else 15.0,"y":34.0},"pressure":0.35}
+	var roll := SeededRngClass.unit_for(seed, 41_000 + index)
+	var set_type := "corner"
+	if roll < 0.48:
+		set_type = "corner"
+	elif roll < 0.78:
+		set_type = "free_kick"
+	elif roll < 0.90:
+		set_type = "throw_in"
+	else:
+		set_type = "penalty"
+	var taker: Dictionary = _best_set_piece_taker_for_kind(team, set_type)
+	var targets := _aerial_targets(team, taker)
+	var marker := _best_aerial_defender(defending)
+	var routines := {"corner": ["near_post", "far_post", "edge_of_box", "short_corner"], "free_kick": ["direct", "delivery_far", "delivery_near", "layoff"], "throw_in": ["long_throw", "retain_possession", "flick_on"], "penalty": ["placed", "power"]}
+	var routine_roll := SeededRngClass.unit_for(seed, 41_500 + index)
+	var options: Array = routines[set_type]
+	var routine: String = options[mini(options.size() - 1, int(floor(routine_roll * float(options.size()))))]
+	var marking := "zonal_plus_man" if not marker.is_empty() else "zonal"
+	events.append({"minute": minute, "type": set_type, "side": attacking_side, "player_id": String(taker.id), "success": true, "routine": routine, "primary_target_id": String(targets[0].id) if not targets.is_empty() else "", "marker_id": String(marker.id) if not marker.is_empty() else "", "marking": marking, "zone": routine})
+	if set_type == "throw_in":
+		return
+	var base_chance := 0.28 if set_type == "corner" else (0.78 if set_type == "penalty" else 0.22)
+	if SeededRngClass.unit_for(seed, 42_000 + index) < base_chance:
+		var shooter := _best_shooter(team) if not targets.is_empty() else taker
+		if set_type == "penalty":
+			shooter = _best_penalty_taker(team)
+		var xg := 0.08 + SeededRngClass.unit_for(seed, 43_000 + index) * 0.12
+		if set_type == "penalty":
+			xg = 0.76
+		elif set_type == "free_kick" and routine == "direct":
+			xg = 0.06 + SeededRngClass.unit_for(seed, 43_000 + index) * 0.08
+		var scored := SeededRngClass.unit_for(seed, 44_000 + index) < xg * (0.75 + float(shooter.get("current_ability", 50)) / 250.0)
+		var on_target := scored or SeededRngClass.unit_for(seed, 45_000 + index) < (0.85 if set_type == "penalty" else 0.42)
+		var shot := {"minute": minute, "type": "shot", "side": attacking_side, "player_id": String(shooter.id), "outcome": "goal" if scored else ("saved" if on_target else "missed"), "success": scored, "xg": xg, "set_piece": set_type, "position": {"x": 90.0 if attacking_side == "home" else 15.0, "y": 34.0}, "pressure": 0.15 if set_type == "penalty" else 0.35}
 		_enrich_shot(shot, home, away, state)
 		events.append(shot)
 
@@ -183,10 +225,15 @@ func _accumulate_event(stats: Dictionary, goals: Dictionary, event: Dictionary) 
 	var side := String(event.get("side", "home"))
 	if not stats.has(side): return
 	match String(event.get("type", "")):
-		"pass": stats[side].passes += 1; stats[side].passes_completed += 1 if bool(event.get("success",false)) else 0
-		"dribble": stats[side].dribbles += 1; stats[side].dribbles_completed += 1 if bool(event.get("success",false)) else 0
+		"pass": stats[side].passes += 1; stats[side].passes_completed += 1 if bool(event.get("success", false)) else 0; stats[side].progressive_passes += 1 if bool(event.get("success", false)) and float(event.get("distance", 0.0)) >= 10.0 and String(event.get("action", "")) != "recycle" else 0
+		"through_ball": stats[side].passes += 1; stats[side].through_balls += 1; stats[side].passes_completed += 1 if bool(event.get("success", false)) else 0; stats[side].progressive_passes += 1 if bool(event.get("success", false)) else 0; stats[side].key_passes += 1 if bool(event.get("success", false)) else 0
+		"cross": stats[side].passes += 1; stats[side].crosses += 1; stats[side].passes_completed += 1 if bool(event.get("success", false)) else 0
+		"clearance": stats[side].clearances += 1
+		"dribble": stats[side].dribbles += 1; stats[side].dribbles_completed += 1 if bool(event.get("success", false)) else 0
 		"corner": stats[side].corners += 1
 		"free_kick": stats[side].free_kicks += 1
+		"throw_in": stats[side].throw_ins += 1
+		"penalty": stats[side].penalties += 1
 		"card":
 			stats[side].cards += 1
 			if String(event.get("card","")) == "red": stats[side].red_cards += 1
@@ -198,13 +245,47 @@ func _accumulate_event(stats: Dictionary, goals: Dictionary, event: Dictionary) 
 				var opponent := "away" if side == "home" else "home"; stats[opponent].saves += 1
 
 func _best_set_piece_taker(team: Array) -> Dictionary:
+	return _best_set_piece_taker_for_kind(team, "corner")
+
+func _best_set_piece_taker_for_kind(team: Array, kind: String) -> Dictionary:
 	var best: Dictionary = team[0]
 	for player in team:
 		var a: Dictionary = player.get("attributes", {}); var b: Dictionary = best.get("attributes", {})
-		var score := int(a.get("corners",a.get("free_kicks",player.get("current_ability",50))))
-		var best_score := int(b.get("corners",b.get("free_kicks",best.get("current_ability",50))))
+		var score := _set_piece_score(a, player, kind)
+		var best_score := _set_piece_score(b, best, kind)
 		if score > best_score: best = player
 	return best
+
+func _set_piece_score(a: Dictionary, player: Dictionary, kind: String) -> int:
+	match kind:
+		"penalty":
+			return int(a.get("penalties", a.get("finishing", player.get("current_ability", 50))))
+		"free_kick":
+			return int(a.get("free_kicks", a.get("technique", player.get("current_ability", 50))))
+		"throw_in":
+			return int(a.get("long_throws", a.get("strength", player.get("current_ability", 50))))
+		_:
+			return int(a.get("corners", a.get("crossing", player.get("current_ability", 50))))
+
+func _best_penalty_taker(team: Array) -> Dictionary:
+	return _best_set_piece_taker_for_kind(team, "penalty")
+
+func _aerial_targets(team: Array, taker: Dictionary) -> Array:
+	var rows: Array = []
+	for player in team:
+		if String(player.get("id", "")) == String(taker.get("id", "")):
+			continue
+		rows.append(player)
+	rows.sort_custom(func(a: Dictionary, b: Dictionary): return _aerial_score(a) > _aerial_score(b))
+	return rows.slice(0, mini(3, rows.size()))
+
+func _aerial_score(player: Dictionary) -> float:
+	var a: Dictionary = player.get("attributes", {})
+	return float(a.get("heading", 50)) * 0.45 + float(a.get("jumping", a.get("jumping_reach", 50))) * 0.30 + float(a.get("strength", 50)) * 0.15 + float(player.get("height_cm", 180)) * 0.02
+
+func _best_aerial_defender(team: Array) -> Dictionary:
+	var targets := _aerial_targets(team, {})
+	return targets[0] if not targets.is_empty() else {}
 
 func _best_shooter(team: Array) -> Dictionary:
 	var best: Dictionary = team[0]
@@ -224,7 +305,7 @@ func _strength(team: Array) -> float:
 	return total/11.0
 
 func _blank_stats() -> Dictionary:
-	return {"passes":0,"passes_completed":0,"dribbles":0,"dribbles_completed":0,"shots":0,"shots_on_target":0,"goals":0,"xg":0.0,"possession":0.0,"corners":0,"free_kicks":0,"cards":0,"red_cards":0,"saves":0}
+	return {"passes": 0, "passes_completed": 0, "progressive_passes": 0, "through_balls": 0, "key_passes": 0, "crosses": 0, "clearances": 0, "dribbles": 0, "dribbles_completed": 0, "shots": 0, "shots_on_target": 0, "goals": 0, "xg": 0.0, "possession": 0.0, "corners": 0, "free_kicks": 0, "throw_ins": 0, "penalties": 0, "cards": 0, "red_cards": 0, "saves": 0}
 
 func _ids(players: Array) -> Array:
 	var ids: Array = []

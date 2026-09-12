@@ -114,14 +114,36 @@ func ai_choose_tactic(world: Dictionary, club_id: String, opponent_id: String, s
 	var club := _find_club(world.get("clubs", []), club_id); var opponent := _find_club(world.get("clubs", []), opponent_id)
 	if club.is_empty(): return create_tactic("4-3-3")
 	var base: Dictionary = club.tactic.duplicate(true); ensure_instructions(base)
-	var own_strength := _squad_strength(world.get("players", []),club_id); var opponent_strength := _squad_strength(world.get("players", []),opponent_id)
+	var own_strength := _squad_strength(world.get("players", []), club_id); var opponent_strength := _squad_strength(world.get("players", []), opponent_id)
+	var opponent_tactic: Dictionary = opponent.get("tactic", {}) if not opponent.is_empty() else {}
+	var opponent_formation := String(opponent_tactic.get("formation", "4-3-3"))
+	var opponent_mentality := String(opponent_tactic.get("mentality", "balanced"))
 	if own_strength > opponent_strength + 7.0:
-		base.mentality="positive"; base.tempo="high"; base.instructions.transition.counter=true
+		base.mentality = "positive"; base.tempo = "high"; base.instructions.transition.counter = true
 	elif own_strength + 7.0 < opponent_strength:
-		base.mentality="cautious"; base.tempo="low"; base.instructions.transition.regroup=true; base.instructions.out_of_possession.defensive_line="lower"
+		base.mentality = "cautious"; base.tempo = "low"; base.instructions.transition.regroup = true; base.instructions.out_of_possession.defensive_line = "lower"
 	else:
-		base.mentality="balanced"
-	if not opponent.is_empty() and int(opponent.get("reputation",50)) > int(club.get("reputation",50))+10: base.pressing="standard"
+		base.mentality = "balanced"
+	# Opponent-formation scouting: pick a shape that is not countered and
+	# adjust the defensive line against pace-heavy attacks.
+	var counters: Dictionary = {"4-3-3": "5-3-2", "4-2-3-1": "4-4-2", "3-5-2": "4-3-3", "5-3-2": "4-2-3-1", "4-4-2": "3-5-2", "3-4-3": "5-3-2"}
+	if counters.get(String(base.get("formation", "4-3-3")), "") == opponent_formation:
+		base.formation = "4-3-3" if String(base.get("formation", "")) != "4-3-3" else "4-2-3-1"
+		var roles := {}; var duties := {}; var role_counts := {}
+		for position in FORMATIONS[base.formation]:
+			role_counts[position] = int(role_counts.get(position, 0)) + 1
+			var key: String = position if int(role_counts[position]) == 1 else "%s_%d" % [position, int(role_counts[position])]
+			roles[key] = String(ROLES.get(position, ["support"])[0])
+			duties[key] = _default_duty(position)
+		base.roles = roles
+		base.duties = duties
+	if opponent_mentality == "attacking" and base.pressing == "very_high":
+		base.pressing = "high"
+		base.instructions.out_of_possession.defensive_line = "lower"
+	if opponent_mentality in ["cautious", "very_cautious"] and own_strength > opponent_strength:
+		base.instructions.in_possession.width = "wide"
+		base.instructions.in_possession.work_ball_into_box = false
+	if not opponent.is_empty() and int(opponent.get("reputation", 50)) > int(club.get("reputation", 50)) + 10: base.pressing = "standard"
 	return base
 
 func select_lineup(players: Array, club_id: String, tactic: Dictionary) -> Array:

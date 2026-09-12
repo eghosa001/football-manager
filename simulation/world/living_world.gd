@@ -79,13 +79,48 @@ func _update_rivalries(world: Dictionary, records: Array, year: int, reasons: Ar
 	for record in records:
 		var table: Array = record.get("table", [])
 		if table.size() < 2: continue
-		var first_id: String = String(table[0].club_id); var second_id: String = String(table[1].club_id); var rivalry: Dictionary = _find_pair(world.rivalries, first_id, second_id)
-		if rivalry.is_empty(): world.rivalries.append({"club_a": first_id, "club_b": second_id, "intensity": 12, "last_changed": year})
-		else: rivalry.intensity = clampi(int(rivalry.intensity) + 4, 0, 100); rivalry.last_changed = year
+		var first_id: String = String(table[0].club_id); var second_id: String = String(table[1].club_id)
+		_bump_rivalry(world, first_id, second_id, 4, year, "title_race")
+		if table.size() >= 4:
+			_bump_rivalry(world, String(table[2].club_id), String(table[3].club_id), 2, year, "continental_race")
+	# Geography: same-country clubs drift toward low-level derbies so local
+	# rivalries exist even without title battles.
+	var by_country := {}
+	for club in world.clubs:
+		var country := String(club.get("country_id", ""))
+		if country == "": continue
+		if not by_country.has(country): by_country[country] = []
+		by_country[country].append(club)
+	for country in by_country.keys():
+		var clubs: Array = by_country[country]
+		for i in range(mini(clubs.size(), 6)):
+			for j in range(i + 1, mini(clubs.size(), 6)):
+				var a: String = String(clubs[i].id); var b: String = String(clubs[j].id)
+				var existing := _find_pair(world.rivalries, a, b)
+				if existing.is_empty() and _stable_roll(year, a + b) < 0.12:
+					world.rivalries.append({"club_a": a, "club_b": b, "intensity": 6, "last_changed": year, "origin": "geography"})
+	# Cup meetings and repeated contention create new rivalries dynamically.
+	for fixture in world.get("fixtures", []):
+		if not bool(fixture.get("played", false)): continue
+		if String(fixture.get("competition_type", "league")) != "knockout": continue
+		var a := String(fixture.get("home_club_id", "")); var b := String(fixture.get("away_club_id", ""))
+		if a == "" or b == "": continue
+		_bump_rivalry(world, a, b, 2, year, "cup_meeting")
 	for rivalry in world.rivalries:
 		if int(rivalry.get("last_changed", year)) < year: rivalry.intensity = maxi(0, int(rivalry.intensity) - 1)
 	world.rivalries = world.rivalries.filter(func(r): return int(r.intensity) > 0)
-	if not records.is_empty(): reasons.append({"type": "rivalry_change", "count": world.rivalries.size(), "cause": "title_races"})
+	if not records.is_empty(): reasons.append({"type": "rivalry_change", "count": world.rivalries.size(), "cause": "title_races_geography_cups"})
+
+func _bump_rivalry(world: Dictionary, a: String, b: String, amount: int, year: int, origin: String) -> void:
+	if a == "" or b == "" or a == b: return
+	var rivalry := _find_pair(world.rivalries, a, b)
+	if rivalry.is_empty(): world.rivalries.append({"club_a": a, "club_b": b, "intensity": 8 + amount, "last_changed": year, "origin": origin})
+	else: rivalry.intensity = clampi(int(rivalry.intensity) + amount, 0, 100); rivalry.last_changed = year; rivalry["origin"] = String(rivalry.get("origin", origin))
+
+func _stable_roll(year: int, key: String) -> float:
+	var value := year * 7919 + 13
+	for c in key.to_utf8_buffer(): value = posmod(value * 131 + int(c), 2_147_483_647)
+	return float(posmod(value, 1000)) / 1000.0
 
 func _update_reputations(world: Dictionary, records: Array, year: int, reasons: Array) -> void:
 	var positions := {}
@@ -131,16 +166,65 @@ func _update_legends(world: Dictionary, year: int, reasons: Array) -> int:
 	for legend in world.legends: existing[String(legend.person_id)] = true
 	for player in world.players:
 		if not bool(player.get("retired", false)): continue
-		var rep: int = int(player.get("reputation", player.get("current_ability", 0)))
-		if rep >= 75 and not existing.has(String(player.id)):
-			world.legends.append({"person_id": player.id, "name": "%s %s" % [player.first_name, player.last_name], "club_id": player.get("club_id", ""), "inducted_year": year, "reputation": rep}); existing[String(player.id)] = true
-	if not world.legends.is_empty(): reasons.append({"type": "legends", "count": world.legends.size(), "cause": "retired_high_reputation_players"})
+		if existing.has(String(player.id)): continue
+		var score := _legend_score(player)
+		if score < 55: continue
+		var tier := "Favoured Personnel" if score < 70 else ("Club Icon" if score < 85 else "Club Legend")
+		world.legends.append({"person_id": player.id, "name": "%s %s" % [player.first_name, player.last_name], "club_id": player.get("club_id", player.get("favourite_club_id", "")), "inducted_year": year, "reputation": int(player.get("reputation", 50)), "score": score, "tier": tier, "appearances": int(player.get("career_appearances", 0)), "goals": int(player.get("career_goals", 0)), "trophies": int(player.get("career_trophies", 0))})
+		existing[String(player.id)] = true
+	if not world.legends.is_empty(): reasons.append({"type": "legends", "count": world.legends.size(), "cause": "appearances_goals_trophies_loyalty"})
 	return world.legends.size()
+
+func _legend_score(player: Dictionary) -> int:
+	var score := float(player.get("reputation", player.get("current_ability", 0))) * 0.35
+	score += clampf(float(player.get("career_appearances", 0)) / 400.0, 0.0, 1.0) * 28.0
+	score += clampf(float(player.get("career_goals", 0)) / 180.0, 0.0, 1.0) * 20.0
+	score += clampf(float(player.get("career_trophies", 0)) / 8.0, 0.0, 1.0) * 22.0
+	score += clampf(float(player.get("club_tenure_years", 0)) / 12.0, 0.0, 1.0) * 10.0
+	if bool(player.get("captain", false)):
+		score += 4.0
+	return clampi(int(round(score)), 0, 100)
 
 func _emit_news(world: Dictionary, reasons: Array, year: int) -> void:
 	for index in range(mini(reasons.size(), 50)):
-		var reason: Dictionary = reasons[index]; world.news.append({"id": "news-%d-%d-%s" % [year, index, String(reason.get("type", "event"))], "year": year, "type": reason.get("type", "event"), "reason": reason.duplicate(true)})
+		var reason: Dictionary = reasons[index]
+		world.news.append({"id": "news-%d-%d-%s" % [year, index, String(reason.get("type", "event"))], "year": year, "type": reason.get("type", "event"), "reason": reason.duplicate(true), "headline": _headline_for(reason, world), "chain_id": String(reason.get("chain_id", "season-%d" % year))})
+		_maybe_extend_chain(world, reason, year)
 	if world.news.size() > 500: world.news = world.news.slice(world.news.size() - 500)
+
+func _headline_for(reason: Dictionary, world: Dictionary) -> String:
+	var kind := String(reason.get("type", "event"))
+	match kind:
+		"manager_trophy":
+			return "Champions again: %s lifts another trophy" % _manager_name(world, String(reason.get("entity_id", "")))
+		"rivalry_change":
+			return "Title race ignites new rivalry (%d active)" % int(reason.get("count", 0))
+		"awards":
+			return "Season awards confirmed (%d honours)" % int(reason.get("count", 0))
+		"legends":
+			return "Hall of fame grows to %d legends" % int(reason.get("count", 0))
+		"morale_change":
+			return "Dressing-room mood shifts"
+		_:
+			return String(reason.get("cause", kind)).capitalize()
+
+func _maybe_extend_chain(world: Dictionary, reason: Dictionary, year: int) -> void:
+	# Event chains: wonderkid -> breakout -> scouting -> transfer request ->
+	# dressing-room response -> fans reaction. Each link keeps the same chain
+	# id so the UI can render a story rather than isolated articles.
+	if String(reason.get("type", "")) != "morale_change":
+		return
+	var chain_id := "story-%d-%s" % [year, String(reason.get("entity_id", "team"))]
+	reason["chain_id"] = chain_id
+	if abs(int(reason.get("delta", 0))) < 4:
+		return
+	world.news.append({"id": "news-%d-chain-%s" % [year, String(reason.get("entity_id", ""))], "year": year, "type": "story_chain", "reason": {"cause": "dressing_room_fallout", "chain_id": chain_id, "entity_id": reason.get("entity_id", "")}, "headline": "Fallout grows: teammates react to mood shift", "chain_id": chain_id})
+
+func _manager_name(world: Dictionary, manager_id: String) -> String:
+	for member in world.get("staff", []):
+		if String(member.get("id", "")) == manager_id:
+			return "%s %s" % [String(member.get("first_name", "Manager")), String(member.get("last_name", ""))]
+	return "The manager"
 
 func _best_player_for_competition(world: Dictionary, record: Dictionary) -> Dictionary:
 	var club_ids := {}

@@ -68,14 +68,16 @@ func suffer_injury(player: Dictionary, seed: int, cause: String = "match") -> Di
 	player.medical.match_fitness = minf(float(player.medical.match_fitness), 70.0)
 	return injury
 
-func advance_day(player: Dictionary, physio_quality: int = 50, rehab_intensity: float = 0.6) -> Dictionary:
+func advance_day(player: Dictionary, physio_quality: int = 50, rehab_intensity: float = 0.6, department: Dictionary = {}) -> Dictionary:
 	ensure_player(player)
 	var current: Dictionary = player.medical.current
 	if current.is_empty():
 		player.medical.match_fitness = minf(100.0, float(player.medical.match_fitness) + 1.5)
-		return {"recovered":false,"available":true}
-	var recovery_rate := 1.0 + clampf(float(physio_quality) / 200.0, 0.0, 0.5)
+		return {"recovered": false, "available": true}
+	var effectiveness := medical_effectiveness(department, physio_quality)
+	var recovery_rate := 1.0 + effectiveness * 0.55
 	var recovered_days := maxf(0.5, recovery_rate * clampf(rehab_intensity, 0.25, 1.0))
+	# Sports science reduces recurrence on return; poor departments risk setbacks.
 	current.days_remaining = maxf(0.0, float(current.days_remaining) - recovered_days)
 	player.injured_days = int(ceil(float(current.days_remaining)))
 	player.medical.rehab_progress = clampf(1.0 - float(current.days_remaining) / maxf(float(current.days_total), 1.0), 0.0, 1.0)
@@ -87,15 +89,16 @@ func advance_day(player: Dictionary, physio_quality: int = 50, rehab_intensity: 
 		return {"recovered":true,"available":true,"rehab_stage":"return_to_play"}
 	return {"recovered":false,"available":false,"days_remaining":player.injured_days,"rehab_progress":player.medical.rehab_progress,"rehab_stage":String(current.rehab_stage)}
 
-func availability(player: Dictionary, physio_quality: int = 50) -> Dictionary:
+func availability(player: Dictionary, physio_quality: int = 50, department: Dictionary = {}) -> Dictionary:
 	ensure_player(player)
 	var current: Dictionary = player.medical.current
 	if current.is_empty():
-		return {"available":true,"injury":"","days_remaining":0,"estimated_min_days":0,"estimated_max_days":0,"estimated_range":"","match_fitness":float(player.medical.match_fitness),"rehab_stage":"available"}
+		return {"available": true, "injury": "", "days_remaining": 0, "estimated_min_days": 0, "estimated_max_days": 0, "estimated_range": "", "match_fitness": float(player.medical.match_fitness), "rehab_stage": "available"}
 	var remaining := int(ceil(float(current.get("days_remaining", 0))))
-	# Medical staff never expose the exact internal recovery timer. Better staff
-	# narrow the estimate around the hidden canonical remaining duration.
-	var uncertainty := clampf(0.42 - float(clampi(physio_quality, 0, 100)) / 330.0, 0.08, 0.42)
+	# Doctor diagnoses, physio treats, sports scientist conditions. Better
+	# departments narrow the estimate around the hidden canonical duration.
+	var effectiveness := medical_effectiveness(department, physio_quality)
+	var uncertainty := clampf(0.42 - effectiveness * 0.34, 0.08, 0.42)
 	var min_days := maxi(1, int(floor(float(remaining) * (1.0 - uncertainty))))
 	var max_days := maxi(min_days + 1, int(ceil(float(remaining) * (1.0 + uncertainty))))
 	return {
@@ -131,6 +134,19 @@ func _body_region(name: String) -> String:
 	if "concussion" in name:
 		return "head"
 	return "other"
+
+func medical_effectiveness(department: Dictionary, fallback_quality: int = 50) -> float:
+	if department.is_empty():
+		return clampf(float(fallback_quality) / 100.0, 0.0, 1.0)
+	var doctor := clampf(float(department.get("doctor", department.get("medical", fallback_quality))) / 100.0, 0.0, 1.0)
+	var physio := clampf(float(department.get("physio", department.get("medical", fallback_quality))) / 100.0, 0.0, 1.0)
+	var science := clampf(float(department.get("sports_science", department.get("sports_scientist", 50))) / 100.0, 0.0, 1.0)
+	var fitness_coach := clampf(float(department.get("fitness_coach", 50)) / 100.0, 0.0, 1.0)
+	return clampf(doctor * 0.32 + physio * 0.38 + science * 0.20 + fitness_coach * 0.10, 0.0, 1.0)
+
+func department_from_club(club: Dictionary) -> Dictionary:
+	var facilities: Dictionary = club.get("facilities", {})
+	return {"doctor": int(facilities.get("medical", 50)), "physio": int(facilities.get("medical", 50)), "sports_science": int(facilities.get("sports_science", 50)), "fitness_coach": int(facilities.get("training", 50))}
 
 func _stable_key(text: String) -> int:
 	var value := 53

@@ -18,10 +18,18 @@ func eligibility(player: Dictionary, competition: Dictionary, season_year: int) 
 		reasons.append("retired")
 	if int(player.get("suspended_until_year", 0)) > season_year:
 		reasons.append("suspended")
+	if int(player.get("injured_days", 0)) > 180:
+		reasons.append("long_term_injured")
 	var min_age := int(rules.get("min_age", 15))
 	if age < min_age:
 		reasons.append("too_young")
-	return {"eligible":reasons.is_empty(),"reasons":reasons,"homegrown":homegrown,"foreign":home_country != "" and nationality != "" and nationality != home_country,"u21":age <= 21}
+	var max_age := int(rules.get("max_age", 99))
+	if age > max_age:
+		reasons.append("too_old")
+	# Loan players registered elsewhere cannot double-register.
+	if String(player.get("loan_parent_club_id", "")) != "" and int(player.get("loan_end_year", season_year)) > season_year:
+		reasons.append("on_loan_elsewhere")
+	return {"eligible": reasons.is_empty(), "reasons": reasons, "homegrown": homegrown, "foreign": home_country != "" and nationality != "" and nationality != home_country, "u21": age <= 21}
 
 func register_squad(world: Dictionary, club_id: String, competition: Dictionary, player_ids: Array, season_year: int, player_index: Dictionary = {}) -> Dictionary:
 	ensure_world(world)
@@ -29,40 +37,49 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 		for player in world.get("players", []): player_index[String(player.get("id", ""))] = player
 	var rules: Dictionary = competition.get("registration_rules", {})
 	var max_squad := int(rules.get("max_squad", 25))
+	var max_loans := int(rules.get("max_loans", 4))
 	var min_homegrown := int(rules.get("min_homegrown", 0))
 	var min_goalkeepers := int(rules.get("min_goalkeepers", 0))
 	var max_foreign := int(rules.get("max_foreign", 99))
+	var min_u21 := int(rules.get("min_u21", 0))
 	var accepted: Array = []
 	var rejected: Array = []
 	var homegrown_count := 0
 	var foreign_count := 0
 	var goalkeeper_count := 0
+	var loan_count := 0
+	var u21_count := 0
 	for player_id in player_ids:
 		if String(player_id) in accepted:
-			rejected.append({"player_id":String(player_id),"reason":"duplicate"})
+			rejected.append({"player_id": String(player_id), "reason": "duplicate"})
 			continue
 		var player: Dictionary = player_index.get(String(player_id), {})
 		if player.is_empty() or String(player.get("club_id", "")) != club_id:
-			rejected.append({"player_id":String(player_id),"reason":"not_at_club"})
+			rejected.append({"player_id": String(player_id), "reason": "not_at_club"})
 			continue
 		var check: Dictionary = eligibility(player, competition, season_year)
 		if not bool(check.eligible):
-			rejected.append({"player_id":String(player_id),"reason":String(check.reasons[0])})
+			rejected.append({"player_id": String(player_id), "reason": String(check.reasons[0])})
 			continue
 		if accepted.size() >= max_squad and not bool(check.u21):
-			rejected.append({"player_id":String(player_id),"reason":"squad_full"})
+			rejected.append({"player_id": String(player_id), "reason": "squad_full"})
 			continue
 		if bool(check.foreign) and foreign_count >= max_foreign:
-			rejected.append({"player_id":String(player_id),"reason":"foreign_limit"})
+			rejected.append({"player_id": String(player_id), "reason": "foreign_limit"})
+			continue
+		if String(player.get("loan_parent_club_id", "")) != "" and loan_count >= max_loans:
+			rejected.append({"player_id": String(player_id), "reason": "loan_limit"})
 			continue
 		accepted.append(String(player_id))
 		if bool(check.homegrown): homegrown_count += 1
 		if bool(check.foreign): foreign_count += 1
 		if String(player.get("position", "")) == "GK": goalkeeper_count += 1
-	var valid := homegrown_count >= mini(min_homegrown, accepted.size()) and goalkeeper_count >= mini(min_goalkeepers, accepted.size())
+		if String(player.get("loan_parent_club_id", "")) != "": loan_count += 1
+		if bool(check.u21): u21_count += 1
+	var valid := homegrown_count >= mini(min_homegrown, accepted.size()) and goalkeeper_count >= mini(min_goalkeepers, accepted.size()) and u21_count >= mini(min_u21, accepted.size())
 	var key := _key(club_id, String(competition.get("id", "competition")), season_year)
-	world.registrations[key] = {"club_id":club_id,"competition_id":String(competition.get("id", "")),"season_year":season_year,"player_ids":accepted.duplicate(),"homegrown":homegrown_count,"foreign":foreign_count,"goalkeepers":goalkeeper_count,"valid":valid}
-	return {"valid":valid,"registered":accepted,"rejected":rejected,"homegrown":homegrown_count,"foreign":foreign_count,"goalkeepers":goalkeeper_count}
+	world.registrations[key] = {"club_id": club_id, "competition_id": String(competition.get("id", "")), "season_year": season_year, "player_ids": accepted.duplicate(), "homegrown": homegrown_count, "foreign": foreign_count, "goalkeepers": goalkeeper_count, "loans": loan_count, "u21": u21_count, "valid": valid}
+	return {"valid": valid, "registered": accepted, "rejected": rejected, "homegrown": homegrown_count, "foreign": foreign_count, "goalkeepers": goalkeeper_count, "loans": loan_count, "u21": u21_count}
 
 func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
 	ensure_world(world)

@@ -105,9 +105,27 @@ func apply_week(player: Dictionary, sessions: int, coaching_quality: float, faci
 
 func mentor(mentor_player: Dictionary, youth: Dictionary, sessions: int) -> Dictionary:
 	var professionalism := float(mentor_player.get("hidden_attributes", {}).get("professionalism", 50))
-	var gain := clampf(float(sessions) * (0.4 + professionalism / 200.0), 0.0, 6.0)
+	var determination := float(mentor_player.get("attributes", {}).get("determination", 50))
+	var gain := clampf(float(sessions) * (0.4 + professionalism / 200.0 + determination / 400.0), 0.0, 6.0)
 	youth["mentoring_gain"] = float(youth.get("mentoring_gain", 0.0)) + gain
+	youth["determination_boost"] = float(youth.get("determination_boost", 0.0)) + gain * 0.4
+	mentor_player["mentor_sessions"] = int(mentor_player.get("mentor_sessions", 0)) + sessions
 	return youth
+
+func assign_rest(player: Dictionary, days: int) -> Dictionary:
+	ensure_player(player)
+	player["fitness"] = clampi(int(player.get("fitness", 90)) + days * 4, 0, 100)
+	player["fatigue"] = clampi(int(player.get("fatigue", 20)) - days * 9, 0, 100)
+	player["match_fitness"] = clampf(float(player.get("match_fitness", 90.0)) - float(days) * 1.5, 40.0, 100.0)
+	return {"fitness": int(player.fitness), "fatigue": int(player.fatigue), "match_fitness": float(player.match_fitness)}
+
+func match_preparation(player: Dictionary, opponent_strength: float, sessions: int) -> Dictionary:
+	ensure_player(player)
+	var focus := String(player.get("training_focus", "passing"))
+	var boost := clampf(float(sessions) * 0.8 - absf(opponent_strength - 50.0) / 60.0, 0.0, 3.0)
+	player["match_prep_boost"] = float(player.get("match_prep_boost", 0.0)) + boost
+	player["tactical_familiarity"] = clampf(float(player.get("tactical_familiarity", 50.0)) + float(sessions) * 0.7, 0.0, 100.0)
+	return {"focus": focus, "boost": boost, "familiarity": float(player.tactical_familiarity)}
 
 func injury_risk_feedback(player: Dictionary, workload: float) -> Dictionary:
 	var proneness := float(player.get("hidden_attributes", {}).get("injury_proneness", 50))

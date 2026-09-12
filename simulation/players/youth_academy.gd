@@ -22,12 +22,17 @@ func intake_preview(world: Dictionary, club_id: String, seed: int, count: int = 
 	var result: Array = []
 	var base := int(club.academy.recruitment) + int(club.academy.coaching) + int(club.get("reputation", 50))
 	var country_id := String(club.get("country_id", ""))
+	var country_talent := _country_talent(world, country_id)
 	var city_id := String(club.get("city_id", ""))
 	var region_id := String(club.get("region_id", ""))
 	for i in range(intake_count):
 		var key := base_key + i * 101
-		var quality := clampi(int(float(base) / 3.0) + int(SeededRngClass.value_for(seed, key) % 31) - 15, 18, 88)
-		var potential := clampi(quality + 8 + int(SeededRngClass.value_for(seed, key + 1) % 31), quality, 99)
+		var talent_roll := float(SeededRngClass.value_for(seed, key + 21) % 1000) / 1000.0
+		# Tiny nations occasionally produce a once-in-a-century superstar.
+		var wonderkid := talent_roll > 0.985 and country_talent < 0.45
+		var quality_base := float(base) / 3.0 * lerpf(0.72, 1.18, country_talent)
+		var quality := clampi(int(quality_base) + int(SeededRngClass.value_for(seed, key) % 31) - 15 + (14 if wonderkid else 0), 18, 92)
+		var potential := clampi(quality + 8 + int(SeededRngClass.value_for(seed, key + 1) % 31) + (10 if wonderkid else 0), quality, 99)
 		var nationality := _nationality(world,country_id,seed,key+3)
 		var second_nationality := _second_nationality(world,nationality,seed,key+4)
 		var origin := _origin(world,country_id,region_id,city_id,seed,key+5)
@@ -139,8 +144,19 @@ func _height_for_position(position:String,seed:int,key:int)->int:
 	var base:=188 if position=="GK" else (185 if position=="DC" else (181 if position=="ST" else 177))
 	return clampi(base+int(SeededRngClass.value_for(seed,key)%17)-8,160,205)
 
-func _weight(height:int,seed:int,key:int)->int:
-	return clampi(int(float(height-100)*0.83)+int(SeededRngClass.value_for(seed,key)%9)-4,55,105)
+func _weight(height: int, seed: int, key: int) -> int:
+	return clampi(int(float(height - 100) * 0.83) + int(SeededRngClass.value_for(seed, key) % 9) - 4, 55, 105)
+
+func _country_talent(world: Dictionary, country_id: String) -> float:
+	for country in world.get("countries", []):
+		if String(country.get("id", "")) == country_id:
+			var youth := float(country.get("youth_rating", country.get("reputation", 50)))
+			var popularity := float(country.get("football_popularity", 60))
+			var infrastructure := float(country.get("youth_infrastructure", country.get("infrastructure", 50)))
+			var population := float(country.get("population", 10_000_000))
+			var pop_factor := clampf(log(population + 1.0) / log(200_000_000.0), 0.25, 1.0)
+			return clampf((youth * 0.45 + popularity * 0.20 + infrastructure * 0.25 + pop_factor * 100.0 * 0.10) / 100.0, 0.05, 1.0)
+	return 0.45
 
 func _club(world: Dictionary, club_id: String) -> Dictionary:
 	for club in world.get("clubs", []):

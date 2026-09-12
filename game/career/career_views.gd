@@ -119,9 +119,21 @@ func add_tactics(tabs: TabContainer) -> void:
 func add_medical(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Medical")
 	var rows: Array = query.medical(session.world, session.managed_club_id)
-	if rows.is_empty(): _label(box, tr("No injured first-team players."))
+	if rows.is_empty():
+		_label(box, tr("No injured first-team players."))
 	for row in rows:
 		_label(box, tr("%s — %s — %d days — Match fitness %.0f%%") % [String(row.name), String(row.status.injury), int(row.status.days_remaining), float(row.status.match_fitness)])
+		_button(box, tr("Rest 3 days: %s") % String(row.name), func():
+			_rest_player(String(row.id), 3)
+			app.call("_show_career")
+		)
+
+func _rest_player(player_id: String, days: int) -> void:
+	for player in session.world.get("players", []):
+		if String(player.get("id", "")) == player_id:
+			player["fitness"] = clampi(int(player.get("fitness", 90)) + days * 4, 0, 100)
+			player["fatigue"] = clampi(int(player.get("fatigue", 20)) - days * 9, 0, 100)
+			return
 
 func add_scouting(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Scouting")
@@ -163,7 +175,12 @@ func add_staff(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Staff")
 	var recruitment = preload("res://simulation/staff/staff_recruitment.gd").new()
 	for member in query.staff(session.world, session.managed_club_id):
-		_button(box, tr("%s — %s — Ability %d") % [String(member.get("name","Staff")), String(member.get("role","")), int(member.get("ability",0))], _show_staff.bind(String(member.id)))
+		_button(box, tr("%s — %s — Ability %d") % [String(member.get("name", "Staff")), String(member.get("role", "")), int(member.get("ability", 0))], _show_staff.bind(String(member.id)))
+		_label(box, tr("Licenses: %s") % ", ".join(member.get("licenses", ["none"])))
+		_button(box, tr("Enroll in course"), func():
+			member["licenses"] = member.get("licenses", []) + [_next_license(member)]
+			app.call("_show_career")
+		)
 		_button(box, tr("Release staff member"), func():
 			app.call("_confirm", tr("Release this staff member? Twelve weeks of wages may be charged."), func(): _report_command(recruitment.fire(session.world, session.managed_club_id, String(member.id))))
 		)
@@ -207,9 +224,14 @@ func add_competitions(tabs: TabContainer) -> void:
 func _show_competition(competition_id: String) -> void:
 	var box: VBoxContainer = app.call("_clear")
 	for competition in session.world.competitions:
-		if String(competition.id) != competition_id: continue
+		if String(competition.id) != competition_id:
+			continue
 		_heading(box, "%s%s" % [String(competition.name), _competition_suffix(competition)], 26)
 		_label(box, _competition_qualification_text(competition))
+		_label(box, tr("Rules: %s") % _competition_rules_text(competition))
+		_label(box, tr("Extra time: %s   Penalties: %s   Replays: %s") % [_yes_no(competition.get("extra_time", competition.get("rules", {}).get("extra_time", true))), _yes_no(competition.get("penalties", competition.get("rules", {}).get("penalties", true))), _yes_no(competition.get("rules", {}).get("replays", false))])
+		_label(box, tr("Registration: %s") % str(competition.get("registration_rules", {})))
+		_label(box, tr("Tie-breakers: %s") % ", ".join(competition.get("tie_breakers", competition.get("rules", {}).get("tie_breakers", ["points", "goal_difference", "goals_scored"]))))
 		if session.managed_club_id in competition.get("club_ids", []):
 			_button(box, tr("Register best eligible squad"), func():
 				var result: Dictionary = command.auto_register_competition_squad(session.world, session.managed_club_id, competition_id)
@@ -237,19 +259,54 @@ func add_finances(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Finances")
 	var data: Dictionary = query.finances(session.world, session.managed_club_id)
 	_heading(box, tr("Club finances"), 18)
+	_heading(box, tr("Board objectives"), 16)
+	for objective in _board_objectives():
+		_label(box, "- %s: %s" % [String(objective.get("type", "")), str(objective.get("target", ""))])
+	_label(box, tr("Board confidence: %d") % _board_confidence())
 	var institutions = Institutions.new()
 	var ticket := SpinBox.new(); ticket.min_value = 1; ticket.max_value = 200; ticket.value = 20; box.add_child(ticket)
 	_button(box, tr("Set ticket price"), func(): _report_command(institutions.set_ticket_price(session.world, session.managed_club_id, int(ticket.value))))
 	for facility in ["training", "youth", "medical"]:
 		_button(box, tr("Improve %s facilities") % facility, func(): _report_command(institutions.invest_facility(session.world, session.managed_club_id, facility)))
-	_button(box, tr("Request transfer budget"), func():
-		var result: Dictionary = institutions.request_budget(session.world, session.managed_club_id, "transfer", 100000)
-		app.call("_show_career")
-		app.call("_show_error", "Board request approved." if bool(result.get("approved", false)) else "Board request declined.")
+	for kind in ["transfer", "wage", "facilities"]:
+		_button(box, tr("Request %s budget" % kind) if kind == "transfer" else (tr("Request wage budget") if kind == "wage" else tr("Request facilities budget")), func():
+			var result: Dictionary = institutions.request_budget(session.world, session.managed_club_id, kind, 100000)
+			app.call("_show_career")
+			app.call("_show_error", "Board request approved." if bool(result.get("approved", false)) else "Board request declined.")
+		)
+	_button(box, tr("Approve stadium project"), func():
+		_report_command(institutions.approve_stadium(session.world, session.managed_club_id) if institutions.has_method("approve_stadium") else ERR_UNAVAILABLE)
 	)
-	_label(box, tr("Cash: %d   Debt: %d   Transfer budget: %d   Wage budget: %d") % [int(data.cash),int(data.debt),int(data.transfer_budget),int(data.wage_budget)])
-	for entry in data.ledger.slice(maxi(0, data.ledger.size()-20)):
-		_label(box, tr("%s  %s  %+d") % [String(entry.get("reference","")), String(entry.get("category","")), int(entry.get("amount",0))])
+	_label(box, tr("Cash: %d   Debt: %d   Transfer budget: %d   Wage budget: %d") % [int(data.cash), int(data.debt), int(data.transfer_budget), int(data.wage_budget)])
+	for entry in data.ledger.slice(maxi(0, data.ledger.size() - 20)):
+		_label(box, tr("%s  %s  %+d") % [String(entry.get("reference", "")), String(entry.get("category", "")), int(entry.get("amount", 0))])
+
+func _board_objectives() -> Array:
+	for club in session.world.get("clubs", []):
+		if String(club.get("id", "")) == session.managed_club_id:
+			return club.get("board", {}).get("objectives", [])
+	return []
+
+func _board_confidence() -> int:
+	for club in session.world.get("clubs", []):
+		if String(club.get("id", "")) == session.managed_club_id:
+			return int(club.get("board", {}).get("confidence", 60))
+	return 60
+
+func add_youth(tabs: TabContainer) -> void:
+	var box := _tab(tabs, tr("Youth Academy"))
+	_heading(box, tr("Intake preview"), 18)
+	var academy = load("res://simulation/players/youth_academy.gd").new()
+	var previews: Array = academy.intake_preview(session.world, session.managed_club_id, int(session.world.get("seed", 1)))
+	if previews.is_empty():
+		_label(box, tr("No prospects in this intake."))
+	for prospect in previews.slice(0, 12):
+		_label(box, "%s — %s — Ability %d" % [String(prospect.get("name", "?")), String(prospect.get("position", "?")), int(prospect.get("ability", prospect.get("current_ability", 0)))])
+		_button(box, tr("Promote to first team"), func():
+			academy.materialize_intake(session.world, session.managed_club_id, int(session.world.get("seed", 1)), 1)
+			app.call("_show_career")
+		)
+		break
 
 func add_search(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Search")
@@ -381,6 +438,13 @@ func _complete_offer(offer_id: String, player_id: String) -> void:
 	if demand.has("error"): return
 	command.complete_transfer(session.world, offer_id, int(demand.weekly_wage), int(demand.signing_bonus), int(demand.years_preferred), session.seed + int(session.world.get("day_index",0)))
 	app.call("_show_career")
+
+func _next_license(member: Dictionary) -> String:
+	var order := ["national_c", "national_b", "national_a", "continental_b", "continental_a", "pro"]
+	for license in order:
+		if String(license) not in member.get("licenses", []):
+			return String(license)
+	return "pro"
 
 func _tab(tabs: TabContainer, name: String) -> VBoxContainer:
 	var scroll := ScrollContainer.new(); scroll.name = name; scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -534,6 +598,21 @@ func _competition_qualification_text(competition: Dictionary) -> String:
 	if String(competition.get("competition_type", "")) == "knockout":
 		return "Single-elimination domestic cup."
 	return "Double round-robin league with promotion and relegation."
+
+func _competition_rules_text(competition: Dictionary) -> String:
+	var rules: Dictionary = competition.get("rules", {})
+	var parts: Array = []
+	parts.append("3 pts win" if int(competition.get("points_win", 3)) == 3 else "%d pts win" % int(competition.get("points_win", 3)))
+	if bool(rules.get("away_goals", competition.get("away_goals_rule", false))):
+		parts.append("away goals")
+	if bool(rules.get("seeded_draw", false)):
+		parts.append("seeded draw")
+	if String(rules.get("draw_restrictions", "")) != "":
+		parts.append(String(rules.get("draw_restrictions", "")))
+	return ", ".join(parts)
+
+func _yes_no(value) -> String:
+	return "Yes" if bool(value) else "No"
 
 func add_data_hub(tabs: TabContainer) -> void:
 	var box := _tab(tabs, "Data Hub")

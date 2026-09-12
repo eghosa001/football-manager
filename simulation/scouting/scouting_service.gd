@@ -91,22 +91,45 @@ func decay_knowledge(world: Dictionary, days: int = 7) -> Dictionary:
 func player_report(world: Dictionary, player: Dictionary, observer_quality: int, seed: int) -> Dictionary:
 	ensure_world(world)
 	var country_id := String(player.get("country_id", ""))
-	var country_bonus := float(world.country_knowledge.get(country_id,0.0))*0.25
-	var knowledge: float = clampf(maxf(maxf(float(world.scouting_knowledge.get(String(player.id),0.0)),observer_quality/100.0*0.5),country_bonus),0.0,1.0)
+	var country_bonus := float(world.country_knowledge.get(country_id, 0.0)) * 0.25
+	var scout_judgment := clampf(float(observer_quality) / 100.0, 0.15, 1.0)
+	var knowledge: float = clampf(maxf(maxf(float(world.scouting_knowledge.get(String(player.id), 0.0)), scout_judgment * 0.5), country_bonus), 0.0, 1.0)
 	var attrs: Dictionary = player.get("attributes", {})
 	var visible := {}
 	for name in attrs.keys():
-		var actual: int = int(attrs[name]); var uncertainty: int = int(round((1.0-knowledge)*12.0))
-		var noise: int = int(SeededRngClass.value_for(seed,_stable_key(String(player.id)+String(name)))%(uncertainty*2+1))-uncertainty if uncertainty > 0 else 0
-		var center := clampi(actual+noise,1,100)
-		visible[name] = {"min":clampi(center-uncertainty,1,100),"max":clampi(center+uncertainty,1,100),"exact":actual if knowledge >= 0.95 else null}
+		var actual: int = int(attrs[name]); var uncertainty: int = int(round((1.0 - knowledge) * (14.0 - scout_judgment * 6.0)))
+		var noise: int = int(SeededRngClass.value_for(seed, _stable_key(String(player.id) + String(name))) % (uncertainty * 2 + 1)) - uncertainty if uncertainty > 0 else 0
+		var center := clampi(actual + noise, 1, 100)
+		visible[name] = {"min": clampi(center - uncertainty, 1, 100), "max": clampi(center + uncertainty, 1, 100), "exact": actual if knowledge >= 0.95 else null}
 	var hidden_visible := {}
 	if knowledge >= 0.55:
-		for name in player.get("hidden_attributes",{}).keys():
+		for name in player.get("hidden_attributes", {}).keys():
 			var actual := int(player.hidden_attributes[name])
-			var spread := int(round((1.0-knowledge)*20.0))
-			hidden_visible[name] = {"min":clampi(actual-spread,1,100),"max":clampi(actual+spread,1,100),"exact":actual if knowledge>=0.92 else null}
-	return {"player_id":String(player.id),"knowledge":knowledge,"attributes":visible,"hidden_traits":hidden_visible,"ability_estimate":_range(int(player.get("current_ability",50)),knowledge),"potential_estimate":_range(int(player.get("development_ceiling",player.get("potential",50))),knowledge)}
+			var spread := int(round((1.0 - knowledge) * 20.0))
+			hidden_visible[name] = {"min": clampi(actual - spread, 1, 100), "max": clampi(actual + spread, 1, 100), "exact": actual if knowledge >= 0.92 else null}
+	var ability := int(player.get("current_ability", 50))
+	var potential := int(player.get("development_ceiling", player.get("potential", 50)))
+	return {"player_id": String(player.id), "knowledge": knowledge, "attributes": visible, "hidden_traits": hidden_visible, "ability_estimate": _range(ability, knowledge), "potential_estimate": _range(potential, knowledge), "ability_stars": _stars(ability, knowledge, scout_judgment, seed, String(player.id)), "potential_stars": _stars(potential, knowledge, scout_judgment, seed + 7, String(player.id)), "verdict": _verdict(ability, potential, knowledge)}
+
+func _stars(value: int, knowledge: float, judgment: float, seed: int, player_id: String) -> Dictionary:
+	var spread := (1.0 - knowledge) * (1.6 - judgment * 0.7)
+	var noise := (float(SeededRngClass.value_for(seed, _stable_key(player_id + "stars")) % 100) / 100.0 - 0.5) * 2.0 * spread
+	var stars := clampf((float(value) - 38.0) / 11.0 + noise, 0.5, 5.0)
+	stars = snappedf(stars * 2.0, 1.0) / 2.0
+	return {"stars": stars, "range": [snappedf(maxf(0.5, stars - spread), 0.5), snappedf(minf(5.0, stars + spread), 0.5)]}
+
+func _verdict(ability: int, potential: int, knowledge: float) -> String:
+	if knowledge < 0.35:
+		return "Insufficient knowledge"
+	if potential >= 78 and ability >= 62:
+		return "Elite prospect — prioritise"
+	if potential >= 70:
+		return "Strong prospect"
+	if ability >= 66:
+		return "First-team ready"
+	if ability >= 55:
+		return "Squad option"
+	return "Below required level"
 
 func analyst_report(world: Dictionary, player: Dictionary, observer_quality: int, seed: int) -> Dictionary:
 	var report := player_report(world,player,observer_quality,seed)

@@ -18,6 +18,7 @@ const StaffMarketClass = preload("res://simulation/staff/staff_market.gd")
 const StaffContractsClass = preload("res://simulation/staff/staff_contracts.gd")
 const StaffDevelopmentClass = preload("res://simulation/staff/staff_development.gd")
 const InternationalSeasonClass = preload("res://application/season/international_season.gd")
+const InternationalFootballClass = preload("res://simulation/competitions/international_football.gd")
 const AiTransferDirectorClass = preload("res://simulation/transfers/ai_transfer_director.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
 const NamePoolServiceClass = preload("res://application/career/name_pool_service.gd")
@@ -72,9 +73,11 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 			_events.emit(world, "RECORD_BROKEN", {"year":completed_year,"record":String(key),"value":world.history_archive.records.get(key)}, "history")
 	var economy_result: Dictionary = _economy.run_season_finances(world, completed_year, season_result.records)
 	_history_records.enrich_club_context(world, economy_result, completed_year)
-	var board_result: Dictionary = _board.evaluate_world(world, season_result.records)
-	var manager_market_result: Dictionary = _process_ai_manager_market(world, season_result.records, completed_year)
 	var next_year: int = int(season_result.next_season_year)
+	var payables_result: Dictionary = _economy_payables(world, next_year)
+	var board_result: Dictionary = _board.evaluate_world(world, season_result.records)
+	var takeover_result: Array = _run_takeovers(world, next_year, season_seed + 712_001)
+	var manager_market_result: Dictionary = _process_ai_manager_market(world, season_result.records, completed_year)
 	var stadium_projects: Array = _stadiums.advance_projects(world, next_year)
 	var loans_settled: Dictionary = _market.settle_loan_terms(world, next_year, season_seed + 700_006)
 	for signing in loans_settled.get("bought", []):
@@ -107,13 +110,54 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 			club.tactic = _tactics.ai_choose_tactic(world, String(club.id), opponent_id, season_seed + 800_001 + next_year)
 	var international_result: Dictionary = _international.run_year(world, completed_year, season_seed + 850_001)
 	world["international_history"] = world.get("international_history", [])
-	world.international_history.append({"year":completed_year,"champion_country_id":String(international_result.get("champion", "")),"qualified":international_result.get("qualified", []).duplicate()})
+	world.international_history.append({"year": completed_year, "champion_country_id": String(international_result.get("champion", "")), "qualified": international_result.get("qualified", []).duplicate()})
+	_run_youth_pathway(world, completed_year)
+	_run_staff_market(world, next_year, season_seed + 875_001)
 	var living_result: Dictionary = _living_world.advance_year(world, season_result.records, season_seed + 900_001)
 	var living_depth_result: Dictionary = _living_depth.advance_year(world, completed_year)
 	var reputation_result: Dictionary = _reputation.advance_year(world, season_result.records)
 	var happiness_result: Dictionary = _happiness.update_week(world)
-	_events.emit(world, "SEASON_ENDED", {"completed_year":completed_year,"next_year":next_year,"competition_records":season_result.records.duplicate(true),"promotion_movements":season_result.get("movements", []).duplicate(true),"international_champion":String(international_result.get("champion", ""))}, "career_cycle")
-	return {"season":season_result,"history_archive":history_result,"economy":economy_result,"board":board_result,"stadium_projects":stadium_projects,"lifecycle":lifecycle_result,"youth_quality":youth_quality_result,"contracts":contract_result,"staff_contracts":staff_contract_result,"staff_development":staff_development_result,"squads":squad_result,"ai_transfer_market":ai_market_result,"loans_settled":loans_settled,"registrations":registration_result,"living_world":living_result,"living_world_depth":living_depth_result,"reputation":reputation_result,"happiness":happiness_result,"manager_market":manager_market_result,"international":international_result,"loans_returned":loans_returned,"season_year":next_year}
+	_events.emit(world, "SEASON_ENDED", {"completed_year": completed_year, "next_year": next_year, "competition_records": season_result.records.duplicate(true), "promotion_movements": season_result.get("movements", []).duplicate(true), "international_champion": String(international_result.get("champion", ""))}, "career_cycle")
+	return {"season": season_result, "history_archive": history_result, "economy": economy_result, "payables": payables_result, "board": board_result, "takeovers": takeover_result, "stadium_projects": stadium_projects, "lifecycle": lifecycle_result, "youth_quality": youth_quality_result, "contracts": contract_result, "staff_contracts": staff_contract_result, "staff_development": staff_development_result, "squads": squad_result, "ai_transfer_market": ai_market_result, "loans_settled": loans_settled, "registrations": registration_result, "living_world": living_result, "living_world_depth": living_depth_result, "reputation": reputation_result, "happiness": happiness_result, "manager_market": manager_market_result, "international": international_result, "loans_returned": loans_returned, "season_year": next_year}
+
+func _run_takeovers(world: Dictionary, year: int, seed: int) -> Array:
+	var service = load("res://simulation/finance/board_supporter_service.gd").new()
+	if service.has_method("run_takeovers"):
+		var changed: Array = service.run_takeovers(world, year, seed)
+		for event in changed:
+			_events.emit(world, "OWNERSHIP_CHANGED", event, "board")
+		return changed
+	return []
+
+func _economy_payables(world: Dictionary, year: int) -> Dictionary:
+	return _market.settle_payables(world, year)
+
+func _run_youth_pathway(world: Dictionary, year: int) -> void:
+	# Lightweight pathway: single player scan assigns U17/U20/U23 levels and
+	# youth caps without 60 full-world selections per season.
+	var pathway = InternationalFootballClass.new()
+	var by_country := {}
+	for player in world.get("players", []):
+		if bool(player.get("retired", false)):
+			continue
+		var age := int(player.get("age", 99))
+		if age > 23:
+			continue
+		for country_id in pathway.eligible_countries(player):
+			if country_id == "":
+				continue
+			if not by_country.has(country_id):
+				by_country[country_id] = {"U23": 0, "U20": 0, "U17": 0}
+			var level := "U23" if age > 20 else ("U20" if age > 17 else "U17")
+			if int(by_country[country_id][level]) >= 20:
+				continue
+			by_country[country_id][level] = int(by_country[country_id][level]) + 1
+			player["youth_caps"] = int(player.get("youth_caps", 0)) + 1
+			player["international_level"] = level
+			break
+
+func _run_staff_market(world: Dictionary, year: int, seed: int) -> void:
+	_staff_market.run_staff_market(world, year, seed)
 
 func _process_ai_manager_market(world: Dictionary, records: Array, year: int) -> Dictionary:
 	var human_club_id := String(world.get("human_manager", {}).get("club_id", ""))

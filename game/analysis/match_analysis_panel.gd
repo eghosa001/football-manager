@@ -1,10 +1,13 @@
 class_name MatchAnalysisPanel
 extends Control
 
-const MODES := ["xG timeline", "Shot map", "Average positions", "Passing network", "Heat map", "Possession zones"]
+const AdvancedMatchAnalyticsClass = preload("res://game/analysis/advanced_match_analytics.gd")
+
+const MODES := ["xG timeline", "Shot map", "Average positions", "Passing network", "Heat map", "Possession zones", "Advanced"]
 
 var match_result: Dictionary = {}
 var analysis_mode := "xG timeline"
+var advanced_cache := {}
 
 func _init() -> void:
 	custom_minimum_size = Vector2(900, 360)
@@ -12,6 +15,7 @@ func _init() -> void:
 
 func set_result(result: Dictionary) -> void:
 	match_result = result.duplicate(true)
+	advanced_cache = AdvancedMatchAnalyticsClass.new().analyze(match_result.get("events", []))
 	queue_redraw()
 
 func set_analysis(mode: String) -> void:
@@ -31,6 +35,7 @@ func _draw() -> void:
 		"Passing network": _draw_passing_network()
 		"Heat map": _draw_heat_map()
 		"Possession zones": _draw_possession_zones()
+		"Advanced": _draw_advanced()
 
 func _plot_rect() -> Rect2:
 	return Rect2(Vector2(52,48), Vector2(maxf(100.0,size.x-76.0), maxf(100.0,size.y-76.0)))
@@ -100,11 +105,13 @@ func _draw_passing_network() -> void:
 	var averages := _average_positions()
 	var links := {}
 	for event in match_result.get("events", []):
-		if String(event.get("type","")) != "pass" or not bool(event.get("success",true)): continue
-		var from := String(event.get("player_id","")); var to := String(event.get("target_id",event.get("receiver_id","")))
-		if from=="" or to=="": continue
-		var side := String(event.get("side","home")); var key := "%s|%s|%s" % [side,from,to]
-		links[key] = int(links.get(key,0))+1
+		if String(event.get("type", "")) not in ["pass", "through_ball", "cross"] or not bool(event.get("success", true)):
+			continue
+		var from := String(event.get("player_id", "")); var to := String(event.get("target_id", event.get("receiver_id", "")))
+		if from == "" or to == "":
+			continue
+		var side := String(event.get("side", "home")); var key := "%s|%s|%s" % [side, from, to]
+		links[key] = int(links.get(key, 0)) + (2 if String(event.get("type", "")) != "pass" else 1)
 	for key in links.keys():
 		var parts := String(key).split("|"); if parts.size()!=3: continue
 		var side := String(parts[0]); var from := String(parts[1]); var to := String(parts[2])
@@ -157,6 +164,18 @@ func _average_positions() -> Dictionary:
 	return out
 
 func _pitch_point(rect: Rect2, pos: Dictionary) -> Vector2:
-	var x := float(pos.get("x",52.5)); var y := float(pos.get("y",34.0))
-	if x <= 1.01 and y <= 1.01: return Vector2(rect.position.x+clampf(x,0.0,1.0)*rect.size.x,rect.position.y+clampf(y,0.0,1.0)*rect.size.y)
-	return Vector2(rect.position.x+clampf(x/105.0,0.0,1.0)*rect.size.x,rect.position.y+clampf(y/68.0,0.0,1.0)*rect.size.y)
+	var x := float(pos.get("x", 52.5)); var y := float(pos.get("y", 34.0))
+	if x <= 1.01 and y <= 1.01:
+		return Vector2(rect.position.x + clampf(x, 0.0, 1.0) * rect.size.x, rect.position.y + clampf(y, 0.0, 1.0) * rect.size.y)
+	return Vector2(rect.position.x + clampf(x / 105.0, 0.0, 1.0) * rect.size.x, rect.position.y + clampf(y / 68.0, 0.0, 1.0) * rect.size.y)
+
+func _draw_advanced() -> void:
+	var y := 58.0
+	for side in ["home", "away"]:
+		var detail: Dictionary = advanced_cache.get(side, {})
+		var line := "%s  xA %.2f  xT %.2f  prog %d/%d  crosses %d  pressures %d  tilt %d  box %d" % [side.capitalize(), float(detail.get("xa", 0.0)), float(detail.get("xt", 0.0)), int(detail.get("progressive_passes", 0)), int(detail.get("progressive_carries", 0)), int(detail.get("crosses", 0)), int(detail.get("pressures", 0)), int(detail.get("field_tilt_actions", 0)), int(detail.get("passes_into_box", 0))]
+		draw_string(ThemeDB.fallback_font, Vector2(18, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
+		y += 22.0
+		var line2 := "  chances %d  SCA %d  deep %d  turnovers %d  set pieces %d" % [int(detail.get("chances_created", 0)), int(detail.get("shot_creating_actions", 0)), int(detail.get("deep_completions", 0)), int(detail.get("turnovers_won", 0)), int(detail.get("set_pieces", 0))]
+		draw_string(ThemeDB.fallback_font, Vector2(18, y), line2, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.8, 0.85, 0.9))
+		y += 26.0

@@ -30,27 +30,78 @@ func validate_seed(data: Dictionary) -> Array[String]:
 	var country_ids := {}
 	for country in data.get("countries", []):
 		var id := String(country.get("id", ""))
-		if id == "" or country_ids.has(id): errors.append("invalid/duplicate country id: %s" % id)
+		if id == "" or country_ids.has(id):
+			errors.append("invalid/duplicate country id: %s" % id)
 		country_ids[id] = true
+		if int(country.get("youth_rating", 50)) < 1 or int(country.get("youth_rating", 50)) > 100:
+			errors.append("youth rating out of range for %s" % id)
+		if int(country.get("population", 1_000_000)) <= 0:
+			errors.append("population must be positive for %s" % id)
+	var city_ids := {}
+	for city in data.get("cities", []):
+		var city_id := String(city.get("id", ""))
+		if city_id == "" or city_ids.has(city_id):
+			errors.append("invalid/duplicate city id: %s" % city_id)
+		city_ids[city_id] = true
+		if not country_ids.has(String(city.get("country_id", ""))):
+			errors.append("city references unknown country: %s" % city_id)
 	var templates := {}
 	for template in data.get("competition_templates", []):
 		var template_id := String(template.get("id", ""))
-		if template_id == "" or templates.has(template_id): errors.append("invalid/duplicate competition template: %s" % template_id)
+		if template_id == "" or templates.has(template_id):
+			errors.append("invalid/duplicate competition template: %s" % template_id)
 		templates[template_id] = template
-		if int(template.get("teams", 0)) < 2: errors.append("competition template requires at least two teams")
+		if int(template.get("teams", 0)) < 2:
+			errors.append("competition template requires at least two teams")
 	for system in data.get("league_systems", []):
 		var country_id := String(system.get("country_id", ""))
-		if not country_ids.has(country_id): errors.append("league system references unknown country: %s" % country_id)
+		if not country_ids.has(country_id):
+			errors.append("league system references unknown country: %s" % country_id)
 		var tier_names := {}
 		for tier in system.get("tiers", []):
 			var name := String(tier.get("name", ""))
-			if name == "" or tier_names.has(name): errors.append("invalid/duplicate tier name for %s: %s" % [country_id,name])
+			if name == "" or tier_names.has(name):
+				errors.append("invalid/duplicate tier name for %s: %s" % [country_id, name])
 			tier_names[name] = true
-			if not templates.has(String(tier.get("template", ""))): errors.append("tier references unknown template: %s" % String(tier.get("template", "")))
+			if not templates.has(String(tier.get("template", ""))):
+				errors.append("tier references unknown template: %s" % String(tier.get("template", "")))
 		var cup: Dictionary = system.get("cup", {})
-		if not cup.is_empty() and not templates.has(String(cup.get("template", ""))): errors.append("cup references unknown template: %s" % String(cup.get("template", "")))
+		if not cup.is_empty() and not templates.has(String(cup.get("template", ""))):
+			errors.append("cup references unknown template: %s" % String(cup.get("template", "")))
 	var registration: Dictionary = data.get("registration_defaults", {})
-	if int(registration.get("max_squad",0)) < int(registration.get("homegrown_required",0)): errors.append("homegrown requirement exceeds maximum squad size")
+	if int(registration.get("max_squad", 0)) < int(registration.get("homegrown_required", 0)):
+		errors.append("homegrown requirement exceeds maximum squad size")
+	if int(registration.get("max_squad", 25)) < 11:
+		errors.append("maximum squad size must cover a full lineup")
+	for pool in data.get("name_pools", []):
+		if not country_ids.has(String(pool.get("country_id", ""))):
+			errors.append("name pool references unknown country: %s" % String(pool.get("country_id", "")))
+		if (pool.get("first_names", []) as Array).is_empty() or (pool.get("last_names", []) as Array).is_empty():
+			errors.append("name pool missing names for %s" % String(pool.get("country_id", "")))
+	return errors
+
+func validate_world(world: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var club_ids := {}
+	for club in world.get("clubs", []):
+		var id := String(club.get("id", ""))
+		if id == "" or club_ids.has(id):
+			errors.append("invalid/duplicate club id: %s" % id)
+		club_ids[id] = true
+		if int(club.get("cash", 0)) < -20_000_000:
+			errors.append("club cash implausible: %s" % id)
+		if int(club.get("reputation", 50)) < 1 or int(club.get("reputation", 50)) > 100:
+			errors.append("club reputation out of range: %s" % id)
+	var player_ids := {}
+	for player in world.get("players", []):
+		var pid := String(player.get("id", ""))
+		if pid == "" or player_ids.has(pid):
+			errors.append("invalid/duplicate player id: %s" % pid)
+		player_ids[pid] = true
+		if String(player.get("club_id", "")) != "" and not club_ids.has(String(player.get("club_id", ""))):
+			errors.append("player references unknown club: %s" % pid)
+		if int(player.get("current_ability", 50)) < 1 or int(player.get("current_ability", 50)) > 100:
+			errors.append("ability out of range: %s" % pid)
 	return errors
 
 func template_by_id(data: Dictionary, template_id: String) -> Dictionary:

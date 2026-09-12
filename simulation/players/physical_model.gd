@@ -37,12 +37,30 @@ static func update(load: Dictionary, distance: float, speed: float, pressing: bo
 static func energy_factor(load: Dictionary) -> float:
 	return clampf(float(load.get("energy", 1.0)), MIN_ENERGY, 1.0)
 
-static func injury_risk(load: Dictionary, player: Dictionary, congestion: float = 1.0) -> float:
+static func injury_risk(load: Dictionary, player: Dictionary, congestion: float = 1.0, context: Dictionary = {}) -> float:
 	var proneness := float(player.get("hidden_attributes", {}).get("injury_proneness", 50))
 	var base := 0.002 + proneness / 22000.0
 	var fatigue := 1.0 - energy_factor(load)
 	var sprint := float(load.get("sprint_distance", 0.0)) / 900.0
-	return clampf((base + fatigue * 0.012 + sprint * 0.006) * congestion, 0.001, 0.06)
+	var age := int(player.get("age", 25))
+	var age_factor := 1.0 + maxf(0.0, float(age - 28)) * 0.045
+	var surface_factor := 1.0
+	match String(context.get("surface", "good")):
+		"poor":
+			surface_factor = 1.28
+		"wet":
+			surface_factor = 1.12
+		"hard":
+			surface_factor = 1.16
+	var recurrence := 1.0
+	var history: Array = player.get("injury_history", player.get("medical", {}).get("history", []))
+	var region := String(context.get("body_region", ""))
+	for prior in history.slice(maxi(0, history.size() - 4)):
+		if region != "" and String(prior.get("body_region", "")) != region:
+			continue
+		recurrence += float(prior.get("recurrence", 0.08)) * 0.30
+	var training_factor := 1.0 + clampf(float(context.get("training_load", 0.0)), 0.0, 1.0) * 0.25
+	return clampf(base * age_factor * surface_factor * recurrence * training_factor + fatigue * 0.012 + sprint * 0.006 * congestion, 0.001, 0.06)
 
 static func post_match_recovery(load: Dictionary, player: Dictionary, rest_days: int) -> Dictionary:
 	var recovery := clampi(rest_days, 0, 7) * 0.09

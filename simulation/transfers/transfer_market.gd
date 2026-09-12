@@ -9,13 +9,83 @@ var _ledger = LedgerClass.new()
 var _events = DomainEventBusClass.new()
 
 func player_value(player: Dictionary, season_year: int) -> int:
+	return estimated_value(player, {}, {}, season_year)
+
+func estimated_value(player: Dictionary, seller: Dictionary = {}, buyer: Dictionary = {}, season_year: int = 0) -> int:
 	if bool(player.get("retired", false)):
 		return 0
-	var ca: int = int(player.current_ability)
-	var upside: int = maxi(0, int(player.potential) - ca)
-	var age: int = int(player.age)
+	var ca: int = int(player.get("current_ability", 50))
+	var upside: int = maxi(0, int(player.get("potential", ca)) - ca)
+	var age: int = int(player.get("age", 24))
 	var peak_factor: float = 1.0 if age <= 28 else maxf(0.35, 1.0 - float(age - 28) * 0.08)
-	return maxi(5_000, int((ca * ca * 700 + upside * 45_000) * peak_factor))
+	if age <= 20:
+		peak_factor *= 1.18
+	elif age <= 23:
+		peak_factor *= 1.08
+	var base := float(ca * ca * 700 + upside * 45_000) * peak_factor
+	# Position scarcity: strikers and creative attackers cost more.
+	var scarcity := 1.0
+	match String(player.get("position", "MC")):
+		"ST":
+			scarcity = 1.22
+		"AMC", "AMR", "AML":
+			scarcity = 1.12
+		"GK":
+			scarcity = 0.88
+		"DC", "DM":
+			scarcity = 0.96
+	# Form / morale: in-form players carry a premium.
+	var form := clampf(float(player.get("form", 50)) / 50.0, 0.82, 1.25)
+	var morale := lerpf(0.94, 1.06, clampf(float(player.get("morale", 50)) / 100.0, 0.0, 1.0))
+	# Contract length: short contracts discount heavily.
+	var contract_factor := 1.0
+	if not seller.is_empty():
+		var years_left := _contract_years_left(player, season_year)
+		if years_left <= 0:
+			contract_factor = 0.45
+		elif years_left == 1:
+			contract_factor = 0.68
+		elif years_left == 2:
+			contract_factor = 0.86
+	# Reputation and club/league context.
+	var rep_factor := lerpf(0.85, 1.30, clampf(float(player.get("reputation", ca)) / 100.0, 0.0, 1.0))
+	var seller_factor := 1.0
+	if not seller.is_empty():
+		seller_factor = lerpf(0.92, 1.18, clampf(float(seller.get("reputation", 50)) / 100.0, 0.0, 1.0))
+		if String(seller.get("financial_status", "secure")) == "insecure":
+			seller_factor *= 0.88
+	var buyer_factor := 1.0
+	if not buyer.is_empty():
+		buyer_factor = lerpf(0.97, 1.12, clampf(float(buyer.get("reputation", 50)) / 100.0, 0.0, 1.0))
+	var trait_premium := 1.0 + float(player.get("traits", []).size()) * 0.02
+	return maxi(5_000, int(base * scarcity * form * morale * contract_factor * rep_factor * seller_factor * buyer_factor * trait_premium))
+
+func asking_price(player: Dictionary, seller: Dictionary, buyer: Dictionary, season_year: int, deadline_proximity: float = 0.0) -> int:
+	var estimate := float(estimated_value(player, seller, buyer, season_year))
+	var importance := clampf(float(player.get("squad_importance", 50)) / 100.0, 0.0, 1.0)
+	var happiness := clampf(float(player.get("happiness", 60)) / 100.0, 0.0, 1.0)
+	var seller_need := 1.0 + importance * 0.35 - (1.0 - happiness) * 0.18
+	if not seller.is_empty() and String(seller.get("financial_status", "secure")) == "secure":
+		seller_need *= 1.08
+	var rivalry := 1.0
+	if not seller.is_empty() and not buyer.is_empty() and _are_rivals(seller, buyer):
+		rivalry = 1.28
+	var deadline := 1.0 + clampf(deadline_proximity, 0.0, 1.0) * 0.22
+	return maxi(5_000, int(estimate * seller_need * rivalry * deadline))
+
+func _contract_years_left(player: Dictionary, season_year: int) -> int:
+	var contracts: Array = player.get("contracts", [])
+	if contracts.is_empty() and player.has("contract_end_year"):
+		return maxi(0, int(player.get("contract_end_year", season_year)) - season_year)
+	var best := 99
+	for contract in contracts:
+		best = mini(best, int(contract.get("end_year", season_year)) - season_year)
+	return best if best != 99 else 2
+
+func _are_rivals(seller: Dictionary, buyer: Dictionary) -> bool:
+	var a := String(seller.get("id", ""))
+	var b := String(buyer.get("id", ""))
+	return String(seller.get("rival_club_id", "")) == b or String(buyer.get("rival_club_id", "")) == a
 
 func recommended_wage(player: Dictionary) -> int:
 	return clampi(int(player.current_ability) * int(player.current_ability) * 5, 500, 60_000)
@@ -51,7 +121,7 @@ func negotiate_contract(player: Dictionary, club: Dictionary, offered_wage: int,
 	var tolerance: int = _rand_int(seed, _stable_key(String(player.id) + String(club.id)), 85, 110)
 	return offered_wage * 100 >= target * tolerance and offered_wage <= int(club.get("wage_budget", 250_000))
 
-func execute_transfer(world: Dictionary, player_id: String, buyer_id: String, fee: int, wage: int, years: int, season_year: int, seed: int) -> Error:
+func execute_transfer(world: Dictionary, player_id: String, buyer_id: String, fee: int, wage: int, years: int, season_year: int, seed: int, terms: Dictionary = {}) -> Error:
 	_ledger.ensure(world)
 	_events.ensure_world(world)
 	var player: Dictionary = _find_player(world.players, player_id)
@@ -61,21 +131,61 @@ func execute_transfer(world: Dictionary, player_id: String, buyer_id: String, fe
 	var seller_id: String = String(player.get("club_id", ""))
 	if seller_id == buyer_id:
 		return ERR_ALREADY_EXISTS
-	if fee < 0 or int(buyer.transfer_budget) < fee:
+	var instalments := clampi(int(terms.get("instalments", 1)), 1, 5)
+	var sell_on := clampf(float(terms.get("sell_on_pct", 0.0)), 0.0, 0.30)
+	var upfront := int(round(float(fee) / float(instalments)))
+	if fee < 0 or int(buyer.transfer_budget) < upfront:
 		return ERR_UNAVAILABLE
 	if not negotiate_contract(player, buyer, wage, years, seed):
 		return ERR_UNAUTHORIZED
 	var reference := "transfer-%s-%d" % [player_id, season_year]
-	_ledger.post(world, buyer_id, -fee, "transfer_fee", reference, season_year)
+	_pay_sell_on_chain(world, player, seller_id, fee, season_year)
+	_ledger.post(world, buyer_id, -upfront, "transfer_fee", reference, season_year)
 	if seller_id != "":
-		_ledger.post(world, seller_id, fee, "transfer_fee", reference, season_year)
+		_ledger.post(world, seller_id, upfront, "transfer_fee", reference, season_year)
+	if instalments > 1 and seller_id != "":
+		_ledger.schedule_payable(world, buyer_id, seller_id, fee - upfront, instalments - 1, "transfer_instalment", reference, season_year + 1)
+	# Agent fee + signing bonus move real money through the ledger, but only
+	# when the deal terms explicitly include them. Plain fee-only transfers
+	# (including legacy tests) keep exact fee accounting.
+	var agent_fee := maxi(0, int(terms.get("agent_fee", 0)))
+	if agent_fee == 0 and bool(terms.get("pay_agent_fee", false)):
+		agent_fee = _agent_fee_for(player, buyer, fee, seed)
+	if agent_fee > 0:
+		_ledger.post(world, buyer_id, -agent_fee, "agent_fee", "agent-%s-%d" % [player_id, season_year], season_year)
+	var signing_bonus := maxi(0, int(terms.get("signing_bonus", 0)))
+	if signing_bonus > 0:
+		_ledger.post(world, buyer_id, -signing_bonus, "signing_bonus", "signing-%s-%d" % [player_id, season_year], season_year)
 	player.club_id = buyer_id
 	player.erase("loan_parent_club_id")
 	player.erase("loan_end_year")
-	_upsert_contract(world, player_id, buyer_id, season_year, season_year + years, wage)
-	_events.emit(world, "PLAYER_SIGNED", {"player_id":player_id,"buyer_id":buyer_id,"seller_id":seller_id,"fee":fee,"transfer_type":"permanent","season_year":season_year}, "transfer_market")
-	_events.emit(world, "CONTRACT_SIGNED", {"player_id":player_id,"club_id":buyer_id,"start_year":season_year,"end_year":season_year+years,"weekly_wage":wage,"renewal":false}, "transfer_market")
+	player["sell_on_pct"] = sell_on
+	player["sell_on_beneficiary"] = seller_id
+	_upsert_contract(world, player_id, buyer_id, season_year, season_year + years, wage, terms)
+	_events.emit(world, "PLAYER_SIGNED", {"player_id": player_id, "buyer_id": buyer_id, "seller_id": seller_id, "fee": fee, "upfront": upfront, "instalments": instalments, "sell_on_pct": sell_on, "transfer_type": "permanent", "season_year": season_year}, "transfer_market")
+	_events.emit(world, "CONTRACT_SIGNED", {"player_id": player_id, "club_id": buyer_id, "start_year": season_year, "end_year": season_year + years, "weekly_wage": wage, "renewal": false}, "transfer_market")
 	return OK
+
+func _pay_sell_on_chain(world: Dictionary, player: Dictionary, seller_id: String, fee: int, season_year: int) -> void:
+	var beneficiary := String(player.get("sell_on_beneficiary", ""))
+	var pct := float(player.get("sell_on_pct", 0.0))
+	if beneficiary == "" or pct <= 0.0 or fee <= 0:
+		return
+	var due := int(round(float(fee) * pct))
+	var reference := "sellon-%s-%d" % [String(player.get("id", "")), season_year]
+	# Beneficiary is paid from the seller's proceeds; seller keeps the rest.
+	_ledger.post(world, seller_id, -due, "sell_on_fee", reference, season_year)
+	_ledger.post(world, beneficiary, due, "sell_on_fee", reference, season_year)
+	_events.emit(world, "SELL_ON_PAID", {"player_id": String(player.get("id", "")), "beneficiary_id": beneficiary, "seller_id": seller_id, "fee": fee, "due": due, "season_year": season_year}, "transfer_market")
+
+func _agent_fee_for(player: Dictionary, buyer: Dictionary, fee: int, seed: int) -> int:
+	var greed := float(player.get("hidden_attributes", {}).get("greed", player.get("hidden_attributes", {}).get("ambition", 50)))
+	var base := float(fee) * (0.03 + greed / 2500.0)
+	# Agent who dislikes the buyer charges more; good relationship discounts.
+	var agent: Dictionary = player.get("agent", {})
+	var rel := float(agent.get("club_relationships", {}).get(String(buyer.get("id", "")), 0))
+	base *= clampf(1.0 - rel / 400.0, 0.85, 1.25)
+	return maxi(0, int(round(base)))
 
 func execute_loan(world: Dictionary, player_id: String, borrower_id: String, fee: int, season_year: int, terms: Dictionary = {}) -> Error:
 	_ledger.ensure(world)
@@ -149,6 +259,10 @@ func return_expired_loans(world: Dictionary, season_year: int) -> int:
 			player.erase("loan_end_year")
 			count += 1
 	return count
+
+func settle_payables(world: Dictionary, season_year: int) -> Dictionary:
+	_ledger.ensure(world)
+	return _ledger.settle_due_payables(world, season_year)
 
 func rebalance_ai_squads(world: Dictionary, season_year: int, seed: int, min_squad: int = 20, max_squad: int = 30) -> Dictionary:
 	_ledger.ensure(world)
@@ -252,15 +366,30 @@ func _squad(players: Array, club_id: String) -> Array:
 			result.append(player)
 	return result
 
-func _upsert_contract(world: Dictionary, player_id: String, club_id: String, start_year: int, end_year: int, wage: int) -> void:
+func _upsert_contract(world: Dictionary, player_id: String, club_id: String, start_year: int, end_year: int, wage: int, terms: Dictionary = {}) -> void:
+	var clauses := {
+		"signing_bonus": maxi(0, int(terms.get("signing_bonus", 0))),
+		"release_clause": maxi(0, int(terms.get("release_clause", 0))),
+		"extension_option": bool(terms.get("extension_option", false)),
+		"promotion_rise_pct": clampf(float(terms.get("promotion_rise_pct", 0.0)), 0.0, 0.5),
+		"relegation_drop_pct": clampf(float(terms.get("relegation_drop_pct", 0.0)), 0.0, 0.5),
+		"squad_status": String(terms.get("squad_status", "squad")),
+		"appearance_bonus": maxi(0, int(terms.get("appearance_bonus", 0))),
+		"goal_bonus": maxi(0, int(terms.get("goal_bonus", 0))),
+	}
 	for contract in world.contracts:
 		if String(contract.player_id) == player_id:
 			contract.club_id = club_id
 			contract.start_year = start_year
 			contract.end_year = end_year
 			contract.weekly_wage = wage
+			for key in clauses.keys():
+				contract[key] = clauses[key]
 			return
-	world.contracts.append({"id": "contract-" + player_id, "player_id": player_id, "club_id": club_id, "start_year": start_year, "end_year": end_year, "weekly_wage": wage})
+	var row := {"id": "contract-" + player_id, "player_id": player_id, "club_id": club_id, "start_year": start_year, "end_year": end_year, "weekly_wage": wage}
+	for key in clauses.keys():
+		row[key] = clauses[key]
+	world.contracts.append(row)
 
 func _find_player(players: Array, player_id: String) -> Dictionary:
 	for player in players:

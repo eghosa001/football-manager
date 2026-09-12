@@ -8,13 +8,15 @@ func ensure_world(world: Dictionary) -> void:
 
 func make_promise(world: Dictionary, player_id: String, promise_type: String, target_value: int, deadline_day: int) -> Dictionary:
 	ensure_world(world)
+	if promise_type not in ["playing_time", "morale", "training", "captaincy", "transfer", "position", "wage_rise"]:
+		return {"error": ERR_INVALID_PARAMETER}
 	var promise := {
-		"id":"promise-%s-%d" % [player_id, world.player_promises.size() + 1],
-		"player_id":player_id,
-		"type":promise_type,
-		"target_value":target_value,
-		"deadline_day":deadline_day,
-		"status":"active"
+		"id": "promise-%s-%d" % [player_id, world.player_promises.size() + 1],
+		"player_id": player_id,
+		"type": promise_type,
+		"target_value": target_value,
+		"deadline_day": deadline_day,
+		"status": "active"
 	}
 	world.player_promises.append(promise)
 	return promise
@@ -58,6 +60,10 @@ func _fulfilled(player: Dictionary, promise: Dictionary) -> bool:
 		"playing_time": return int(player.get("season_appearances", 0)) >= int(promise.get("target_value", 0))
 		"morale": return int(player.get("morale", 0)) >= int(promise.get("target_value", 0))
 		"training": return int(player.get("current_ability", 0)) >= int(promise.get("target_value", 0))
+		"captaincy": return String(player.get("captain", player.get("is_captain", false))) == "true" or bool(player.get("captain", false)) or bool(player.get("is_captain", false))
+		"transfer": return String(player.get("club_id", "")) != String(promise.get("from_club_id", player.get("club_id", "")))
+		"position": return String(player.get("position", "")) == String(promise.get("target_position", player.get("position", "")))
+		"wage_rise": return int(player.get("weekly_wage", 0)) >= int(promise.get("target_value", 0))
 		_: return false
 
 func _player(world: Dictionary, player_id: String) -> Dictionary:

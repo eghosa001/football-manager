@@ -166,11 +166,97 @@ func _refresh_records(world: Dictionary) -> void:
 		if int(player_totals[player_id].assists) > assists:
 			assists_player = String(player_id)
 			assists = int(player_totals[player_id].assists)
-	records["most_decorated_club"] = {"club_id":top_club,"titles":maxi(0,top_titles)}
-	records["most_appearances"] = {"player_id":appearance_player,"appearances":maxi(0,appearances)}
-	records["most_goals"] = {"player_id":goals_player,"goals":maxi(0,goals)}
-	records["most_assists"] = {"player_id":assists_player,"assists":maxi(0,assists)}
+	records["most_decorated_club"] = {"club_id": top_club, "titles": maxi(0, top_titles)}
+	records["most_appearances"] = {"player_id": appearance_player, "appearances": maxi(0, appearances)}
+	records["most_goals"] = {"player_id": goals_player, "goals": maxi(0, goals)}
+	records["most_assists"] = {"player_id": assists_player, "assists": maxi(0, assists)}
+	records["biggest_victory"] = _biggest_victory(world)
+	records["longest_unbeaten"] = _longest_unbeaten(world)
+	records["transfer_record"] = _transfer_record(world)
+	records["hall_of_fame"] = _hall_of_fame(world, player_totals)
+	records["manager_records"] = _manager_records(world)
 	world.history_archive.records = records
+
+func _biggest_victory(world: Dictionary) -> Dictionary:
+	var best := {"margin": -1}
+	for fixture in world.get("fixtures", []):
+		if not bool(fixture.get("played", false)):
+			continue
+		var margin: int = abs(int(fixture.get("home_goals", 0)) - int(fixture.get("away_goals", 0)))
+		if margin > int(best.get("margin", -1)):
+			best = {"margin": margin, "home_club_id": String(fixture.get("home_club_id", "")), "away_club_id": String(fixture.get("away_club_id", "")), "home_goals": int(fixture.get("home_goals", 0)), "away_goals": int(fixture.get("away_goals", 0)), "competition_id": String(fixture.get("competition_id", "")), "date": String(fixture.get("date", ""))}
+	return best
+
+func _longest_unbeaten(world: Dictionary) -> Dictionary:
+	var streaks := {}
+	var best := {"club_id": "", "matches": 0}
+	for fixture in world.get("fixtures", []):
+		if not bool(fixture.get("played", false)):
+			continue
+		for side in ["home_club_id", "away_club_id"]:
+			var club_id := String(fixture.get(side, ""))
+			if club_id == "":
+				continue
+			if not streaks.has(club_id):
+				streaks[club_id] = 0
+			var gf: int = int(fixture.get("home_goals", 0)) if side == "home_club_id" else int(fixture.get("away_goals", 0))
+			var ga: int = int(fixture.get("away_goals", 0)) if side == "home_club_id" else int(fixture.get("home_goals", 0))
+			if gf >= ga:
+				streaks[club_id] = int(streaks[club_id]) + 1
+				if int(streaks[club_id]) > int(best.get("matches", 0)):
+					best = {"club_id": club_id, "matches": int(streaks[club_id])}
+			else:
+				streaks[club_id] = 0
+	return best
+
+func _transfer_record(world: Dictionary) -> Dictionary:
+	var best := {"fee": 0}
+	for entry in world.get("ledger", []):
+		if String(entry.get("category", entry.get("type", ""))) != "transfer_fee":
+			continue
+		if int(entry.get("amount", 0)) <= 0:
+			continue
+		if int(entry.get("amount", 0)) > int(best.get("fee", 0)):
+			best = {"fee": int(entry.get("amount", 0)), "club_id": String(entry.get("club_id", "")), "reference": String(entry.get("reference", entry.get("id", ""))), "season_year": int(entry.get("season_year", entry.get("year", 0)))}
+	return best
+
+func _hall_of_fame(world: Dictionary, player_totals: Dictionary) -> Array:
+	var rows: Array = []
+	for player_id in player_totals.keys():
+		var totals: Dictionary = player_totals[player_id]
+		var score := float(totals.get("appearances", 0)) * 0.5 + float(totals.get("goals", 0)) * 1.4 + float(totals.get("assists", 0)) * 0.9
+		rows.append({"player_id": player_id, "score": score, "appearances": int(totals.get("appearances", 0)), "goals": int(totals.get("goals", 0)), "assists": int(totals.get("assists", 0))})
+	rows.sort_custom(func(a: Dictionary, b: Dictionary): return float(a.get("score", 0.0)) > float(b.get("score", 0.0)))
+	return rows.slice(0, mini(25, rows.size()))
+
+func _manager_records(world: Dictionary) -> Dictionary:
+	var matches := {}
+	var wins := {}
+	var trophies := {}
+	for career in world.get("manager_careers", []):
+		var career_id := String(career.get("manager_id", ""))
+		matches[career_id] = int(career.get("matches", career.get("seasons", 0)) * 38)
+		wins[career_id] = int(career.get("wins", 0))
+		trophies[career_id] = int(career.get("trophies", 0))
+	for row in world.history_archive.get("clubs", []):
+		var manager_id := String(row.get("manager_id", ""))
+		if manager_id == "":
+			continue
+		matches[manager_id] = int(matches.get(manager_id, 0)) + int(row.get("played", 0))
+		wins[manager_id] = int(wins.get(manager_id, 0)) + int(row.get("won", 0))
+	var best_matches := {"manager_id": "", "matches": 0}
+	var best_wins := {"manager_id": "", "wins": 0}
+	var best_trophies := {"manager_id": "", "trophies": 0}
+	for manager_id in matches.keys():
+		if int(matches[manager_id]) > int(best_matches.get("matches", 0)):
+			best_matches = {"manager_id": manager_id, "matches": int(matches[manager_id])}
+	for manager_id in wins.keys():
+		if int(wins[manager_id]) > int(best_wins.get("wins", 0)):
+			best_wins = {"manager_id": manager_id, "wins": int(wins[manager_id])}
+	for manager_id in trophies.keys():
+		if int(trophies[manager_id]) > int(best_trophies.get("trophies", 0)):
+			best_trophies = {"manager_id": manager_id, "trophies": int(trophies[manager_id])}
+	return {"most_matches": best_matches, "most_wins": best_wins, "most_trophies": best_trophies}
 
 func _manager_id(world: Dictionary, club_id: String) -> String:
 	for member in world.get("staff", []):

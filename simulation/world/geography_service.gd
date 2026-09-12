@@ -41,8 +41,25 @@ func distance_km(world: Dictionary, city_a: String, city_b: String) -> float:
 	return distance
 
 func travel_effects(world: Dictionary, home_club: Dictionary, away_club: Dictionary) -> Dictionary:
-	var km := distance_km(world,String(home_club.get("city_id","")),String(away_club.get("city_id","")))
-	return {"distance_km":km,"away_fatigue":clampf(km/4000.0,0.0,0.30),"supporter_travel_factor":clampf(1.0-km/5000.0,0.15,1.0)}
+	var km := distance_km(world, String(home_club.get("city_id", "")), String(away_club.get("city_id", "")))
+	var timezone := absf(float(_city(world.cities, String(home_club.get("city_id", ""))).get("longitude", 0.0)) - float(_city(world.cities, String(away_club.get("city_id", ""))).get("longitude", 0.0))) / 15.0
+	return {"distance_km": km, "away_fatigue": clampf(km / 4000.0 + timezone * 0.02, 0.0, 0.38), "timezone_hours": timezone, "supporter_travel_factor": clampf(1.0 - km / 5000.0, 0.15, 1.0)}
+
+func apply_travel_fatigue(world: Dictionary, away_club: Dictionary, effects: Dictionary) -> int:
+	var affected := 0
+	var penalty := float(effects.get("away_fatigue", 0.0)) * 22.0
+	for player in world.get("players", []):
+		if String(player.get("club_id", "")) != String(away_club.get("id", "")) or bool(player.get("retired", false)):
+			continue
+		player["fitness"] = clampi(int(player.get("fitness", 100)) - int(round(penalty)), 25, 100)
+		affected += 1
+	return affected
+
+func youth_modifier_for(world: Dictionary, club: Dictionary) -> float:
+	for region in world.get("regions", []):
+		if String(region.get("id", "")) == String(club.get("region_id", "")):
+			return clampf(float(region.get("youth_modifier", 1.0)), 0.5, 1.5)
+	return 1.0
 
 func local_rivalry_score(world: Dictionary, club_a: Dictionary, club_b: Dictionary) -> float:
 	var same_city := String(club_a.get("city_id","")) != "" and String(club_a.get("city_id","")) == String(club_b.get("city_id",""))

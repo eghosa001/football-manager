@@ -14,7 +14,7 @@ var value_input: LineEdit
 var notice: Label
 var _catalog: Dictionary = {}
 var _full_world: Dictionary = {}
-var _collections := ["clubs", "countries", "players", "staff", "competitions"]
+var _collections := ["clubs", "countries", "players", "staff", "competitions", "stadiums", "name_pools"]
 
 func _init(owner_app: Control, current: Dictionary = {}) -> void:
 	app = owner_app
@@ -93,8 +93,9 @@ func show() -> void:
 	box.add_child(graphic_path)
 	var graphic_row := HBoxContainer.new()
 	box.add_child(graphic_row)
-	app.call("_add_button", graphic_row, tr("Set graphic override"), _set_graphic.bind(graphic_entity, graphic_key, graphic_path))
+	app.call("_add_button", graphic_row, tr("Set graphic override"), _set_graphic.bind(graphic_entity, graphic_key, graphic_path, null))
 	app.call("_add_button", graphic_row, tr("Clear entity graphics"), _clear_graphics.bind(graphic_entity))
+	app.call("_add_button", graphic_row, tr("Preview graphic"), _preview_graphic.bind(graphic_path, null))
 
 	notice = Label.new()
 	notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -249,7 +250,7 @@ func _remove_name_pool(country: LineEdit) -> void:
 	mod.get("names", {}).erase(country_id)
 	_update_notice()
 
-func _set_graphic(entity: LineEdit, key: OptionButton, path: LineEdit) -> void:
+func _set_graphic(entity: LineEdit, key: OptionButton, path: LineEdit, _preview: Variant = null) -> void:
 	var id := entity.text.strip_edges()
 	var value := path.text.strip_edges()
 	if id == "" or value == "":
@@ -267,6 +268,23 @@ func _set_graphic(entity: LineEdit, key: OptionButton, path: LineEdit) -> void:
 	mod = candidate
 	path.text = ""
 	_update_notice()
+
+func _preview_graphic(path: LineEdit, _unused: Variant = null) -> void:
+	var value := path.text.strip_edges()
+	if value == "":
+		notice.text = tr("Enter a graphic path to preview.")
+		return
+	if value.contains("..") or value.begins_with("/") or value.contains(":\\"):
+		notice.text = tr("Preview rejected: unsafe path.")
+		return
+	if not ResourceLoader.exists(value):
+		notice.text = tr("Preview: file not found in project — pack it inside the mod package.")
+		return
+	var texture = load(value)
+	if texture is Texture2D:
+		notice.text = tr("Preview loaded: %s (%dx%d)") % [value, int(texture.get_width()), int(texture.get_height())]
+	else:
+		notice.text = tr("Preview rejected: not a readable image.")
 
 func _clear_graphics(entity: LineEdit) -> void:
 	var id := entity.text.strip_edges()
@@ -294,7 +312,12 @@ func _update_notice() -> void:
 	for collection in _collections:
 		patched += mod.get("patches", {}).get(collection, []).size()
 		added += mod.get("additions", {}).get(collection, []).size()
+	var meta: Dictionary = mod.get("metadata", {})
+	var deps: Array = meta.get("dependencies", [])
+	var conflicts: Array = meta.get("conflicts", [])
 	notice.text = tr("%d patched • %d added • %d name pools • %d graphic override sets") % [patched, added, mod.get("names", {}).size(), mod.get("graphics", {}).size()]
+	if not deps.is_empty() or not conflicts.is_empty():
+		notice.text += "\n" + tr("Depends: %s   Conflicts: %s") % [", ".join(deps) if not deps.is_empty() else "-", ", ".join(conflicts) if not conflicts.is_empty() else "-"]
 
 func _file_dialog(saving: bool) -> void:
 	var dialog := FileDialog.new()

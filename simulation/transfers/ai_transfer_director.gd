@@ -45,25 +45,72 @@ func run_season_market(world: Dictionary, season_year: int, seed: int) -> Dictio
 
 func _attempt_signing(world: Dictionary, buyer: Dictionary, player: Dictionary, market: RefCounted, season_year: int, seed: int) -> Dictionary:
 	var buyer_id := String(buyer.get("id", ""))
+	var agent_block := _agent_block(world, player, buyer)
+	if String(agent_block.get("blocked", "")) != "":
+		return {"status": "rejected_agent", "buyer_id": buyer_id, "player_id": String(player.get("id", "")), "reason": String(agent_block.blocked)}
 	var value := int(market.player_value(player, season_year))
 	var fee := _affordable_fee(buyer, value, seed)
 	if fee <= 0:
 		return {"status": "skipped_budget", "buyer_id": buyer_id, "player_id": String(player.get("id", ""))}
+	fee = int(round(float(fee) * float(agent_block.get("fee_multiplier", 1.0))))
 	var wage := int(market.recommended_wage(player))
+	wage = int(round(float(wage) * float(agent_block.get("wage_multiplier", 1.0))))
 	if not market.negotiate_contract(player, buyer, wage, 3, seed):
 		# Try one step down: younger/cheaper wage still respects the structure.
 		wage = int(wage * 0.9)
 		if not market.negotiate_contract(player, buyer, wage, 3, seed + 5):
 			return {"status": "rejected_contract", "buyer_id": buyer_id, "player_id": String(player.get("id", "")), "fee": fee}
 	var negotiation = NegotiationClass.new()
-	var offer: Dictionary = negotiation.create_offer(world, player, buyer, fee, {"instalments": 1, "squad_status": "rotation"})
+	var offer: Dictionary = negotiation.create_offer(world, player, buyer, fee, {"instalments": 2 if fee >= 2_000_000 else 1, "squad_status": "rotation", "pay_agent_fee": true, "agent_fee": _agent_fee_estimate(player, fee)})
 	var status := negotiation.evaluate_offer(world, offer, seed)
 	if status != "accepted":
 		return {"status": "rejected_fee", "buyer_id": buyer_id, "player_id": String(player.get("id", "")), "fee": fee, "offer_id": String(offer.get("id", ""))}
-	var err: Error = market.execute_transfer(world, String(player.get("id", "")), buyer_id, fee, wage, 3, season_year, seed)
+	var err: Error = market.execute_transfer(world, String(player.get("id", "")), buyer_id, fee, wage, 3, season_year, seed, {"instalments": 2 if fee >= 2_000_000 else 1, "pay_agent_fee": true, "agent_fee": _agent_fee_estimate(player, fee)})
 	if err != OK:
 		return {"status": "failed_execution", "buyer_id": buyer_id, "player_id": String(player.get("id", "")), "fee": fee, "error": err}
+	_record_agent_deal(world, player, buyer, fee, season_year)
 	return {"status": "completed", "buyer_id": buyer_id, "seller_id": String(offer.get("seller_id", "")), "player_id": String(player.get("id", "")), "fee": fee, "wage": wage, "offer_id": String(offer.get("id", ""))}
+
+func _agent_block(world: Dictionary, player: Dictionary, buyer: Dictionary) -> Dictionary:
+	var buyer_id := String(buyer.get("id", ""))
+	var agent_id := String(player.get("agent_id", ""))
+	var fee_multiplier := 1.0
+	var wage_multiplier := 1.0
+	if agent_id == "":
+		return {"blocked": "", "fee_multiplier": fee_multiplier, "wage_multiplier": wage_multiplier}
+	for agent in world.get("agents", []):
+		if String(agent.get("id", "")) != agent_id:
+			continue
+		var club_rel := float(agent.get("club_relationships", {}).get(buyer_id, 0.0))
+		var greed := float(agent.get("greed", 60))
+		if buyer_id in agent.get("conflicts", []):
+			return {"blocked": "agent_conflict", "fee_multiplier": 1.0, "wage_multiplier": 1.0}
+		if club_rel < -45.0:
+			return {"blocked": "agent_relationship", "fee_multiplier": 1.0, "wage_multiplier": 1.0}
+		# Preferred clubs get a small discount; hostile agents inflate.
+		for preferred in agent.get("preferred_clubs", []):
+			if String(preferred) == buyer_id:
+				fee_multiplier *= 0.94
+				wage_multiplier *= 0.96
+		fee_multiplier *= 1.0 + (greed - 55.0) / 420.0 - club_rel / 900.0
+		wage_multiplier *= 1.0 + (greed - 55.0) / 520.0 - club_rel / 1100.0
+		break
+	return {"blocked": "", "fee_multiplier": clampf(fee_multiplier, 0.9, 1.30), "wage_multiplier": clampf(wage_multiplier, 0.9, 1.25)}
+
+func _agent_fee_estimate(player: Dictionary, fee: int) -> int:
+	var greed := float(player.get("hidden_attributes", {}).get("greed", 55))
+	return maxi(0, int(round(float(fee) * (0.03 + greed / 2500.0))))
+
+func _record_agent_deal(world: Dictionary, player: Dictionary, buyer: Dictionary, fee: int, season_year: int) -> void:
+	var agent_id := String(player.get("agent_id", ""))
+	if agent_id == "":
+		return
+	for agent in world.get("agents", []):
+		if String(agent.get("id", "")) == agent_id:
+			agent.club_relationships[String(buyer.get("id", ""))] = clampf(float(agent.get("club_relationships", {}).get(String(buyer.get("id", "")), 0.0)) + 3.0, -100.0, 100.0)
+			world["agent_history"] = world.get("agent_history", [])
+			world.agent_history.append({"type": "negotiation", "agent_id": agent_id, "club_id": String(buyer.get("id", "")), "outcome": "accepted", "value": fee, "season_year": season_year})
+			break
 
 func _affordable_fee(buyer: Dictionary, value: int, seed: int) -> int:
 	var budget := int(buyer.get("transfer_budget", 0))

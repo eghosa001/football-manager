@@ -22,8 +22,9 @@ const CAREER_TABS := [
 	{"id":"schedule","title":"Schedule","builder":"add_schedule","owner":"views"},
 	{"id":"competitions","title":"Competitions","builder":"add_competitions","owner":"views"},
 	{"id":"inbox","title":"Inbox","builder":"_add_inbox_tab","owner":"app"},
-	{"id":"staff","title":"Staff","builder":"add_staff","owner":"views"},
-	{"id":"finances","title":"Finances","builder":"add_finances","owner":"views"},
+	{"id": "staff", "title": "Staff", "builder": "add_staff", "owner": "views"},
+	{"id": "youth", "title": "Youth Academy", "builder": "add_youth", "owner": "views"},
+	{"id": "finances", "title": "Finances", "builder": "add_finances", "owner": "views"},
 	{"id":"search","title":"Search","builder":"add_search","owner":"views"},
 	{"id":"match_analysis","title":"Match Analysis","builder":"add_match_analysis","owner":"views"},
 ]

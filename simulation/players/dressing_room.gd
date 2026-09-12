@@ -39,16 +39,42 @@ func apply_event(world: Dictionary, club_id: String, event: String, subject_id: 
 	var delta := 0.0
 	match event:
 		"captain_sold": delta = -8.0
+		"captain_changed": delta = -2.0
 		"big_win": delta = 4.0
 		"heavy_loss": delta = -5.0
 		"team_meeting_positive": delta = 3.0
 		"broken_promise": delta = -7.0
 		"new_contract": delta = 1.5
+		"transfer_request": delta = -4.0
+		"marquee_signing": delta = 3.5
+		"derby_win": delta = 5.0
+		"derby_loss": delta = -6.0
 	room.atmosphere = clampf(float(room.get("atmosphere", 70.0)) + delta, 0.0, 100.0)
-	if subject_id != "": room["last_subject_id"] = subject_id
+	if subject_id != "":
+		room["last_subject_id"] = subject_id
+	_propagate_mood(world, club_id, room, delta)
 	room["last_event"] = event
 	world.dressing_rooms[club_id] = room
 	return room
+
+func _propagate_mood(world: Dictionary, club_id: String, room: Dictionary, delta: float) -> void:
+	# Leaders amplify atmosphere shifts; young players follow. Selling a
+	# captain upsets his social group first, then the wider squad.
+	if is_zero_approx(delta):
+		return
+	var leaders: Array = room.get("leaders", []) + room.get("highly_influential", [])
+	var weight := clampf(absf(delta) / 8.0, 0.25, 1.0)
+	for player in world.get("players", []):
+		if String(player.get("club_id", "")) != club_id or bool(player.get("retired", false)):
+			continue
+		var id := String(player.get("id", ""))
+		var factor := 1.0
+		if id in leaders:
+			factor = 0.6
+		elif int(player.get("age", 24)) <= 21:
+			factor = 1.35
+		var shift := delta * weight * factor * 0.45
+		player["morale"] = clampi(int(player.get("morale", 60)) + int(round(shift)), 0, 100)
 
 func _social_groups(squad: Array) -> Array:
 	var groups := {"senior":[],"prime":[],"young":[]}

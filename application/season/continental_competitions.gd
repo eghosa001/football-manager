@@ -13,6 +13,7 @@ const TIERS := [
 	{"suffix": "champions", "label": "Champions Cup", "places": [0, 4], "tier": 1},
 	{"suffix": "shield", "label": "Shield Cup", "places": [4, 8], "tier": 2},
 	{"suffix": "plate", "label": "Plate Cup", "places": [8, 12], "tier": 3},
+	{"suffix": "plate_qualifying", "label": "Plate Qualifying", "places": [12, 16], "tier": 3},
 ]
 
 const CLUB_WORLD_CUP_ID := "global-club-world-cup"
@@ -47,7 +48,11 @@ func prepare(world: Dictionary, records: Array = []) -> void:
 			target["continental_region"] = region
 			target["continental_tier"] = int(tier_def.tier)
 			target["qualification"] = "Tier %d: league places %d-%d per region; reputation used for the first season, table position afterwards." % [int(tier_def.tier), lo + 1, hi]
+			if String(tier_def.suffix) == "plate_qualifying":
+				target["qualifying_round"] = true
+				target["qualifiers_to"] = "continental-%s-plate" % region
 	_ensure_club_world_cup(world)
+	_apply_qualification_cascade(world, records)
 
 func club_world_cup_entrants(world: Dictionary) -> Array:
 	var entrants: Array = []
@@ -71,6 +76,21 @@ func club_world_cup_entrants(world: Dictionary) -> Array:
 
 func refresh_club_world_cup(world: Dictionary) -> Dictionary:
 	return _ensure_club_world_cup(world)
+
+func _apply_qualification_cascade(world: Dictionary, records: Array) -> void:
+	# Champions defend: title winners keep tier-1 seeding over reputation.
+	# Plate-qualifying winners feed the plate; continental champions feed CWC.
+	for competition in world.get("competitions", []):
+		if not bool(competition.get("continental", false)):
+			continue
+		var champion := String(competition.get("champion_club_id", ""))
+		if champion == "":
+			continue
+		for other in world.get("competitions", []):
+			if String(other.get("id", "")) == "continental-%s-plate_qualifying" % String(competition.get("continental_region", "")):
+				continue
+		world["qualification_cascade"] = world.get("qualification_cascade", [])
+		world.qualification_cascade.append({"competition_id": String(competition.get("id", "")), "champion_club_id": champion, "tier": int(competition.get("continental_tier", 1))})
 
 func _ensure_club_world_cup(world: Dictionary) -> Dictionary:
 	var entrants := club_world_cup_entrants(world)
