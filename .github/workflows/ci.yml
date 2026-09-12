@@ -135,17 +135,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (-not (Test-Path build/linux/FootballDynasty.x86_64) -or (Get-Item build/linux/FootballDynasty.x86_64).Length -le 0) { throw 'Linux export missing.' }
 
-      - name: Build Windows release candidate
+      - name: Build and smoke-test Windows release candidate
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path build/windows | Out-Null
           & $env:GODOT_EXE --headless --path . --export-release 'Windows Desktop' build/windows/FootballDynasty.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (-not (Test-Path build/windows/FootballDynasty.exe) -or (Get-Item build/windows/FootballDynasty.exe).Length -le 0) { throw 'Windows export missing.' }
-
-      - name: Smoke-test Windows release
-        shell: powershell
-        run: .\tools\release-smoke.ps1 -ExePath build/windows/FootballDynasty.exe -LogPath build/windows/runtime.log
+          $exportedExe = Resolve-Path build/windows/FootballDynasty.exe
+          .\tools\release-smoke.ps1 -ExePath $exportedExe -LogPath build/windows/runtime.log
 
       - name: Install pinned Godot-SQLite v4.9
         shell: powershell
