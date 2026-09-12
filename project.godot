@@ -32,6 +32,7 @@ UI2Runtime="*res://game/polish/ui2_runtime.gd"
 UI2ExtendedRuntime="*res://game/polish/ui2_extended_runtime.gd"
 UI2MatchdayRuntime="*res://game/polish/ui2_matchday_runtime.gd"
 UI2ProfileRuntime="*res://game/polish/ui2_profile_runtime.gd"
+UI2IntegrationRuntime="*res://game/polish/ui2_integration_runtime.gd"
 
 [display]
 window/size/viewport_width=1280

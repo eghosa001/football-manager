@@ -58,6 +58,9 @@ jobs:
       - name: Responsive navigation contract
         run: bash tools/test-headless.sh tests/navigation_responsive_test.gd 300
 
+      - name: UI2 runtime takeover contract
+        run: bash tools/test-headless.sh tests/ui2_runtime_integration_test.gd 300
+
       - name: Performance baseline
         run: bash tools/test-headless.sh tests/performance_baseline_test.gd 1200
 
