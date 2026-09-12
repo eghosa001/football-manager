@@ -26,6 +26,7 @@ TrainingRuntime="*res://game/polish/training_runtime.gd"
 HappinessRuntime="*res://game/polish/happiness_runtime.gd"
 UIReadabilityRuntime="*res://game/polish/ui_readability_runtime.gd"
 PresentationRuntime="*res://game/polish/presentation_runtime.gd"
+CompositionRuntime="*res://game/polish/composition_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
