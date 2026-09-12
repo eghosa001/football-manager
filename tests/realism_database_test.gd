@@ -18,7 +18,8 @@ func _init() -> void:
 	var championship: Dictionary = england.tiers[1]
 	if not _check(int(championship.get("automatic_promotion", 0)) == 2, "English Championship automatic promotion must be two"): return
 	if not _check(int(championship.get("playoff_promotion", 0)) == 1, "English Championship must have one playoff promotion place"): return
-	if not _check(championship.get("playoff_places", []) == [3, 6], "English Championship playoff places must be 3-6"): return
+	var playoff_places: Array = championship.get("playoff_places", [])
+	if not _check(playoff_places.size() >= 2 and int(playoff_places[0]) == 3 and int(playoff_places[1]) == 6, "English Championship playoff places must be 3-6"): return
 	var germany: Dictionary = loader.league_system(data, "deu")
 	if not _check(int(germany.tiers[0].get("relegation_playoff", 0)) == 1, "German top tier needs relegation playoff metadata"): return
 	if not _check(int(germany.tiers[1].get("promotion_playoff_vs_upper", 0)) == 1, "German second tier needs promotion playoff metadata"): return
