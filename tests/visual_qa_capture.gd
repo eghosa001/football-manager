@@ -81,8 +81,9 @@ func _run() -> void:
 	quit(0)
 
 func _capture(label: String) -> void:
-	# Keep the pointer away from interactive controls so hover states/tooltips do
-	# not contaminate deterministic visual QA screenshots.
+	# Eliminate hover/accessibility tooltips from deterministic screenshots.
+	# These are useful in the live game but would otherwise contaminate the QA image.
+	_clear_tooltips(root)
 	Input.warp_mouse(Vector2(4, 4))
 	await _settle(3, 0.05)
 	await RenderingServer.frame_post_draw
@@ -99,6 +100,12 @@ func _capture(label: String) -> void:
 		return
 	_manifest.append("%s\t%s" % [filename, label])
 	print("[VISUAL QA] %s" % filename)
+
+func _clear_tooltips(node: Node) -> void:
+	if node is Control:
+		(node as Control).tooltip_text = ""
+	for child in node.get_children():
+		_clear_tooltips(child)
 
 func _settle(frames: int, seconds: float = 0.0) -> void:
 	for _i in range(frames):
