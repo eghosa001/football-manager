@@ -8,6 +8,8 @@ const FormSchemaClass = preload("res://tools/modding/competition_form_schema.gd"
 const ScreenRegistryClass = preload("res://game/career/career_screen_registry.gd")
 const UIAuditClass = preload("res://game/quality/ui_quality_audit.gd")
 const ArtDirectionClass = preload("res://game/polish/art_direction_runtime.gd")
+const UI2Class = preload("res://game/presentation/fd_ui2.gd")
+const UI2RuntimeClass = preload("res://game/polish/ui2_runtime.gd")
 
 var failures:Array=[]
 
@@ -19,6 +21,7 @@ func _init()->void:
 	_test_screen_registry()
 	_test_ui_audit()
 	_test_art_direction()
+	_test_ui2()
 	# Preloading the canonical cycle is itself a parser/dependency gate.
 	_assert(CareerCycleV2Class!=null,"canonical career cycle preload")
 	if failures.is_empty(): print("POLISH COMPLETION: PASS"); quit(0)
@@ -75,6 +78,15 @@ func _test_art_direction()->void:
 	_assert(ArtDirectionClass.TAB_ART.size()>=15,"major career screens have dedicated artwork")
 	for required in ["Dashboard","Squad","Tactics","Transfers","Scouting","Finances","Board","Inbox","News","Match Analysis","Medical","Training","Competitions","Club","World History"]:
 		_assert(ArtDirectionClass.TAB_ART.has(required),"art coverage: %s" % required)
+
+func _test_ui2()->void:
+	_assert(UI2Class!=null,"UI2 component library parses")
+	_assert(UI2RuntimeClass!=null,"UI2 runtime parses")
+	_assert(UI2Class.money(1500000)=="£1.5m","UI2 money formatting")
+	var host:=VBoxContainer.new()
+	var card=UI2Class.panel(host,Vector2(200,100),UI2Class.CYAN)
+	_assert(card!=null and host.get_child_count()==1,"UI2 reusable panel component")
+	host.free()
 
 func _assert(condition:bool,label:String)->void:
 	if not condition: failures.append(label)
