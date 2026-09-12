@@ -12,6 +12,7 @@ const StaffContractsClass = preload("res://simulation/staff/staff_contracts.gd")
 const InternationalFootballClass = preload("res://simulation/competitions/international_football.gd")
 const KnockoutSeasonClass = preload("res://application/season/knockout_season.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
+const ModernRulesCatalogClass = preload("res://simulation/competitions/modern_rules_catalog.gd")
 const ModIntegrationClass = preload("res://application/career/mod_integration.gd")
 const NamePoolServiceClass = preload("res://application/career/name_pool_service.gd")
 
@@ -94,17 +95,20 @@ func _initialize_world(is_new: bool) -> void:
 	StaffContractsClass.new().ensure_world(world)
 	InternationalFootballClass.new().ensure_world(world)
 	_ensure_match_factor_fields()
+	# Migrate both fresh and existing careers to the current football-rule profile
+	# before any cup/continental structures or registrations are generated.
+	ModernRulesCatalogClass.new().apply_to_world(world)
 	var season_year := int(world.get("season_year", 2026))
 	if is_new:
 		preload("res://application/season/continental_competitions.gd").new().prepare(world)
+		ModernRulesCatalogClass.new().apply_to_world(world)
 		KnockoutSeasonClass.new().initialize_all(world, season_year)
 	else:
 		for competition in world.get("competitions", []):
 			if String(competition.get("competition_type", "league")) == "knockout" and not competition.has("knockout_bracket"):
 				KnockoutSeasonClass.new().initialize_competition(world, competition, season_year)
-		# Refresh continental tiers + Club World Cup entrants on load so old
-		# saves gain the three-tier structure without a new career.
 		preload("res://application/season/continental_competitions.gd").new().prepare(world)
+		ModernRulesCatalogClass.new().apply_to_world(world)
 	var registration = RegistrationServiceClass.new()
 	registration.ensure_world(world)
 	if is_new or world.get("registrations", {}).is_empty(): registration.auto_register_world(world, season_year)
