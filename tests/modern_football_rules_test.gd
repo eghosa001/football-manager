@@ -30,6 +30,7 @@ func _init() -> void:
 	if failures == 0:
 		print("[TEST] MODERN FOOTBALL RULES PASS: functional league phases, five subs, extra time, penalties, no away goals and domestic movement verified")
 		quit(0)
+		return
 	push_error("[TEST] MODERN FOOTBALL RULES FAIL: %d failures across %d checks" % [failures, checks])
 	quit(1)
 
