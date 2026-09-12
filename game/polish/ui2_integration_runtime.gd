@@ -48,9 +48,6 @@ func _force_ui2(tabs: TabContainer) -> void:
 	if world.is_empty():
 		return
 
-	# The screenshots showed the legacy horizontal TabContainer still exposed.
-	# Force the production navigation shell even when NavigationRuntime's
-	# script-path based discovery misses the CareerApp instance.
 	if not bool(tabs.get_meta("career_navigation_shell", false)):
 		NavigationRuntime.wire_tabs(tabs)
 	tabs.tabs_visible = false
@@ -60,8 +57,6 @@ func _force_ui2(tabs: TabContainer) -> void:
 	tabs.set_meta("tactics_board_added", true)
 	tabs.set_meta("individual_training_added", true)
 
-	# Call the proven UI2 builders directly with the resolved session. This
-	# removes the remaining dependency on internal ancestor/script-path lookup.
 	UI2Runtime.call("_enhance_shell", tabs, session)
 	UI2Runtime.call("_build_home", _page(tabs, "Dashboard"), tabs, session)
 	UI2Runtime.call("_build_squad", _page(tabs, "Squad"), tabs, session)
@@ -83,9 +78,6 @@ func _style_visible_shell(tabs: TabContainer, app: Node) -> void:
 		return
 	shell.set_meta("ui2_reference_shell", true)
 
-	# Remove the old prototype heading/button/status rows from the career page.
-	# UI2 has its own screen header and continue action, so retaining those rows
-	# only duplicates information and wastes a large amount of vertical space.
 	var career_root: Node = shell.get_parent()
 	if career_root != null:
 		for sibling: Node in career_root.get_children():
@@ -133,6 +125,12 @@ func _style_desktop_sidebar(shell: Node, app: Node) -> void:
 	_add_utility_button(sidebar_box, "MAIN MENU", func() -> void: app.call("_show_main_menu"))
 
 func _style_navigation_button(button: Button) -> void:
+	if not bool(button.get_meta("ui2_iconified", false)):
+		var target: String = String(button.get_meta("target_tab", ""))
+		var icon: String = _nav_icon(target)
+		if icon != "":
+			button.text = "%s   %s" % [icon, button.text]
+		button.set_meta("ui2_iconified", true)
 	button.custom_minimum_size.y = 34
 	button.add_theme_font_size_override("font_size", 12)
 	button.add_theme_color_override("font_color", Color(0.82, 0.86, 0.94, 1.0))
@@ -152,6 +150,28 @@ func _style_navigation_button(button: Button) -> void:
 	pressed.border_width_left = 3
 	pressed.set_corner_radius_all(5)
 	button.add_theme_stylebox_override("pressed", pressed)
+
+func _nav_icon(target: String) -> String:
+	match target:
+		"Dashboard": return "⌂"
+		"Inbox": return "✉"
+		"Squad": return "●"
+		"Dynamics": return "↔"
+		"Tactics": return "◇"
+		"Training": return "▲"
+		"Medical": return "+"
+		"Schedule": return "□"
+		"Competitions": return "★"
+		"Scouting": return "⌕"
+		"Transfers": return "⇄"
+		"Staff": return "◌"
+		"Finances": return "$"
+		"Club": return "◆"
+		"World History": return "◎"
+		"Match Analysis": return "∿"
+		"Data Hub": return "▦"
+		"Board": return "▣"
+		_: return ""
 
 func _add_utility_button(parent: VBoxContainer, title: String, callback: Callable) -> void:
 	var button: Button = UI.action(title, Color(0.25, 0.32, 0.48, 1.0))
