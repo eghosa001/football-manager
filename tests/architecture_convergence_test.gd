@@ -58,9 +58,14 @@ func _test_lifecycle_facades() -> void:
 	var lifecycle = PlayerLifecycleServiceClass.new()
 	assert(cycle.get_script().resource_path == "res://application/career/career_cycle_service.gd")
 	assert(lifecycle.get_script().resource_path == "res://simulation/players/player_lifecycle_service.gd")
+
 	var session_source := FileAccess.get_file_as_string("res://application/career/career_session.gd")
 	assert("career_cycle_service.gd" in session_source)
 	assert("career_cycle_v2.gd" not in session_source)
+	var cycle_facade_source := FileAccess.get_file_as_string("res://application/career/career_cycle_service.gd")
+	assert("career_cycle_v2.gd" in cycle_facade_source)
+
 	var living_source := FileAccess.get_file_as_string("res://simulation/world/living_world.gd")
-	assert("player_lifecycle_service.gd" in living_source)
 	assert("player_lifecycle_v2.gd" not in living_source)
+	var lifecycle_facade_source := FileAccess.get_file_as_string("res://simulation/players/player_lifecycle_service.gd")
+	assert("player_lifecycle_v2.gd" in lifecycle_facade_source)
