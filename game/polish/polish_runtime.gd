@@ -55,7 +55,9 @@ func _scan_node(node: Node) -> void:
 func _wire_button(button: Button) -> void:
 	if button.has_meta("polish_audio"): return
 	button.set_meta("polish_audio", true)
-	button.pressed.connect(_play_ui_click)
+	var callback := Callable(self, "_play_ui_click")
+	if not button.pressed.is_connected(callback):
+		button.pressed.connect(callback)
 
 func _wire_tabs(tabs: TabContainer) -> void:
 	if not _looks_like_career_tabs(tabs): return
