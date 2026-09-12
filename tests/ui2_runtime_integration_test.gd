@@ -9,8 +9,8 @@ func _run() -> void:
 	await process_frame
 	scene.session.new_career("UI2 Test", "", 12345, 1)
 	scene._show_career()
-	# Allow the autoload integration bridge to discover the newly rebuilt tree.
-	for _i in range(8):
+	# Allow all UI2 autoload layers to discover and rebuild the career tree.
+	for _i in range(12):
 		await process_frame
 		await create_timer(0.05).timeout
 
@@ -30,6 +30,12 @@ func _run() -> void:
 	assert(tactics != null and bool(tactics.get_meta("ui2_screen", false)))
 	assert(training != null and bool(training.get_meta("ui2_extended", false)))
 	assert(scouting != null and bool(scouting.get_meta("ui2_extended", false)))
+
+	# Remaining destinations must not fall back to the legacy CareerViews UI.
+	for page_name in ["Inbox", "Staff", "Youth Academy", "Search", "Match Analysis"]:
+		var remaining_page := _page(tabs, page_name)
+		assert(remaining_page != null)
+		assert(bool(remaining_page.get_meta("ui2_remaining", false)))
 
 	var shell := tabs.get_parent()
 	assert(shell != null and String(shell.name) == "CareerNavigationShell")
