@@ -37,11 +37,11 @@ func _init() -> void:
 	var ci := FileAccess.get_file_as_string("res://.github/workflows/ci.yml")
 	assert("clean: true" in ci)
 	assert("tests/ui_readability_test.gd" in ci)
-	assert("tests/navigation_responsive_test.gd" in ci)
 	assert("tests/performance_baseline_test.gd" in ci)
 	assert("Install pinned Godot-SQLite v4.9" in ci)
 
 	var hosted := FileAccess.get_file_as_string("res://.github/workflows/hosted-validation.yml")
+	assert("tests/navigation_responsive_test.gd" in hosted)
 	assert("--export-release \"Linux/X11\"" in hosted)
 	assert("release-smoke.sh" in hosted)
 	assert("FootballDynasty.x86_64.sha256" in hosted)
