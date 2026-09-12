@@ -7,12 +7,15 @@ func _ready() -> void:
 	set_process(true)
 	call_deferred("_scan")
 
+func _scan() -> void:
+	_scan_node(get_tree().root)
+
 func _process(_delta: float) -> void:
 	var now := Time.get_ticks_msec()
 	if now < _next_scan:
 		return
 	_next_scan = now + 350
-	_scan_node(get_tree().root)
+	_scan()
 
 func _scan_node(node: Node) -> void:
 	if node is VBoxContainer:
