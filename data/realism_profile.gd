@@ -26,7 +26,6 @@ func generated_name(data: Dictionary, country_id: String, seed: int, key: int, u
 	if first_names.is_empty(): first_names = FALLBACK_FIRST
 	if last_names.is_empty(): last_names = FALLBACK_LAST
 
-	# First try ordinary first-name + surname combinations.
 	for attempt in range(16):
 		var first: String = String(first_names[_range(seed, key + attempt * 3, 0, first_names.size() - 1)])
 		var last: String = String(last_names[_range(seed, key + attempt * 3 + 1, 0, last_names.size() - 1)])
@@ -35,8 +34,6 @@ func generated_name(data: Dictionary, country_id: String, seed: int, key: int, u
 			used[full] = true
 			return {"first_name":first,"last_name":last,"full_name":full}
 
-	# Large leagues exhaust simple combinations. Use natural-looking compound
-	# surnames instead of numeric/ID suffixes, giving thousands more unique names.
 	for attempt in range(last_names.size() * 2):
 		var first: String = String(first_names[_range(seed, key + 100 + attempt * 3, 0, first_names.size() - 1)])
 		var left: String = String(last_names[_range(seed, key + 101 + attempt * 3, 0, last_names.size() - 1)])
@@ -49,15 +46,21 @@ func generated_name(data: Dictionary, country_id: String, seed: int, key: int, u
 			used[full] = true
 			return {"first_name":first,"last_name":last,"full_name":full}
 
-	# Extremely large custom databases may still exhaust the supplied pool. A
-	# deterministic alphabetic suffix keeps the identity readable and fictional.
 	var first: String = String(first_names[_range(seed, key, 0, first_names.size() - 1)])
 	var base_last: String = String(last_names[_range(seed, key + 1, 0, last_names.size() - 1)])
-	var token: int = posmod(_key(unique_key), 26 * 26 * 26)
-	var suffix := String.chr(65 + token / 676) + String.chr(65 + (token / 26) % 26) + String.chr(65 + token % 26)
-	var last := "%s-%s" % [base_last, suffix]
-	var full := "%s %s" % [first, last]
-	used[full] = true
+	var start_token: int = posmod(_key(unique_key), 26 * 26 * 26)
+	for offset in range(26 * 26 * 26):
+		var token: int = posmod(start_token + offset, 26 * 26 * 26)
+		var suffix: String = _alpha_suffix(token)
+		var last: String = "%s-%s" % [base_last, suffix]
+		var full: String = "%s %s" % [first, last]
+		if not used.has(full):
+			used[full] = true
+			return {"first_name":first,"last_name":last,"full_name":full}
+	# A practical launch database cannot exhaust this path, but keep a readable
+	# final fallback for extreme mod databases.
+	var last: String = "%s-X" % base_last
+	var full: String = "%s %s" % [first, last]
 	return {"first_name":first,"last_name":last,"full_name":full}
 
 func nationality(home_country: String, loaded_country_ids: Array, club_reputation: int, seed: int, key: int) -> String:
@@ -96,6 +99,12 @@ func range_value(seed: int, key: int, lo: int, hi: int) -> int:
 
 func stable_key(text: String) -> int:
 	return _key(text)
+
+func _alpha_suffix(token: int) -> String:
+	var a: int = token / 676
+	var b: int = (token / 26) % 26
+	var c: int = token % 26
+	return String.chr(65 + a) + String.chr(65 + b) + String.chr(65 + c)
 
 func _range(seed: int, key: int, lo: int, hi: int) -> int:
 	if hi <= lo: return lo
