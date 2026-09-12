@@ -28,6 +28,7 @@ UIReadabilityRuntime="*res://game/polish/ui_readability_runtime.gd"
 PresentationRuntime="*res://game/polish/presentation_runtime.gd"
 CompositionRuntime="*res://game/polish/composition_runtime.gd"
 ArtDirectionRuntime="*res://game/polish/art_direction_runtime.gd"
+UI2Runtime="*res://game/polish/ui2_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
