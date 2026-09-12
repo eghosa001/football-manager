@@ -30,9 +30,15 @@ var _continuous_attempted := false
 var _stats = PlayerStatsServiceClass.new()
 var _knockout = KnockoutSeasonClass.new()
 var _registration = RegistrationServiceClass.new()
+var _match_factors = MatchFactorsClass.new()
 var _club_index: Dictionary = {}
 var _player_index: Dictionary = {}
 var _competition_index: Dictionary = {}
+var _suspension_index: Dictionary = {}
+var _discipline_ban_index: Dictionary = {}
+var _yellow_count_index: Dictionary = {}
+var _city_index: Dictionary = {}
+var _rivalry_index: Dictionary = {}
 
 func play_date(world: Dictionary, date_string: String, managed_club_id: String, season_seed: int) -> Array:
 	SeasonRunnerClass.new().assign_fixture_dates(world)
@@ -180,18 +186,20 @@ func _eligible_match_players(world: Dictionary, home_id: String, away_id: String
 
 func _available(players: Array, world: Dictionary) -> Array:
 	var result: Array = []
-	var bans := _suspension_map(world)
+	var day := int(world.get("day_index", 0))
 	for player in players:
 		if bool(player.get("retired", false)):
 			continue
 		if int(player.get("injured_days", 0)) > 0:
 			continue
-		if int(bans.get(String(player.get("id", "")), 0)) > int(world.get("day_index", 0)):
+		if int(_suspension_index.get(String(player.get("id", "")), 0)) > day:
 			continue
 		result.append(player)
 	return result
 
 func _suspension_map(world: Dictionary) -> Dictionary:
+	# Kept for compatibility with direct callers/tests; play_date uses the
+	# prebuilt incremental index instead of rebuilding this map per squad.
 	var bans := {}
 	for row in world.get("suspensions", []):
 		bans[String(row.get("player_id", ""))] = int(row.get("until_day", 0))
@@ -238,21 +246,25 @@ func _apply_match_load(world: Dictionary, result: Dictionary) -> void:
 func _apply_suspensions(world: Dictionary, fixture: Dictionary, result: Dictionary, date_string: String) -> void:
 	world["suspensions"] = world.get("suspensions", [])
 	var day := int(world.get("day_index", 0))
+	var competition_id := String(fixture.get("competition_id", ""))
 	for event in result.get("events", []):
 		if String(event.get("type", "")) != "card":
 			continue
 		var player_id := String(event.get("player_id", ""))
 		if String(event.get("card", "")) == "red":
-			world.suspensions.append({"player_id": player_id, "from": date_string, "until_day": day + 7, "reason": "red_card", "competition_id": String(fixture.get("competition_id", ""))})
+			var until_day := day + 7
+			world.suspensions.append({"player_id": player_id, "from": date_string, "until_day": until_day, "reason": "red_card", "competition_id": competition_id})
+			_suspension_index[player_id] = maxi(until_day, int(_discipline_ban_index.get(player_id, 0)))
 		elif String(event.get("card", "")) == "yellow":
-			var count := 0
-			for row in world.get("suspensions", []):
-				if String(row.get("player_id", "")) == player_id and String(row.get("reason", "")) == "yellow_count":
-					count += 1
+			var count := int(_yellow_count_index.get(player_id, 0))
 			if count >= 4:
-				world.suspensions.append({"player_id": player_id, "from": date_string, "until_day": day + 7, "reason": "accumulation", "competition_id": String(fixture.get("competition_id", ""))})
+				var until_day := day + 7
+				world.suspensions.append({"player_id": player_id, "from": date_string, "until_day": until_day, "reason": "accumulation", "competition_id": competition_id})
+				_suspension_index[player_id] = maxi(until_day, int(_discipline_ban_index.get(player_id, 0)))
 			else:
-				world.suspensions.append({"player_id": player_id, "from": date_string, "until_day": day, "reason": "yellow_count", "competition_id": String(fixture.get("competition_id", ""))})
+				world.suspensions.append({"player_id": player_id, "from": date_string, "until_day": day, "reason": "yellow_count", "competition_id": competition_id})
+				_yellow_count_index[player_id] = count + 1
+				_suspension_index[player_id] = maxi(day, int(_discipline_ban_index.get(player_id, 0)))
 
 func _add_match_message(world: Dictionary, home: Dictionary, away: Dictionary, result: Dictionary, managed_club_id: String) -> void:
 	var managed_home := String(home.id) == managed_club_id
@@ -268,7 +280,7 @@ func _add_match_message(world: Dictionary, home: Dictionary, away: Dictionary, r
 
 func _match_context(world: Dictionary, fixture: Dictionary, home: Dictionary, away: Dictionary) -> Dictionary:
 	var competition := _competition(world, String(fixture.get("competition_id", "")))
-	var importance := MatchFactorsClass.new().importance_for(competition, fixture)
+	var importance := _match_factors.importance_for(competition, fixture)
 	var stage := ""
 	if bool(fixture.get("knockout", false)):
 		var round_number := int(fixture.get("round", 1))
@@ -292,12 +304,8 @@ func _is_derby(world: Dictionary, home: Dictionary, away: Dictionary) -> bool:
 		return false
 	if String(home.get("city_id", "")) != "" and String(home.get("city_id", "")) == String(away.get("city_id", "")):
 		return true
-	for rivalry in world.get("rivalries", []):
-		var a := String(rivalry.get("club_a", ""))
-		var b := String(rivalry.get("club_b", ""))
-		if (a == String(home.get("id", "")) and b == String(away.get("id", ""))) or (a == String(away.get("id", "")) and b == String(home.get("id", ""))):
-			if int(rivalry.get("intensity", 0)) >= 25:
-				return true
+	if _rivalry_index.has(_rivalry_key(String(home.get("id", "")), String(away.get("id", "")))):
+		return true
 	return String(home.get("country_id", "")) != "" and String(home.get("country_id", "")) == String(away.get("country_id", "")) and abs(int(home.get("reputation", 50)) - int(away.get("reputation", 50))) <= 12
 
 func _travel_fatigue(world: Dictionary, home: Dictionary, away: Dictionary) -> Dictionary:
@@ -313,9 +321,13 @@ func _travel_fatigue(world: Dictionary, home: Dictionary, away: Dictionary) -> D
 	return {"away_fatigue": clampf(km / 4000.0, 0.0, 0.38), "distance_km": km}
 
 func _city_coords(world: Dictionary, city_id: String) -> Dictionary:
+	if _city_index.has(city_id):
+		return _city_index[city_id]
 	for city in world.get("cities", []):
 		if String(city.get("id", "")) == city_id:
-			return {"lat": float(city.get("latitude", city.get("lat", 0.0))), "lon": float(city.get("longitude", city.get("lon", 0.0)))}
+			var coords := {"lat": float(city.get("latitude", city.get("lat", 0.0))), "lon": float(city.get("longitude", city.get("lon", 0.0)))}
+			_city_index[city_id] = coords
+			return coords
 	return {}
 
 func _haversine(a: Dictionary, b: Dictionary) -> float:
@@ -356,6 +368,11 @@ func _build_indexes(world: Dictionary) -> void:
 	_club_index.clear()
 	_player_index.clear()
 	_competition_index.clear()
+	_suspension_index.clear()
+	_discipline_ban_index.clear()
+	_yellow_count_index.clear()
+	_city_index.clear()
+	_rivalry_index.clear()
 	for club in world.get("clubs", []):
 		var id := String(club.get("id", ""))
 		if id != "":
@@ -368,6 +385,36 @@ func _build_indexes(world: Dictionary) -> void:
 		var id := String(competition.get("id", ""))
 		if id != "":
 			_competition_index[id] = competition
+	for city in world.get("cities", []):
+		var id := String(city.get("id", ""))
+		if id != "":
+			_city_index[id] = {"lat": float(city.get("latitude", city.get("lat", 0.0))), "lon": float(city.get("longitude", city.get("lon", 0.0)))}
+	for rivalry in world.get("rivalries", []):
+		if int(rivalry.get("intensity", 0)) < 25:
+			continue
+		var club_a := String(rivalry.get("club_a", ""))
+		var club_b := String(rivalry.get("club_b", ""))
+		if club_a != "" and club_b != "":
+			_rivalry_index[_rivalry_key(club_a, club_b)] = true
+	for row in world.get("suspensions", []):
+		var player_id := String(row.get("player_id", ""))
+		if player_id == "":
+			continue
+		_suspension_index[player_id] = int(row.get("until_day", 0))
+		if String(row.get("reason", "")) == "yellow_count":
+			_yellow_count_index[player_id] = int(_yellow_count_index.get(player_id, 0)) + 1
+	var day := int(world.get("day_index", 0))
+	for row in world.get("discipline_bans", []):
+		var player_id := String(row.get("player_id", ""))
+		if player_id == "":
+			continue
+		var fallback_until := day + int(row.get("matches", 1)) * 7
+		var until_day := int(row.get("until_day", fallback_until))
+		_discipline_ban_index[player_id] = maxi(int(_discipline_ban_index.get(player_id, 0)), until_day)
+		_suspension_index[player_id] = maxi(int(_suspension_index.get(player_id, 0)), until_day)
+
+func _rivalry_key(club_a: String, club_b: String) -> String:
+	return "%s|%s" % [club_a, club_b] if club_a <= club_b else "%s|%s" % [club_b, club_a]
 
 func _player(world: Dictionary, player_id: String) -> Dictionary:
 	if _player_index.has(player_id):
