@@ -28,8 +28,8 @@ VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppNumericVersion}
 
 [Files]
-Source: "..\..\build\windows\FootballDynasty.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\..\build\windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "FootballDynasty.exe"
+Source: "..\..\build\installer-source\FootballDynasty.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\build\installer-source\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "FootballDynasty.exe"
 
 [Icons]
 Name: "{group}\Football Dynasty"; Filename: "{app}\{#MyAppExeName}"
