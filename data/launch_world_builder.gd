@@ -5,6 +5,7 @@ const DatabaseLoaderClass = preload("res://data/database_loader.gd")
 const DomainModelsClass = preload("res://simulation/world/domain_models.gd")
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
 const RealismProfileClass = preload("res://data/realism_profile.gd")
+const SpecialAbilityServiceClass = preload("res://simulation/players/special_ability_service.gd")
 
 const FIRST_NAMES := ["Daniel","Victor","Samuel","David","Ibrahim","Michael","Joseph","Emmanuel","Tobi","Kelvin","Musa","Peter","Ahmed","John","Chinedu","Seyi"]
 const LAST_NAMES := ["Okoro","Mensah","Diallo","Banda","Mokoena","Abdullahi","Adeyemi","Kamara","Ndlovu","Boateng","Ibrahim","Dlamini","Osei","Eze","Sow","Yusuf"]
@@ -112,6 +113,7 @@ func _generate_players(world: Dictionary, club: Dictionary, country_id: String, 
 	var club_rep := int(club.reputation)
 	var band: Vector2i = realism.ability_band(club_rep)
 	var wage_band: Vector2i = realism.wage_band(club_rep)
+	var abilities = SpecialAbilityServiceClass.new()
 	for i in range(maxi(15, count)):
 		var id := "player-%s-%02d" % [String(club.id), i + 1]
 		var key := _key(id)
@@ -128,6 +130,8 @@ func _generate_players(world: Dictionary, club: Dictionary, country_id: String, 
 		player["fictional_identity"] = true
 		player["preferred_foot"] = "left" if i % 7 == 0 else "right"
 		player["role_profile"] = realism.role_profile(position, key)
+		player["special_abilities"] = abilities.assign_for_player(player, seed, key + 5000)
+		player["special_ability_labels"] = abilities.labels_for(player)
 		world.players.append(player)
 		world.contracts.append(DomainModelsClass.contract("contract-"+id,id,String(club.id),2026,_range(seed,key+6,2027,2031),_range(seed,key+7,wage_band.x,wage_band.y)))
 
