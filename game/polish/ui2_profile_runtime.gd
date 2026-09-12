@@ -19,8 +19,8 @@ func _scan() -> void:
 	_scan_node(get_tree().root)
 
 func _scan_node(node: Node) -> void:
-	if _is_profile(node):
-		_enhance(node as Control)
+	if _is_profile(node) and node is Window:
+		_enhance(node as Window)
 	for child in node.get_children():
 		_scan_node(child)
 
@@ -28,7 +28,7 @@ func _is_profile(node: Node) -> bool:
 	var script = node.get_script()
 	return script != null and String(script.resource_path).ends_with("game/presentation/player_profile_dialog.gd")
 
-func _enhance(dialog: Control) -> void:
+func _enhance(dialog: Window) -> void:
 	if dialog.has_meta("ui2_profile_enhanced"):
 		return
 	var tabs: TabContainer = _find_tabs(dialog)
@@ -43,8 +43,7 @@ func _enhance(dialog: Control) -> void:
 	if player.is_empty():
 		return
 	dialog.set_meta("ui2_profile_enhanced", true)
-	if dialog is Window:
-		(dialog as Window).min_size = Vector2i(1040, 720)
+	dialog.min_size = Vector2i(1040, 720)
 	var overview: Control = _page(tabs, "Overview")
 	var attributes: Control = _page(tabs, "Attributes")
 	var performance: Control = _page(tabs, "Performance")
