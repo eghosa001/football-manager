@@ -13,8 +13,10 @@ func _init() -> void:
 		"res://.github/workflows/ci.yml",
 		"res://.github/workflows/hosted-validation.yml",
 		"res://.github/workflows/debug-apk.yml",
+		"res://.github/workflows/android-release.yml",
 		"res://.github/workflows/fresh-windows-release.yml",
 		"res://.github/workflows/rc3-heavy-gates.yml",
+		"res://docs/RELEASE_ACCEPTANCE_TEMPLATE.md",
 		"res://tests/ui_readability_test.gd",
 		"res://tests/navigation_responsive_test.gd",
 		"res://tests/performance_baseline_test.gd",
@@ -50,6 +52,11 @@ func _init() -> void:
 	assert("game/**" in android)
 	assert("export_presets.cfg" in android)
 	assert("FootballDynasty-debug.apk.sha256" in android)
+
+	var android_release := FileAccess.get_file_as_string("res://.github/workflows/android-release.yml")
+	assert("GODOT_ANDROID_KEYSTORE_RELEASE_PATH" in android_release)
+	assert("--install-android-build-template" in android_release)
+	assert("FootballDynasty.aab.sha256" in android_release)
 
 	var heavy := FileAccess.get_file_as_string("res://.github/workflows/rc3-heavy-gates.yml")
 	assert("ref: release/rc3-convergence" not in heavy)
