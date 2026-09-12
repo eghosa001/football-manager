@@ -81,15 +81,17 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 		else:
 			result = _aggregate.simulate_match(home, away, [], match_seed)
 			_aggregate.apply_to_fixture(fixture, result)
-	if not result.has("error"):
+
+		if result.has("error"):
+			continue
 		_stats.record_match(world, fixture, result)
 		_apply_dressing_room_result(world, home, away, result)
 		_apply_match_load(world, result)
 		_apply_suspensions(world, fixture, result, date_string)
 		_update_club_form(world, home, away, result)
-			if tier != SimulationTierPolicyClass.INACTIVE_WORLD:
-				result["injuries"] = _apply_match_injuries(world, fixture, result, tier, match_seed, managed_club_id)
-			_emit_match_events(world, fixture, result, tier, detailed_model, date_string)
+		if tier != SimulationTierPolicyClass.INACTIVE_WORLD:
+			result["injuries"] = _apply_match_injuries(world, fixture, result, tier, match_seed, managed_club_id)
+		_emit_match_events(world, fixture, result, tier, detailed_model, date_string)
 		results.append({"fixture":fixture,"result":result,"match_seed":match_seed,"detailed":is_managed,"model":detailed_model,"simulation_tier":tier})
 		touched_competitions[competition_id] = true
 	for competition_id in touched_competitions.keys():
