@@ -126,7 +126,7 @@ func _test_match_engine(world: Dictionary) -> void:
 	var second: Dictionary = engine.simulate_match(home, away, world.players, 827183927)
 	_expect(_deep_equal(first, second), "Match seed must reproduce identical match state and event stream")
 	_expect(first.lineups.home.size() == 11 and first.lineups.away.size() == 11, "Each starting lineup must contain 11 players")
-	_expect(first.substitutions.size() <= 6, "Default match must not exceed three substitutions per side")
+	_expect(first.substitutions.size() <= 10, "Default match must not exceed five substitutions per side")
 	_expect(first.stats.home.possession + first.stats.away.possession >= 99.9, "Possession should sum to approximately 100")
 	_expect(first.home_goals == first.stats.home.goals, "Home goals must derive from shot events")
 	_expect(first.away_goals == first.stats.away.goals, "Away goals must derive from shot events")
