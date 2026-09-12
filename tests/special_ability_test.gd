@@ -81,8 +81,8 @@ func _init() -> void:
 		candidate["potential"] = mini(98, int(candidate.current_ability) + 20)
 		var traits: Array = abilities.assign_for_player(candidate, 55555, i * 101 + 7)
 		if not traits.is_empty(): assigned += 1
-		for trait in traits:
-			if String(trait) in SpecialAbilityServiceClass.NEGATIVE_TRAITS: weaknesses += 1
+		for ability_id in traits:
+			if String(ability_id) in SpecialAbilityServiceClass.NEGATIVE_TRAITS: weaknesses += 1
 		assert(traits.size() <= 3, "Players must not receive excessive special abilities")
 	assert(assigned > 30 and assigned < 210, "Special abilities should remain uncommon but visible")
 	assert(weaknesses > 5 and weaknesses < 60, "Negative traits should be uncommon but present")
