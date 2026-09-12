@@ -31,6 +31,7 @@ ArtDirectionRuntime="*res://game/polish/art_direction_runtime.gd"
 UI2Runtime="*res://game/polish/ui2_runtime.gd"
 UI2ExtendedRuntime="*res://game/polish/ui2_extended_runtime.gd"
 UI2MatchdayRuntime="*res://game/polish/ui2_matchday_runtime.gd"
+UI2ProfileRuntime="*res://game/polish/ui2_profile_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
