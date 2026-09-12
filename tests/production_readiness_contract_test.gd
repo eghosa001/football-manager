@@ -31,6 +31,7 @@ func _init() -> void:
 	var presets := ConfigFile.new()
 	assert(presets.load("res://export_presets.cfg") == OK)
 	assert(String(presets.get_value("preset.0.options", "application/file_version", "")) == "1.0.0.3")
+	assert(int(String(presets.get_value("preset.2.options", "gradle_build/target_sdk", "0"))) >= 36)
 	assert(int(presets.get_value("preset.2.options", "version/code", 0)) == 10003)
 	assert(String(presets.get_value("preset.2.options", "version/name", "")) == "1.0.0-rc3")
 	assert(String(presets.get_value("preset.3.options", "application/version", "")) == "1.0.0-rc3")
