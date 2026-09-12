@@ -38,5 +38,6 @@ func _init() -> void:
 	field.free()
 	label.free()
 	tabs.free()
+	runtime.free()
 	print("[TEST] UI READABILITY PASS")
 	quit(0)
