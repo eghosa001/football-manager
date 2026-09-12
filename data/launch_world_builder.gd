@@ -69,8 +69,6 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 	world["default_country_id"] = loader.default_country_id(data)
 	world["featured_country_ids"] = loader.featured_country_ids(data)
 	world["transfer_windows"] = world.transfer_windows_by_country.get(String(world.default_country_id), [])
-	preload("res://application/season/continental_competitions.gd").new().prepare(world)
-	preload("res://application/season/knockout_season.gd").new().initialize_all(world, 2026)
 	return world
 
 func _add_domestic_cup(world: Dictionary, data: Dictionary, system: Dictionary, country_id: String, suffix: String = "cup") -> void:
