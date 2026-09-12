@@ -81,7 +81,10 @@ func _run() -> void:
 	quit(0)
 
 func _capture(label: String) -> void:
-	await process_frame
+	# Keep the pointer away from interactive controls so hover states/tooltips do
+	# not contaminate deterministic visual QA screenshots.
+	Input.warp_mouse(Vector2(4, 4))
+	await _settle(3, 0.05)
 	await RenderingServer.frame_post_draw
 	var image := root.get_texture().get_image()
 	if image == null or image.is_empty():
