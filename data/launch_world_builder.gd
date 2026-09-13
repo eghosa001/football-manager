@@ -15,6 +15,7 @@ const STAFF_ROLES := ["manager","assistant","coach","scout","physio"]
 func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25, expanded: bool = false) -> Dictionary:
 	var loader = DatabaseLoaderClass.new()
 	var realism = RealismProfileClass.new()
+	var abilities = SpecialAbilityServiceClass.new()
 	var data: Dictionary = loader.load_seed("res://data/seed/launch_database.json", expanded)
 	if data.is_empty() or not loader.validate_seed(data).is_empty(): return {}
 	var world := {"seed":seed,"date":"2026-07-01","season_year":2026,"countries":[],"clubs":[],"players":[],"staff":[],"competitions":[],"contracts":[],"fixtures":[],"launch_database_schema":int(data.schema_version)}
@@ -23,11 +24,15 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 	var loaded_country_ids: Array = []
 	for country_index in range(count): loaded_country_ids.append(String(countries[country_index].id))
 	var used_names: Dictionary = {}
+	var registration_cache: Dictionary = {}
 	for country_index in range(count):
 		var raw_country: Dictionary = countries[country_index]
 		var country_id := String(raw_country.id)
+		var registration_rules := _registration_rules(loader, data, country_id)
+		registration_cache[country_id] = registration_rules
 		world.countries.append(DomainModelsClass.country(country_id, String(raw_country.name), String(raw_country.code), int(raw_country.youth_rating)))
 		var system: Dictionary = loader.league_system(data, country_id)
+		var country_club_ids: Array = []
 		for tier_index in range(system.get("tiers", []).size()):
 			var tier: Dictionary = system.tiers[tier_index]
 			var template: Dictionary = loader.template_by_id(data, String(tier.template))
@@ -45,8 +50,9 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 				club["fictional_identity"] = true
 				world.clubs.append(club)
 				club_ids.append(club_id)
+				country_club_ids.append(club_id)
 				_generate_staff(world, club, country_id, data, seed, used_names, realism)
-				_generate_players(world, club, country_id, loaded_country_ids, data, players_per_club, seed, used_names, realism)
+				_generate_players(world, club, country_id, loaded_country_ids, data, players_per_club, seed, used_names, realism, abilities)
 			var competition_id := "%s-league-%d" % [country_id, tier_index + 1]
 			var competition: Dictionary = DomainModelsClass.competition(competition_id, country_id, String(tier.name), club_ids)
 			competition["tier"] = tier_index + 1
@@ -57,48 +63,46 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 			competition["promotion_playoff_vs_upper"] = int(tier.get("promotion_playoff_vs_upper", 0))
 			competition["relegation_places"] = int(tier.get("relegation", 0))
 			competition["relegation_playoff_places"] = int(tier.get("relegation_playoff", 0))
-			competition["registration_rules"] = _registration_rules(data, country_id)
+			competition["registration_rules"] = registration_rules.duplicate(true)
 			competition["competition_type"] = "league"
 			competition["rules_profile"] = tier.duplicate(true)
 			world.competitions.append(competition)
 			world.fixtures.append_array(_round_robin(competition_id, club_ids))
-		_add_domestic_cup(world, data, system, country_id)
-		_add_domestic_cup(world, data, {"cup": system.get("league_cup", {})}, country_id, "league-cup")
+		_add_domestic_cup(world, data, system, country_id, "cup", loader, country_club_ids, registration_rules)
+		_add_domestic_cup(world, data, {"cup": system.get("league_cup", {})}, country_id, "league-cup", loader, country_club_ids, registration_rules)
 	world["transfer_windows_by_country"] = {}
 	for country_id in loaded_country_ids:
-		world.transfer_windows_by_country[country_id] = _transfer_windows(data, String(country_id))
+		world.transfer_windows_by_country[country_id] = _transfer_windows(loader, data, String(country_id))
 	world["default_country_id"] = loader.default_country_id(data)
 	world["featured_country_ids"] = loader.featured_country_ids(data)
 	world["transfer_windows"] = world.transfer_windows_by_country.get(String(world.default_country_id), [])
 	return world
 
-func _add_domestic_cup(world: Dictionary, data: Dictionary, system: Dictionary, country_id: String, suffix: String = "cup") -> void:
+func _add_domestic_cup(world: Dictionary, data: Dictionary, system: Dictionary, country_id: String, suffix: String, loader, country_club_ids: Array, registration_rules: Dictionary) -> void:
 	var cup: Dictionary = system.get("cup", {})
 	if cup.is_empty(): return
-	var all_clubs: Array = []
-	for club in world.clubs:
-		if String(club.get("country_id", "")) == country_id: all_clubs.append(String(club.id))
+	var all_clubs: Array = country_club_ids.duplicate()
 	if all_clubs.size() < 2: return
-	var template: Dictionary = DatabaseLoaderClass.new().template_by_id(data, String(cup.get("template", "")))
+	var template: Dictionary = loader.template_by_id(data, String(cup.get("template", "")))
 	var max_teams := mini(int(template.get("teams", all_clubs.size())), all_clubs.size())
 	all_clubs.sort(); all_clubs.resize(max_teams)
 	var cup_id := "%s-%s" % [country_id, suffix]
-	world.competitions.append({"id":cup_id,"country_id":country_id,"name":String(cup.get("name","National Cup")),"club_ids":all_clubs,"competition_type":"knockout","rules":template.duplicate(true),"registration_rules":_registration_rules(data, country_id),"points_win":3,"points_draw":1,"fictional_branding":true})
+	world.competitions.append({"id":cup_id,"country_id":country_id,"name":String(cup.get("name","National Cup")),"club_ids":all_clubs,"competition_type":"knockout","rules":template.duplicate(true),"registration_rules":registration_rules.duplicate(true),"points_win":3,"points_draw":1,"fictional_branding":true})
 
-func _registration_rules(data: Dictionary, country_id: String) -> Dictionary:
-	var defaults: Dictionary = DatabaseLoaderClass.new().registration_rules_for_country(data, country_id)
+func _registration_rules(loader, data: Dictionary, country_id: String) -> Dictionary:
+	var defaults: Dictionary = loader.registration_rules_for_country(data, country_id)
 	return {"max_squad":int(defaults.get("max_squad",25)),"min_goalkeepers":int(defaults.get("min_goalkeepers",2)),"max_foreign":int(defaults.get("max_foreign",99)),"min_homegrown":int(defaults.get("homegrown_required",0)),"min_age":15}
 
-func _transfer_windows(data: Dictionary, country_id: String) -> Array:
+func _transfer_windows(loader, data: Dictionary, country_id: String) -> Array:
 	var result: Array = []
-	for value in DatabaseLoaderClass.new().transfer_windows_for_country(data, country_id):
+	for value in loader.transfer_windows_for_country(data, country_id):
 		if value is Dictionary:
 			result.append((value as Dictionary).duplicate(true))
 		elif String(value) == "summer": result.append({"start_month":6,"start_day":15,"end_month":9,"end_day":1})
 		elif String(value) == "winter": result.append({"start_month":1,"start_day":1,"end_month":1,"end_day":31})
 	return result
 
-func _generate_staff(world: Dictionary, club: Dictionary, country_id: String, data: Dictionary, seed: int, used_names: Dictionary, realism: RealismProfile) -> void:
+func _generate_staff(world: Dictionary, club: Dictionary, country_id: String, data: Dictionary, seed: int, used_names: Dictionary, realism) -> void:
 	var band: Vector2i = realism.staff_ability_band(int(club.reputation))
 	for role_index in range(STAFF_ROLES.size()):
 		var id := "staff-%s-%d" % [String(club.id), role_index]
@@ -109,11 +113,10 @@ func _generate_staff(world: Dictionary, club: Dictionary, country_id: String, da
 		member["fictional_identity"] = true
 		world.staff.append(member)
 
-func _generate_players(world: Dictionary, club: Dictionary, country_id: String, loaded_country_ids: Array, data: Dictionary, count: int, seed: int, used_names: Dictionary, realism: RealismProfile) -> void:
+func _generate_players(world: Dictionary, club: Dictionary, country_id: String, loaded_country_ids: Array, data: Dictionary, count: int, seed: int, used_names: Dictionary, realism, abilities) -> void:
 	var club_rep := int(club.reputation)
 	var band: Vector2i = realism.ability_band(club_rep)
 	var wage_band: Vector2i = realism.wage_band(club_rep)
-	var abilities = SpecialAbilityServiceClass.new()
 	for i in range(maxi(15, count)):
 		var id := "player-%s-%02d" % [String(club.id), i + 1]
 		var key := _key(id)
