@@ -82,6 +82,15 @@ func _style_visible_shell(tabs: TabContainer, app: Node) -> void:
 
 	var career_root: Node = shell.get_parent()
 	if career_root != null:
+		# The legacy fallback header is kept until UI2 has successfully mounted,
+		# then its Continue control is removed instead of merely hidden. Hidden
+		# duplicate text remained discoverable by automation/accessibility tools and
+		# produced a covered-target failure even though the player saw UI2's button.
+		var legacy_continue := career_root.get_node_or_null("LegacyCareerContinue")
+		if legacy_continue == null:
+			legacy_continue = career_root.find_child("LegacyCareerContinue", true, false)
+		if legacy_continue != null:
+			legacy_continue.queue_free()
 		for sibling: Node in career_root.get_children():
 			if sibling != shell and sibling is CanvasItem:
 				(sibling as CanvasItem).visible = false
