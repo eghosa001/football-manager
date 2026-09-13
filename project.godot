@@ -10,7 +10,7 @@ run/main_scene="res://game/scenes/career_app.tscn"
 config/features=PackedStringArray("4.7")
 
 [autoload]
-PolishRuntime="*res://game/polish/polish_runtime.gd"
+PolishRuntime="*res://game/polish/polish_runtime_compat.gd"
 CompletionRuntime="*res://game/polish/completion_runtime_compat.gd"
 TacticsRuntime="*res://game/polish/tactics_runtime.gd"
 SearchRuntime="*res://game/polish/search_runtime_compat.gd"
