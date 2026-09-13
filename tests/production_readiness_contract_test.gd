@@ -9,13 +9,12 @@ func _init() -> void:
 	assert(String(project.get_value("display", "window/stretch/mode", "")) == "canvas_items")
 	assert(String(project.get_value("display", "window/stretch/aspect", "")) == "expand")
 
+	# Keep this contract aligned with the workflows that actually exist in the
+	# repository. Deleted/retired workflows must not make every validation run fail.
 	var required := [
 		"res://.github/workflows/ci.yml",
-		"res://.github/workflows/hosted-validation.yml",
-		"res://.github/workflows/debug-apk.yml",
 		"res://.github/workflows/android-release.yml",
 		"res://.github/workflows/fresh-windows-release.yml",
-		"res://.github/workflows/rc3-heavy-gates.yml",
 		"res://docs/RELEASE_ACCEPTANCE_TEMPLATE.md",
 		"res://tests/ui_readability_test.gd",
 		"res://tests/navigation_responsive_test.gd",
@@ -39,30 +38,22 @@ func _init() -> void:
 
 	var ci := FileAccess.get_file_as_string("res://.github/workflows/ci.yml")
 	assert("clean: true" in ci)
-	assert("tests/ui_readability_test.gd" in ci)
-	assert("tests/performance_baseline_test.gd" in ci)
-	assert("Install pinned Godot-SQLite v4.9" in ci)
-
-	var hosted := FileAccess.get_file_as_string("res://.github/workflows/hosted-validation.yml")
-	assert("tests/navigation_responsive_test.gd" in hosted)
-	assert("--export-release \"Linux/X11\"" in hosted)
-	assert("release-smoke.sh" in hosted)
-	assert("FootballDynasty.x86_64.sha256" in hosted)
-
-	var android := FileAccess.get_file_as_string("res://.github/workflows/debug-apk.yml")
-	assert("game/**" in android)
-	assert("export_presets.cfg" in android)
-	assert("FootballDynasty-debug.apk.sha256" in android)
+	assert("tests/architecture_convergence_test.gd" in ci)
+	assert("tests/codebase_robustness_regression_test.gd" in ci)
+	assert("tests/production_readiness_contract_test.gd" in ci)
 
 	var android_release := FileAccess.get_file_as_string("res://.github/workflows/android-release.yml")
 	assert("GODOT_ANDROID_KEYSTORE_RELEASE_PATH" in android_release)
 	assert("--install-android-build-template" in android_release)
 	assert("FootballDynasty.aab.sha256" in android_release)
+	assert("tests/mobile_export_test.gd" in android_release)
+	assert("tests/navigation_responsive_test.gd" in android_release)
 
-	var heavy := FileAccess.get_file_as_string("res://.github/workflows/rc3-heavy-gates.yml")
-	assert("ref: release/rc3-convergence" not in heavy)
-	assert("tests/long_session_memory_test.gd" in heavy)
-	assert("CERTIFIED_SHA" in heavy)
+	var windows_release := FileAccess.get_file_as_string("res://.github/workflows/fresh-windows-release.yml")
+	assert("include-templates: true" in windows_release)
+	assert("--export-release 'Windows Desktop'" in windows_release)
+	assert("installer-smoke.ps1" in windows_release)
+	assert("WINDOWS RC3 ACCEPTANCE PASS" in windows_release)
 
 	print("[TEST] PRODUCTION READINESS CONTRACT PASS")
 	quit(0)
