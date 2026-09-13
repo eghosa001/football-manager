@@ -4,14 +4,19 @@ extends RefCounted
 func windows_for_country(world: Dictionary, country_id: String) -> Array:
 	var by_country: Variant = world.get("transfer_windows_by_country",{})
 	if by_country is Dictionary and by_country.has(country_id):
-		return (by_country[country_id] as Array).duplicate(true)
-	return world.get("transfer_windows",[]).duplicate(true)
+		var country_windows: Variant = by_country[country_id]
+		if country_windows is Array:
+			return (country_windows as Array).duplicate(true)
+		return []
+	var fallback: Variant = world.get("transfer_windows",[])
+	return (fallback as Array).duplicate(true) if fallback is Array else []
 
 func window_status(world: Dictionary, date_string: String, country_id: String = "") -> Dictionary:
 	var parts := date_string.split("-")
 	if parts.size() != 3: return {"open":false,"reason":"invalid_date","country_id":country_id,"window":{}}
-	var month := int(parts[1]); var day := int(parts[2])
-	if month < 1 or month > 12 or day < 1 or day > 31: return {"open":false,"reason":"invalid_date","country_id":country_id,"window":{}}
+	if not parts[0].is_valid_int() or not parts[1].is_valid_int() or not parts[2].is_valid_int(): return {"open":false,"reason":"invalid_date","country_id":country_id,"window":{}}
+	var year := int(parts[0]); var month := int(parts[1]); var day := int(parts[2])
+	if year < 1 or not _valid_calendar_day(year,month,day): return {"open":false,"reason":"invalid_date","country_id":country_id,"window":{}}
 	var resolved_country := country_id
 	if resolved_country == "":
 		resolved_country = managed_club_country(world)
@@ -23,6 +28,7 @@ func window_status(world: Dictionary, date_string: String, country_id: String = 
 	for value in windows:
 		if not value is Dictionary: continue
 		var window: Dictionary = value
+		if not _valid_window_boundary(window,"start") or not _valid_window_boundary(window,"end"): continue
 		var start := int(window.get("start_month",0))*100+int(window.get("start_day",0))
 		var finish := int(window.get("end_month",0))*100+int(window.get("end_day",0))
 		var open := (mmdd >= start and mmdd <= finish) if start <= finish else (mmdd >= start or mmdd <= finish)
@@ -63,7 +69,22 @@ func _next_window(windows: Array, mmdd: int) -> Dictionary:
 	var best: Dictionary = {}; var best_delta := 100000
 	for value in windows:
 		if not value is Dictionary: continue
-		var window: Dictionary=value; var start:=int(window.get("start_month",0))*100+int(window.get("start_day",0)); var delta:=start-mmdd
+		var window: Dictionary=value
+		if not _valid_window_boundary(window,"start"): continue
+		var start:=int(window.get("start_month",0))*100+int(window.get("start_day",0)); var delta:=start-mmdd
 		if delta < 0: delta += 1231
 		if delta < best_delta: best_delta=delta; best=window.duplicate(true)
 	return best
+
+func _valid_window_boundary(window: Dictionary, prefix: String) -> bool:
+	var month := int(window.get(prefix+"_month",0)); var day := int(window.get(prefix+"_day",0))
+	# Window definitions recur annually. February 29 is allowed so leap-year
+	# windows remain representable; all other impossible month/day pairs fail.
+	return _valid_calendar_day(2028,month,day)
+
+func _valid_calendar_day(year: int, month: int, day: int) -> bool:
+	if month < 1 or month > 12 or day < 1: return false
+	var days := [31,28,31,30,31,30,31,31,30,31,30,31]
+	var leap := year % 400 == 0 or (year % 4 == 0 and year % 100 != 0)
+	if leap: days[1] = 29
+	return day <= int(days[month-1])
