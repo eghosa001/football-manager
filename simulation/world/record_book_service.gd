@@ -130,7 +130,7 @@ func _dedupe(rows: Array, fields: Array) -> Array:
 	for row in rows:
 		if not row is Dictionary: continue
 		var parts: Array = []
-		for field in fields: parts.append(String(row.get(String(field),"")))
+		for field in fields: parts.append(str(row.get(str(field),"")))
 		by_key["|".join(parts)] = row.duplicate(true)
 	return by_key.values()
 
