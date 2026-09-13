@@ -51,6 +51,7 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 	var goalkeeper_count := 0
 	var loan_count := 0
 	var u21_count := 0
+	var counted_squad_size := 0
 	for player_id in player_ids:
 		if String(player_id) in accepted:
 			rejected.append({"player_id": String(player_id), "reason": "duplicate"})
@@ -63,7 +64,8 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 		if not bool(check.eligible):
 			rejected.append({"player_id": String(player_id), "reason": String(check.reasons[0])})
 			continue
-		if accepted.size() >= max_squad and not bool(check.get("squad_exempt", false)):
+		var squad_exempt := bool(check.get("squad_exempt", false))
+		if counted_squad_size >= max_squad and not squad_exempt:
 			rejected.append({"player_id": String(player_id), "reason": "squad_full"})
 			continue
 		if bool(check.foreign) and foreign_count >= max_foreign:
@@ -73,6 +75,7 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 			rejected.append({"player_id": String(player_id), "reason": "loan_limit"})
 			continue
 		accepted.append(String(player_id))
+		if not squad_exempt: counted_squad_size += 1
 		if bool(check.homegrown): homegrown_count += 1
 		if bool(check.foreign): foreign_count += 1
 		if String(player.get("position", "")) == "GK": goalkeeper_count += 1
@@ -80,8 +83,8 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 		if bool(check.u21): u21_count += 1
 	var valid := homegrown_count >= mini(min_homegrown, accepted.size()) and goalkeeper_count >= mini(min_goalkeepers, accepted.size()) and u21_count >= mini(min_u21, accepted.size())
 	var key := _key(club_id, String(competition.get("id", "competition")), season_year)
-	world.registrations[key] = {"club_id": club_id, "competition_id": String(competition.get("id", "")), "season_year": season_year, "player_ids": accepted.duplicate(), "homegrown": homegrown_count, "foreign": foreign_count, "goalkeepers": goalkeeper_count, "loans": loan_count, "u21": u21_count, "valid": valid}
-	return {"valid": valid, "registered": accepted, "rejected": rejected, "homegrown": homegrown_count, "foreign": foreign_count, "goalkeepers": goalkeeper_count, "loans": loan_count, "u21": u21_count}
+	world.registrations[key] = {"club_id": club_id, "competition_id": String(competition.get("id", "")), "season_year": season_year, "player_ids": accepted.duplicate(), "counted_squad_size": counted_squad_size, "homegrown": homegrown_count, "foreign": foreign_count, "goalkeepers": goalkeeper_count, "loans": loan_count, "u21": u21_count, "valid": valid}
+	return {"valid": valid, "registered": accepted, "rejected": rejected, "counted_squad_size": counted_squad_size, "homegrown": homegrown_count, "foreign": foreign_count, "goalkeepers": goalkeeper_count, "loans": loan_count, "u21": u21_count}
 
 func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
 	ensure_world(world)
