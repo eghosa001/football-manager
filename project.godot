@@ -11,11 +11,11 @@ config/features=PackedStringArray("4.7")
 
 [autoload]
 PolishRuntime="*res://game/polish/polish_runtime.gd"
-CompletionRuntime="*res://game/polish/completion_runtime.gd"
+CompletionRuntime="*res://game/polish/completion_runtime_compat.gd"
 TacticsRuntime="*res://game/polish/tactics_runtime.gd"
-SearchRuntime="*res://game/polish/search_runtime.gd"
+SearchRuntime="*res://game/polish/search_runtime_compat.gd"
 MatchHudRuntime="*res://game/polish/match_hud_runtime.gd"
-ManagementRuntime="*res://game/polish/management_runtime.gd"
+ManagementRuntime="*res://game/polish/management_runtime_compat.gd"
 CareerControlsRuntime="*res://game/polish/career_controls_runtime.gd"
 GraphicsRuntime="*res://game/polish/graphics_runtime.gd"
 SquadRuntime="*res://game/polish/squad_runtime.gd"
