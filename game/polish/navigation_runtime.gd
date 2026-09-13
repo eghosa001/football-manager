@@ -79,7 +79,12 @@ func wire_tabs(tabs: TabContainer, mobile_override: Variant = null) -> void:
 		sidebar_scroll.custom_minimum_size.x = 208
 		sidebar_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		sidebar_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		sidebar_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		# Keep a visible affordance at desktop/tablet heights where recruitment,
+		# club and tools entries fall below the fold. Touch/wheel scrolling still
+		# works normally, while keyboard/gamepad focus follows the selected item.
+		sidebar_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
+		sidebar_scroll.follow_focus = true
+		sidebar_scroll.scroll_deadzone = 6
 		shell.add_child(sidebar_scroll)
 		var sidebar := VBoxContainer.new()
 		sidebar.name = "CareerSidebar"
