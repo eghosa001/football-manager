@@ -139,18 +139,29 @@ func _build_league_fixtures(world: Dictionary, season_year: int) -> Array:
 	return fixtures
 
 func _round_robin(competition_id: String, input_club_ids: Array, season_year: int) -> Array:
-	var teams: Array = input_club_ids.duplicate(); var fixtures: Array = []; var team_count: int = teams.size()
-	assert(team_count >= 2 and team_count % 2 == 0)
+	var teams: Array = input_club_ids.duplicate()
+	var fixtures: Array = []
+	var real_team_count := teams.size()
+	assert(real_team_count >= 2)
+	# Odd-sized divisions are valid in real football and can also arise after
+	# sanctions/restructures. Add a deterministic bye slot instead of crashing.
+	if teams.size() % 2 != 0:
+		teams.append("")
+	var schedule_count: int = teams.size()
 	for leg in range(2):
-		for round_index in range(team_count - 1):
-			for pair_index in range(int(team_count / 2)):
-				var a: String = String(teams[pair_index]); var b: String = String(teams[team_count-1-pair_index])
+		for round_index in range(schedule_count - 1):
+			for pair_index in range(int(schedule_count / 2)):
+				var a: String = String(teams[pair_index]); var b: String = String(teams[schedule_count-1-pair_index])
+				if a == "" or b == "": continue
 				var home: String = a if (round_index+pair_index+leg)%2==0 else b; var away: String = b if home==a else a
 				var fixture_id := "fixture-%s-%d-%d-%d-%d" % [competition_id,season_year,leg,round_index,pair_index]
-				var fixture: Dictionary = Models.fixture(fixture_id,competition_id,leg*(team_count-1)+round_index+1,home,away)
+				var fixture: Dictionary = Models.fixture(fixture_id,competition_id,leg*(schedule_count-1)+round_index+1,home,away)
 				fixture["season_year"] = season_year
 				fixtures.append(fixture)
 			var fixed_team: String = String(teams[0]); var rotating: Array = teams.slice(1); rotating.push_front(rotating.pop_back()); teams=[fixed_team]; teams.append_array(rotating)
+	# A double round-robin always gives each real club 2*(N-1) matches,
+	# regardless of whether the schedule required a bye slot.
+	assert(fixtures.size() == real_team_count * (real_team_count - 1))
 	return fixtures
 
 func _stable_hash(text: String) -> int:
