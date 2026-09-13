@@ -99,7 +99,7 @@ func submit_transfer_offer(world: Dictionary, club_id: String, player_id: String
 	var buyer := _club(world, club_id); var player := _player(world, player_id)
 	if buyer.is_empty() or player.is_empty(): return {"error":ERR_DOES_NOT_EXIST}
 	var negotiation = TransferNegotiationClass.new()
-	if not negotiation.is_window_open(world, String(world.get("date", ""))): return {"error":ERR_UNAVAILABLE,"reason":"transfer_window_closed"}
+	if not negotiation.is_window_open_for_club(world, club_id, String(world.get("date", ""))): return {"error":ERR_UNAVAILABLE,"reason":"transfer_window_closed"}
 	if String(player.get("club_id", "")) == club_id: return {"error":ERR_INVALID_PARAMETER,"reason":"player_already_at_club"}
 	_ensure_finance_defaults(buyer)
 	var offer: Dictionary = negotiation.create_offer(world, player, buyer, fee, clauses)
@@ -119,13 +119,22 @@ func complete_transfer(world: Dictionary, offer_id: String, weekly_wage: int, si
 	if offer.is_empty() or String(offer.get("status", "")) != "accepted": return {"error":ERR_INVALID_PARAMETER,"reason":"offer_not_accepted"}
 	var buyer := _club(world, String(offer.buyer_id)); var player := _player(world, String(offer.player_id))
 	if buyer.is_empty() or player.is_empty(): return {"error":ERR_DOES_NOT_EXIST}
+	var negotiation = TransferNegotiationClass.new()
+	if not negotiation.is_window_open_for_club(world, String(buyer.id), String(world.get("date", ""))):
+		return {"error":ERR_UNAVAILABLE,"reason":"transfer_window_closed"}
 	_ensure_finance_defaults(buyer)
 	var agent_result: Dictionary = AgentServiceClass.new().evaluate_offer(player, buyer, weekly_wage, signing_bonus, years, seed)
 	if not bool(agent_result.get("accepted", false)):
 		offer["contract_status"] = "rejected"
 		return {"error":ERR_UNAUTHORIZED,"reason":"contract_rejected","agent":agent_result}
 	var market = TransferMarketClass.new()
-	var err := market.execute_transfer(world, String(player.id), String(buyer.id), int(offer.fee), weekly_wage, years, int(world.get("season_year", 2026)), seed)
+	# Preserve the structural terms that were accepted by the seller. Contract
+	# cash extras remain posted below so they cannot be charged twice.
+	var execution_terms: Dictionary = offer.get("clauses", {}).duplicate(true)
+	execution_terms["signing_bonus"] = 0
+	execution_terms["agent_fee"] = 0
+	execution_terms["pay_agent_fee"] = false
+	var err := market.execute_transfer(world, String(player.id), String(buyer.id), int(offer.fee), weekly_wage, years, int(world.get("season_year", 2026)), seed, execution_terms)
 	if err != OK: return {"error":err,"reason":"transfer_execution_failed","agent":agent_result}
 	var ledger = LedgerClass.new(); ledger.ensure(world)
 	if signing_bonus > 0: ledger.post(world, String(buyer.id), -signing_bonus, "signing_bonus", offer_id, int(world.get("season_year", 2026)))
@@ -143,7 +152,7 @@ func execute_loan(world: Dictionary, club_id: String, player_id: String, fee: in
 	var player := _player(world, player_id); var club := _club(world, club_id)
 	if player.is_empty() or club.is_empty(): return {"error":ERR_DOES_NOT_EXIST}
 	_ensure_finance_defaults(club)
-	if not TransferNegotiationClass.new().is_window_open(world, String(world.get("date", ""))): return {"error":ERR_UNAVAILABLE,"reason":"transfer_window_closed"}
+	if not TransferNegotiationClass.new().is_window_open_for_club(world, club_id, String(world.get("date", ""))): return {"error":ERR_UNAVAILABLE,"reason":"transfer_window_closed"}
 	var normalized := TransferNegotiationClass.new()._normalized_clauses(fee, terms)
 	var loan_terms := preload("res://simulation/transfers/negotiation_depth.gd").new().loan_terms(int(normalized.get("loan_fee", fee)), float(normalized.get("wage_contribution_pct", 0.0)), int(normalized.get("buy_option", 0)), bool(normalized.get("buy_obligation", false)))
 	var err := TransferMarketClass.new().execute_loan(world, player_id, club_id, fee, int(world.get("season_year", 2026)), loan_terms)
