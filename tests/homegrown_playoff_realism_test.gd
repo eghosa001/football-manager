@@ -23,10 +23,13 @@ func _test_homegrown_is_training_not_nationality() -> void:
 	var competition := {"id":"eng-1","country_id":"eng","registration_rules":{"max_squad":25,"min_homegrown":1}}
 	var same_nationality := {"id":"p1","club_id":"club","country_id":"eng","age":22,"retired":false,"injured_days":0,"training_history_version":1,"training_years_15_21_by_country":{},"training_years_15_21_by_club":{}}
 	var trained_foreign_national := {"id":"p2","club_id":"club","country_id":"fra","age":22,"retired":false,"injured_days":0,"training_history_version":1,"training_years_15_21_by_country":{"eng":3.0},"training_years_15_21_by_club":{"club":3.0}}
+	var impossible_legacy_youth := {"id":"p3","club_id":"club","country_id":"eng","age":17,"retired":false,"injured_days":0,"homegrown":true}
 	var first: Dictionary = registration.eligibility(same_nationality, competition, 2026)
 	var second: Dictionary = registration.eligibility(trained_foreign_national, competition, 2026)
+	var third: Dictionary = registration.eligibility(impossible_legacy_youth, competition, 2026)
 	_require(not bool(first.homegrown), "matching nationality must not automatically confer homegrown status")
 	_require(bool(second.homegrown), "three qualifying training years must confer association-homegrown status regardless of nationality")
+	_require(not bool(third.homegrown), "a legacy homegrown flag must not qualify a player before three seasons can exist")
 	_require(registration.club_trained(trained_foreign_national, "club"), "three qualifying years at the same club must confer club-trained status")
 
 func _test_homegrown_accrues_across_seasons() -> void:
@@ -62,10 +65,10 @@ func _test_playoff_is_resolved_by_match() -> void:
 	_require(String(result.get("winner","")) in ["c0","c1","c2","c3"], "playoff bracket must produce a participating winner")
 	var matches: Array = result.get("matches",[])
 	_require(matches.size() == 3, "four-team playoff must be resolved through two semifinals and a final")
-	for match in matches:
-		_require(bool(match.get("played",false)), "playoff fixture must be marked played")
-		_require(match.has("home_goals") and match.has("away_goals"), "playoff fixture must contain a football score")
-		_require(String(match.get("winner","")) in [String(match.home_club_id),String(match.away_club_id)], "playoff fixture must resolve a winner, including level matches")
+	for fixture_result in matches:
+		_require(bool(fixture_result.get("played",false)), "playoff fixture must be marked played")
+		_require(fixture_result.has("home_goals") and fixture_result.has("away_goals"), "playoff fixture must contain a football score")
+		_require(String(fixture_result.get("winner","")) in [String(fixture_result.home_club_id),String(fixture_result.away_club_id)], "playoff fixture must resolve a winner, including level matches")
 
 func _require(condition: bool, message: String) -> void:
 	checks += 1
