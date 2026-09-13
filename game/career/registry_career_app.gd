@@ -16,6 +16,10 @@ func _show_new_career() -> void:
 	expanded.toggled.connect(func(enabled: bool): expanded_world = enabled; _show_new_career())
 	var name_label := Label.new(); name_label.text = tr("Manager name"); root.add_child(name_label)
 	_manager_name_input = LineEdit.new(); _manager_name_input.text = tr("Manager"); _manager_name_input.placeholder_text = "Enter manager name"; _manager_name_input.custom_minimum_size = Vector2(640, 0); root.add_child(_manager_name_input)
+	_manager_name_input.focus_entered.connect(func() -> void:
+		if _manager_name_input.text == tr("Manager"):
+			_manager_name_input.select_all()
+	)
 	var loading := Label.new(); loading.text = tr("Loading database…"); root.add_child(loading)
 	await get_tree().process_frame
 	var preview: Dictionary = LaunchCatalogClass.new().build(0, expanded_world)
@@ -75,7 +79,11 @@ func _show_career() -> void:
 	_add_heading(root, tr("%s — %s") % [String(club.get("name", "Club")), String(snap.date)], 26)
 	var buttons := HBoxContainer.new()
 	root.add_child(buttons)
-	_add_button(buttons, tr("Continue"), _advance_day)
+	var legacy_continue := Button.new()
+	legacy_continue.name = "LegacyCareerContinue"
+	legacy_continue.text = tr("Continue")
+	legacy_continue.pressed.connect(_advance_day)
+	buttons.add_child(legacy_continue)
 	_add_button(buttons, tr("Save Slot %d") % active_slot if active_slot > 0 else "Save Career", _save)
 	_add_button(buttons, tr("Save As"), _show_save_as)
 	_add_button(buttons, tr("Settings"), _show_settings)
