@@ -26,10 +26,12 @@ func eligibility(player: Dictionary, competition: Dictionary, season_year: int) 
 	var max_age := int(rules.get("max_age", 99))
 	if age > max_age:
 		reasons.append("too_old")
-	# Loan players registered elsewhere cannot double-register.
-	if String(player.get("loan_parent_club_id", "")) != "" and int(player.get("loan_end_year", season_year)) > season_year:
-		reasons.append("on_loan_elsewhere")
-	return {"eligible": reasons.is_empty(), "reasons": reasons, "homegrown": homegrown, "foreign": home_country != "" and nationality != "" and nationality != home_country, "u21": age <= 21}
+	# A current loanee belongs to the borrowing club for selection purposes.
+	# register_squad() already requires player.club_id == club_id, so rejecting
+	# every player with a loan_parent_club_id would incorrectly make valid
+	# borrowed players ineligible for their temporary club.
+	var squad_exempt := (bool(rules.get("u21_exempt", false)) and age <= 21) or (bool(rules.get("u19_exempt", false)) and age <= 19)
+	return {"eligible": reasons.is_empty(), "reasons": reasons, "homegrown": homegrown, "foreign": home_country != "" and nationality != "" and nationality != home_country, "u21": age <= 21, "squad_exempt": squad_exempt}
 
 func register_squad(world: Dictionary, club_id: String, competition: Dictionary, player_ids: Array, season_year: int, player_index: Dictionary = {}) -> Dictionary:
 	ensure_world(world)
@@ -61,7 +63,7 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 		if not bool(check.eligible):
 			rejected.append({"player_id": String(player_id), "reason": String(check.reasons[0])})
 			continue
-		if accepted.size() >= max_squad and not bool(check.u21):
+		if accepted.size() >= max_squad and not bool(check.get("squad_exempt", false)):
 			rejected.append({"player_id": String(player_id), "reason": "squad_full"})
 			continue
 		if bool(check.foreign) and foreign_count >= max_foreign:
