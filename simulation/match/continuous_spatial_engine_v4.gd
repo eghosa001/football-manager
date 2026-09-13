@@ -26,9 +26,11 @@ func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionar
 	# proposed point as steering intent so acceleration, braking and turning are
 	# continuous instead of marker-like point stepping.
 	super._move_side(lineup, own, opp, ball, profile, loads, marking, in_possession, dt, tick)
-	_grid.clear()
-	for own_id in own.keys(): _grid.insert(String(own_id), own[own_id], "own")
-	for opp_id in opp.keys(): _grid.insert(String(opp_id), opp[opp_id], "opp")
+	var refresh_context := tick % STATE_REFRESH_TICKS == 0
+	if refresh_context:
+		_grid.clear()
+		for own_id in own.keys(): _grid.insert(String(own_id), own[own_id], "own")
+		for opp_id in opp.keys(): _grid.insert(String(opp_id), opp[opp_id], "opp")
 	var ball_v := Vector2(float(ball.get("x",0.0)),float(ball.get("y",0.0)))
 
 	for i in range(1,lineup.size()):
@@ -64,8 +66,8 @@ func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionar
 		own[id] = SpatialStateClass.clamp_position({"x":p.x,"y":p.y})
 		_motion_states[id] = state
 
-		if tick % STATE_REFRESH_TICKS == 0 or not _context_states.has(id):
-			var nearby := _grid.query_radius(own[id],12.0,id,"opp")
+		if refresh_context or not _context_states.has(id):
+			var nearby := _grid.query_radius(own[id],12.0,id,"opp") if refresh_context else []
 			var opponent_distance := 99.0 if nearby.is_empty() else float(nearby[0].distance)
 			_context_states[id] = MotionClass.contextual_state(in_possession,false,p.distance_to(ball_v),opponent_distance,float(p.x)/PITCH_LENGTH)
 
