@@ -57,6 +57,14 @@ const LABELS := {
 
 const NEGATIVE_TRAITS := [INJURY_PRONE, TEMPERAMENTAL, INCONSISTENT]
 
+# Match simulation calls ability predicates hundreds of thousands of times on a
+# large fixture day. Ability lists and player ids are effectively immutable for
+# the duration of a matchday, so cache their normalized lookup form and stable
+# hash. The small signature keeps the cache correct if tests/mods replace an
+# ability list on an existing player.
+var _ability_cache: Dictionary = {}
+var _stable_key_cache: Dictionary = {}
+
 func assign_for_player(player: Dictionary, seed: int, key: int) -> Array:
 	var existing: Array = player.get("special_abilities", [])
 	if not existing.is_empty():
@@ -98,7 +106,7 @@ func labels_for(player: Dictionary) -> Array:
 	return result
 
 func has(player: Dictionary, ability: String) -> bool:
-	return ability in player.get("special_abilities", [])
+	return _ability_set(player).has(ability)
 
 func development_multiplier(player: Dictionary) -> float:
 	if not has(player, PRODIGY):
@@ -113,11 +121,13 @@ func development_multiplier(player: Dictionary) -> float:
 	return 1.0
 
 func match_consistency_multiplier(player: Dictionary, seed: int, match_key: int = 0) -> float:
-	if has(player, CONSISTENT):
-		return 0.99 + SeededRngClass.unit_for(seed, match_key + _stable_key(String(player.get("id", ""))) + 801) * 0.04
-	if has(player, INCONSISTENT):
-		return 0.84 + SeededRngClass.unit_for(seed, match_key + _stable_key(String(player.get("id", ""))) + 809) * 0.28
-	return 0.96 + SeededRngClass.unit_for(seed, match_key + _stable_key(String(player.get("id", ""))) + 811) * 0.08
+	var abilities := _ability_set(player)
+	var stable := _cached_stable_key(String(player.get("id", "")))
+	if abilities.has(CONSISTENT):
+		return 0.99 + SeededRngClass.unit_for(seed, match_key + stable + 801) * 0.04
+	if abilities.has(INCONSISTENT):
+		return 0.84 + SeededRngClass.unit_for(seed, match_key + stable + 809) * 0.28
+	return 0.96 + SeededRngClass.unit_for(seed, match_key + stable + 811) * 0.08
 
 func situational_bonus(player: Dictionary, context: Dictionary = {}) -> float:
 	var minute: int = int(context.get("minute", 0))
@@ -127,48 +137,49 @@ func situational_bonus(player: Dictionary, context: Dictionary = {}) -> float:
 	var phase: String = String(context.get("phase", "general"))
 	var derby: bool = bool(context.get("derby", false))
 	var under_pressure: bool = bool(context.get("under_pressure", false))
+	var abilities := _ability_set(player)
 	var bonus: float = 0.0
-	if has(player, SUPER_SUB) and came_on and minute >= 55:
+	if abilities.has(SUPER_SUB) and came_on and minute >= 55:
 		bonus += 8.0 if minute <= 80 else 6.0
-	if has(player, GAMECHANGER) and minute >= 55 and score_diff <= 0:
+	if abilities.has(GAMECHANGER) and minute >= 55 and score_diff <= 0:
 		bonus += 4.0
-	if has(player, BIG_GAME_PLAYER) and importance >= 0.80:
+	if abilities.has(BIG_GAME_PLAYER) and importance >= 0.80:
 		bonus += 4.0 * importance
-	if has(player, CLUTCH_FINISHER) and minute >= 75 and score_diff <= 0 and phase in ["attack", "shot", "general", "one_on_one"]:
+	if abilities.has(CLUTCH_FINISHER) and minute >= 75 and score_diff <= 0 and phase in ["attack", "shot", "general", "one_on_one"]:
 		bonus += 5.0
-	if has(player, STAR_STRIKER) and phase in ["attack", "shot", "one_on_one"]:
+	if abilities.has(STAR_STRIKER) and phase in ["attack", "shot", "one_on_one"]:
 		bonus += 3.5
-	if has(player, THE_WALL) and phase in ["goalkeeping", "defending", "one_on_one"]:
+	if abilities.has(THE_WALL) and phase in ["goalkeeping", "defending", "one_on_one"]:
 		bonus += 5.0
-	if has(player, MIDFIELD_ENGINE) and minute >= 60 and phase in ["general", "midfield", "defending"]:
+	if abilities.has(MIDFIELD_ENGINE) and minute >= 60 and phase in ["general", "midfield", "defending"]:
 		bonus += 2.5
-	if has(player, MAESTRO) and phase in ["general", "midfield", "attack"]:
+	if abilities.has(MAESTRO) and phase in ["general", "midfield", "attack"]:
 		bonus += 2.5
-	if has(player, STOPPER) and phase in ["defending", "goalkeeping", "aerial"]:
+	if abilities.has(STOPPER) and phase in ["defending", "goalkeeping", "aerial"]:
 		bonus += 3.0
-	if has(player, SET_PIECE_SPECIALIST) and phase in ["set_piece", "penalty"]:
+	if abilities.has(SET_PIECE_SPECIALIST) and phase in ["set_piece", "penalty"]:
 		bonus += 7.0
-	if has(player, CAPTAIN_FANTASTIC) and (importance >= 0.65 or score_diff < 0):
+	if abilities.has(CAPTAIN_FANTASTIC) and (importance >= 0.65 or score_diff < 0):
 		bonus += 2.5
-	if has(player, PRESS_RESISTANT) and phase in ["midfield", "general"]:
+	if abilities.has(PRESS_RESISTANT) and phase in ["midfield", "general"]:
 		bonus += 4.0 if under_pressure else 1.5
-	if has(player, AERIAL_MONSTER) and phase in ["aerial", "set_piece"]:
+	if abilities.has(AERIAL_MONSTER) and phase in ["aerial", "set_piece"]:
 		bonus += 5.0
-	if has(player, SPEED_DEMON) and phase in ["attack", "general", "one_on_one"]:
+	if abilities.has(SPEED_DEMON) and phase in ["attack", "general", "one_on_one"]:
 		bonus += 2.5
-	if has(player, LONG_SHOT_SPECIALIST) and phase == "shot" and bool(context.get("long_shot", false)):
+	if abilities.has(LONG_SHOT_SPECIALIST) and phase == "shot" and bool(context.get("long_shot", false)):
 		bonus += 4.0
-	if has(player, PENALTY_EXPERT) and phase == "penalty":
+	if abilities.has(PENALTY_EXPERT) and phase == "penalty":
 		bonus += 8.0
-	if has(player, DERBY_SPECIALIST) and derby:
+	if abilities.has(DERBY_SPECIALIST) and derby:
 		bonus += 4.0
-	if has(player, COMEBACK_KING) and score_diff < 0 and minute >= 50:
+	if abilities.has(COMEBACK_KING) and score_diff < 0 and minute >= 50:
 		bonus += 4.5
-	if has(player, ONE_ON_ONE_SPECIALIST) and phase == "one_on_one":
+	if abilities.has(ONE_ON_ONE_SPECIALIST) and phase == "one_on_one":
 		bonus += 6.0
-	if has(player, CONSISTENT):
+	if abilities.has(CONSISTENT):
 		bonus += 1.0
-	if has(player, INCONSISTENT):
+	if abilities.has(INCONSISTENT):
 		bonus -= 1.5
 	return clampf(bonus, -5.0, 14.0)
 
@@ -176,28 +187,31 @@ func shot_multiplier(player: Dictionary, context: Dictionary = {}) -> float:
 	var multiplier: float = 1.0
 	var minute: int = int(context.get("minute", 0))
 	var score_diff: int = int(context.get("score_diff", 0))
-	if has(player, STAR_STRIKER): multiplier *= 1.14
-	if has(player, GAMECHANGER) and minute >= 60 and score_diff <= 0: multiplier *= 1.08
-	if has(player, CLUTCH_FINISHER) and minute >= 75 and score_diff <= 0: multiplier *= 1.15
-	if has(player, SET_PIECE_SPECIALIST) and bool(context.get("set_piece", false)): multiplier *= 1.16
-	if has(player, LONG_SHOT_SPECIALIST) and bool(context.get("long_shot", false)): multiplier *= 1.18
-	if has(player, PENALTY_EXPERT) and bool(context.get("penalty", false)): multiplier *= 1.12
-	if has(player, ONE_ON_ONE_SPECIALIST) and bool(context.get("one_on_one", false)): multiplier *= 1.16
-	if has(player, DERBY_SPECIALIST) and bool(context.get("derby", false)): multiplier *= 1.05
-	if has(player, COMEBACK_KING) and score_diff < 0 and minute >= 50: multiplier *= 1.08
+	var abilities := _ability_set(player)
+	if abilities.has(STAR_STRIKER): multiplier *= 1.14
+	if abilities.has(GAMECHANGER) and minute >= 60 and score_diff <= 0: multiplier *= 1.08
+	if abilities.has(CLUTCH_FINISHER) and minute >= 75 and score_diff <= 0: multiplier *= 1.15
+	if abilities.has(SET_PIECE_SPECIALIST) and bool(context.get("set_piece", false)): multiplier *= 1.16
+	if abilities.has(LONG_SHOT_SPECIALIST) and bool(context.get("long_shot", false)): multiplier *= 1.18
+	if abilities.has(PENALTY_EXPERT) and bool(context.get("penalty", false)): multiplier *= 1.12
+	if abilities.has(ONE_ON_ONE_SPECIALIST) and bool(context.get("one_on_one", false)): multiplier *= 1.16
+	if abilities.has(DERBY_SPECIALIST) and bool(context.get("derby", false)): multiplier *= 1.05
+	if abilities.has(COMEBACK_KING) and score_diff < 0 and minute >= 50: multiplier *= 1.08
 	return clampf(multiplier, 0.82, 1.48)
 
 func goalkeeper_goal_reduction(player: Dictionary, context: Dictionary = {}) -> float:
+	var abilities := _ability_set(player)
 	var reduction: float = 0.0
-	if has(player, THE_WALL): reduction += 0.14
-	if has(player, BIG_GAME_PLAYER) and float(context.get("importance", 0.5)) >= 0.8: reduction += 0.03
-	if has(player, DERBY_SPECIALIST) and bool(context.get("derby", false)): reduction += 0.02
+	if abilities.has(THE_WALL): reduction += 0.14
+	if abilities.has(BIG_GAME_PLAYER) and float(context.get("importance", 0.5)) >= 0.8: reduction += 0.03
+	if abilities.has(DERBY_SPECIALIST) and bool(context.get("derby", false)): reduction += 0.02
 	return clampf(reduction, 0.0, 0.22)
 
 func stamina_retention(player: Dictionary) -> float:
+	var abilities := _ability_set(player)
 	var retention: float = 0.0
-	if has(player, MIDFIELD_ENGINE): retention += 0.18
-	if has(player, SPEED_DEMON): retention -= 0.04
+	if abilities.has(MIDFIELD_ENGINE): retention += 0.18
+	if abilities.has(SPEED_DEMON): retention -= 0.04
 	return clampf(retention, -0.08, 0.22)
 
 func aerial_multiplier(player: Dictionary) -> float:
@@ -207,9 +221,10 @@ func pace_multiplier(player: Dictionary) -> float:
 	return 1.10 if has(player, SPEED_DEMON) else 1.0
 
 func card_probability_multiplier(player: Dictionary) -> float:
+	var abilities := _ability_set(player)
 	var multiplier: float = 1.0
-	if has(player, TEMPERAMENTAL): multiplier *= 1.65
-	if has(player, CONSISTENT): multiplier *= 0.92
+	if abilities.has(TEMPERAMENTAL): multiplier *= 1.65
+	if abilities.has(CONSISTENT): multiplier *= 0.92
 	return clampf(multiplier, 0.75, 1.80)
 
 func injury_risk_multiplier(player: Dictionary) -> float:
@@ -232,18 +247,20 @@ func pregame_team_edge(players: Array, club_id: String, context: Dictionary = {}
 	var starters: Array = candidates.slice(0, mini(11, candidates.size()))
 	var edge: float = 0.0
 	for player in starters:
-		if has(player, BIG_GAME_PLAYER) and float(context.get("importance", 0.5)) >= 0.8: edge += 0.35
-		if has(player, STAR_STRIKER): edge += 0.18
-		if has(player, THE_WALL): edge += 0.22
-		if has(player, MAESTRO): edge += 0.15
-		if has(player, STOPPER): edge += 0.12
-		if has(player, CAPTAIN_FANTASTIC): edge += 0.20
-		if has(player, DERBY_SPECIALIST) and bool(context.get("derby", false)): edge += 0.22
-		if has(player, CONSISTENT): edge += 0.08
-		if has(player, INCONSISTENT): edge -= 0.10
+		var abilities := _ability_set(player)
+		if abilities.has(BIG_GAME_PLAYER) and float(context.get("importance", 0.5)) >= 0.8: edge += 0.35
+		if abilities.has(STAR_STRIKER): edge += 0.18
+		if abilities.has(THE_WALL): edge += 0.22
+		if abilities.has(MAESTRO): edge += 0.15
+		if abilities.has(STOPPER): edge += 0.12
+		if abilities.has(CAPTAIN_FANTASTIC): edge += 0.20
+		if abilities.has(DERBY_SPECIALIST) and bool(context.get("derby", false)): edge += 0.22
+		if abilities.has(CONSISTENT): edge += 0.08
+		if abilities.has(INCONSISTENT): edge -= 0.10
 	for player in candidates.slice(mini(11, candidates.size()), mini(18, candidates.size())):
-		if has(player, SUPER_SUB): edge += 0.20
-		if has(player, GAMECHANGER): edge += 0.10
+		var abilities := _ability_set(player)
+		if abilities.has(SUPER_SUB): edge += 0.20
+		if abilities.has(GAMECHANGER): edge += 0.10
 	return clampf(edge, -1.0, 3.4)
 
 func _eligible(player: Dictionary) -> Array:
@@ -287,6 +304,31 @@ func _eligible(player: Dictionary) -> Array:
 	if ca >= 58: result.append(DERBY_SPECIALIST)
 	if ca >= 60: result.append(COMEBACK_KING)
 	return result
+
+func _ability_set(player: Dictionary) -> Dictionary:
+	var player_id := String(player.get("id", ""))
+	var values: Array = player.get("special_abilities", [])
+	# Ability arrays contain only a handful of strings. A deterministic compact
+	# signature is cheaper than repeatedly scanning them across every possession.
+	var signature := str(values.size())
+	for value in values:
+		signature += "|" + String(value)
+	var cache_key := player_id if player_id != "" else signature
+	var cached: Dictionary = _ability_cache.get(cache_key, {})
+	if String(cached.get("signature", "")) == signature:
+		return cached.get("lookup", {})
+	var lookup: Dictionary = {}
+	for value in values:
+		lookup[String(value)] = true
+	_ability_cache[cache_key] = {"signature":signature,"lookup":lookup}
+	return lookup
+
+func _cached_stable_key(text: String) -> int:
+	if _stable_key_cache.has(text):
+		return int(_stable_key_cache[text])
+	var value := _stable_key(text)
+	_stable_key_cache[text] = value
+	return value
 
 func _stable_key(text: String) -> int:
 	var value: int = 97

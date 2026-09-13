@@ -1,9 +1,20 @@
 class_name ClubEconomyService
 extends "res://simulation/finance/club_economy.gd"
 
-# Stable production facade for finance execution. Keep insolvency event emission
-# explicit: Array.append() returns void and must never be used as the value of
-# a conditional expression in GDScript.
+# Stable production facade for finance execution. Keep defaults and insolvency
+# handling explicit at this boundary so every career path sees a complete
+# finance model even when older/base callers omit optional seed fields.
+func ensure_club(club: Dictionary) -> void:
+	super.ensure_club(club)
+	var reputation := int(club.get("reputation", 50))
+	club["ticket_price"] = maxi(1, int(club.get("ticket_price", 15 + reputation / 5)))
+	club["commercial_revenue"] = maxi(0, int(club.get("commercial_revenue", 750_000 + reputation * 35_000)))
+	club["debt"] = maxi(0, int(club.get("debt", 0)))
+	club["financial_status"] = String(club.get("financial_status", "secure"))
+	_ensure_sponsorships(club, reputation)
+
+# Array.append() returns void and must never be used as the value of a
+# conditional expression in GDScript.
 func _apply_insolvency(world: Dictionary, club: Dictionary, season_year: int) -> void:
 	var debt := int(club.get("debt", 0))
 	if debt > 30_000_000:

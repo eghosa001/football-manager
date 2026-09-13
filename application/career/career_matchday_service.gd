@@ -82,8 +82,8 @@ func play_date(world: Dictionary, date_string: String, managed_club_id: String, 
 			result = _tactical.simulate_match(home, away, eligible_players, match_seed, match_context)
 			_tactical.apply_to_fixture(fixture, result)
 		elif tier == SimulationTierPolicyClass.BACKGROUND_LEAGUE:
-			result = _abstract.simulate_match(home, away, eligible_players, match_seed, match_context)
-			_abstract.apply_to_fixture(fixture, result)
+			result = _aggregate.simulate_match(home, away, eligible_players, match_seed, match_context)
+			_aggregate.apply_to_fixture(fixture, result)
 		else:
 			result = _aggregate.simulate_match(home, away, [], match_seed)
 			_aggregate.apply_to_fixture(fixture, result)

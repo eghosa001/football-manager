@@ -118,15 +118,74 @@ func _simulate_national_match(world: Dictionary, home_country: String, away_coun
 	var pool: Array = []
 	for player_id in home_ids:
 		var player := _player(world, String(player_id)).duplicate(true)
-		if not player.is_empty(): player.club_id = home_country; pool.append(player)
+		if not player.is_empty():
+			player.club_id = home_country
+			pool.append(player)
 	for player_id in away_ids:
 		var player := _player(world, String(player_id)).duplicate(true)
-		if not player.is_empty(): player.club_id = away_country; pool.append(player)
-	if home_ids.size() < 11 or away_ids.size() < 11:
-		return {"home_goals":0,"away_goals":0,"events":[],"stats":{"home":{},"away":{}},"lineups":{"home":home_ids,"away":away_ids}}
-	var home := {"id":home_country,"name":_country_name(world,home_country),"reputation":50}
-	var away := {"id":away_country,"name":_country_name(world,away_country),"reputation":50}
-	return _engine.simulate_match(home, away, pool, seed)
+		if not player.is_empty():
+			player.club_id = away_country
+			pool.append(player)
+	# Small/newly-added countries and heavily depleted long saves can have fewer
+	# than eleven eligible persistent players. Do not turn every such fixture
+	# into an artificial 0-0. Temporary emergency call-ups exist only for this
+	# match and are derived deterministically from the nation's football strength.
+	_add_emergency_callups(world, pool, home_country, home_ids.size(), seed + 101)
+	_add_emergency_callups(world, pool, away_country, away_ids.size(), seed + 202)
+	var home := {"id":home_country,"name":_country_name(world,home_country),"reputation":_country_strength(world, home_country)}
+	var away := {"id":away_country,"name":_country_name(world,away_country),"reputation":_country_strength(world, away_country)}
+	var result: Dictionary = _engine.simulate_match(home, away, pool, seed)
+	result["emergency_callups"] = {"home": maxi(0, 11 - home_ids.size()), "away": maxi(0, 11 - away_ids.size())}
+	return result
+
+func _add_emergency_callups(world: Dictionary, pool: Array, country_id: String, existing_count: int, seed: int) -> void:
+	if existing_count >= 11:
+		return
+	var positions := ["GK", "DR", "DC", "DC", "DL", "DM", "MC", "MC", "AMR", "AML", "ST"]
+	var existing_positions: Dictionary = {}
+	for player in pool:
+		if String(player.get("club_id", "")) == country_id:
+			var position := String(player.get("position", "MC"))
+			existing_positions[position] = int(existing_positions.get(position, 0)) + 1
+	var needed := 11 - existing_count
+	var strength := _country_strength(world, country_id)
+	for i in range(needed):
+		var position := _next_emergency_position(positions, existing_positions)
+		existing_positions[position] = int(existing_positions.get(position, 0)) + 1
+		var jitter := posmod(_stable("%s:%d:%d" % [country_id, seed, i]), 13) - 6
+		var ability := clampi(strength + jitter, 25, 80)
+		pool.append({
+			"id":"emergency-%s-%d-%d" % [country_id, seed, i],
+			"club_id":country_id,
+			"country_id":country_id,
+			"first_name":"Emergency",
+			"last_name":"Call-up %d" % (i + 1),
+			"name":"Emergency Call-up %d" % (i + 1),
+			"age":24,
+			"position":position,
+			"current_ability":ability,
+			"potential":ability,
+			"fitness":100.0,
+			"fatigue":10.0,
+			"morale":60.0,
+			"injured_days":0,
+			"retired":false,
+			"attributes":{"pace":ability,"stamina":ability,"passing":ability,"finishing":ability,"tackling":ability,"positioning":ability,"decisions":ability,"technique":ability,"handling":ability if position == "GK" else maxi(20, ability - 20)}
+		})
+
+func _next_emergency_position(positions: Array, existing_positions: Dictionary) -> String:
+	var target_counts := {"GK":1,"DR":1,"DC":2,"DL":1,"DM":1,"MC":2,"AMR":1,"AML":1,"ST":1}
+	for position_value in positions:
+		var position := String(position_value)
+		if int(existing_positions.get(position, 0)) < int(target_counts.get(position, 1)):
+			return position
+	return "MC"
+
+func _country_strength(world: Dictionary, id: String) -> int:
+	for country in world.get("countries", []):
+		if String(country.get("id", "")) == id:
+			return clampi(int(country.get("youth_rating", country.get("reputation", 50))), 25, 80)
+	return 50
 
 func _player(world: Dictionary, id: String) -> Dictionary:
 	for player in world.get("players", []):

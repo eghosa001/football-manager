@@ -14,7 +14,20 @@ const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
 const SpecialAbilityServiceClass = preload("res://simulation/players/special_ability_service.gd")
 
 func ensure_player(player: Dictionary) -> void:
-	player["medical"] = player.get("medical", {"current":{},"history":[],"rehab_progress":0.0,"match_fitness":100.0})
+	var raw: Variant = player.get("medical", {})
+	var medical: Dictionary = raw if raw is Dictionary else {}
+	if not medical.get("current", {}) is Dictionary: medical["current"] = {}
+	else: medical["current"] = medical.get("current", {})
+	if not medical.get("history", []) is Array: medical["history"] = []
+	else: medical["history"] = medical.get("history", [])
+	medical["rehab_progress"] = clampf(float(medical.get("rehab_progress", 0.0)), 0.0, 1.0)
+	medical["match_fitness"] = clampf(float(medical.get("match_fitness", 100.0)), 0.0, 100.0)
+	player["medical"] = medical
+	if not medical.current.is_empty():
+		var remaining := maxi(0, int(ceil(float(medical.current.get("days_remaining", player.get("injured_days", 0))))))
+		player["injured_days"] = remaining
+	else:
+		player["injured_days"] = maxi(0, int(player.get("injured_days", 0)))
 
 func injury_risk(player: Dictionary, context: Dictionary = {}) -> Dictionary:
 	ensure_player(player)

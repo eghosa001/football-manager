@@ -7,21 +7,32 @@ var _ledger = LedgerClass.new()
 
 func ensure_world(world: Dictionary) -> void:
 	_ledger.ensure(world)
-	for club in world.clubs:
-		ensure_club(club)
+	var clubs: Variant = world.get("clubs", [])
+	if not clubs is Array:
+		world["clubs"] = []
+		return
+	for club in clubs:
+		if club is Dictionary:
+			ensure_club(club)
 
 func ensure_club(club: Dictionary) -> void:
 	var reputation: int = int(club.get("reputation", 50))
-	if not club.has("stadium"):
+	var stadium_value: Variant = club.get("stadium", {})
+	if not stadium_value is Dictionary:
+		club["stadium"] = {}
+	elif not club.has("stadium"):
 		club["stadium"] = {}
 	club.stadium["name"] = String(club.stadium.get("name", club.get("stadium_name", "%s Stadium" % String(club.get("name", "Club")))))
-	club.stadium["capacity"] = int(club.stadium.get("capacity", club.get("stadium_capacity", 8_000 + reputation * 260)))
+	club.stadium["capacity"] = maxi(500, int(club.stadium.get("capacity", club.get("stadium_capacity", 8_000 + reputation * 260))))
 	club.stadium["condition"] = clampi(int(club.stadium.get("condition", 80)), 0, 100)
 	club.stadium["expansion_potential"] = clampi(int(club.stadium.get("expansion_potential", 25 + reputation / 2)), 0, 100)
 	club.stadium["ownership"] = String(club.stadium.get("ownership", "owned"))
 	club.stadium["annual_rent"] = maxi(0, int(club.stadium.get("annual_rent", 0)))
 
-	if not club.has("facilities"):
+	var facilities_value: Variant = club.get("facilities", {})
+	if not facilities_value is Dictionary:
+		club["facilities"] = {}
+	elif not club.has("facilities"):
 		club["facilities"] = {}
 	club.facilities["training"] = clampi(int(club.facilities.get("training", club.get("training_facilities", 35 + reputation / 2))), 1, 100)
 	club.facilities["youth_training"] = clampi(int(club.facilities.get("youth_training", club.facilities.get("youth", club.get("youth_facilities", 30 + reputation / 2)))), 1, 100)
@@ -38,7 +49,10 @@ func ensure_club(club: Dictionary) -> void:
 	club["scouting_facilities"] = int(club.facilities.scouting)
 	club["sports_science"] = int(club.facilities.sports_science)
 
-	if not club.has("supporters"):
+	var supporters_value: Variant = club.get("supporters", {})
+	if not supporters_value is Dictionary:
+		club["supporters"] = {}
+	elif not club.has("supporters"):
 		club["supporters"] = {}
 	var supporter_size := int(club.supporters.get("size", club.supporters.get("core", 2_000 + reputation * 300)))
 	club.supporters["size"] = maxi(500, supporter_size)
@@ -50,7 +64,10 @@ func ensure_club(club: Dictionary) -> void:
 	club.supporters["wealth"] = clampi(int(club.supporters.get("wealth", 45 + reputation / 4)), 0, 100)
 	club.supporters["mood"] = clampi(int(club.supporters.get("mood", 65)), 0, 100)
 
-	if not club.has("board"):
+	var board_value: Variant = club.get("board", {})
+	if not board_value is Dictionary:
+		club["board"] = {}
+	elif not club.has("board"):
 		club["board"] = {}
 	club.board["patience"] = clampi(int(club.board.get("patience", 65)), 0, 100)
 	club.board["ambition"] = clampi(int(club.board.get("ambition", 35 + reputation / 2)), 0, 100)
@@ -58,8 +75,15 @@ func ensure_club(club: Dictionary) -> void:
 	club.board["financial_prudence"] = clampi(int(club.board.get("financial_prudence", 55)), 0, 100)
 	club.board["youth_priority"] = clampi(int(club.board.get("youth_priority", 45 + int(club.facilities.youth_training) / 4)), 0, 100)
 	club.board["style_priority"] = String(club.board.get("style_priority", "balanced"))
-	if not club.board.has("objectives") or (club.board.objectives as Array).is_empty():
+	var objectives_value: Variant = club.board.get("objectives", [])
+	if not objectives_value is Array or (objectives_value as Array).is_empty():
 		club.board["objectives"] = _default_objectives(club, reputation)
+
+	club["ticket_price"] = maxi(1, int(club.get("ticket_price", 15 + reputation / 5)))
+	club["commercial_revenue"] = maxi(0, int(club.get("commercial_revenue", 750_000 + reputation * 35_000)))
+	club["debt"] = maxi(0, int(club.get("debt", 0)))
+	club["financial_status"] = String(club.get("financial_status", "secure"))
+	_ensure_sponsorships(club, reputation)
 
 func _default_objectives(club: Dictionary, reputation: int) -> Array:
 	var league_target := maxi(1, 21 - int(round(float(reputation) / 5.0)))
@@ -71,14 +95,8 @@ func _default_objectives(club: Dictionary, reputation: int) -> Array:
 		{"type": "playing_style", "target": String(club.board.get("style_priority", "balanced")), "weight": 0.35},
 	]
 
-	club["ticket_price"] = int(club.get("ticket_price", 15 + reputation / 5))
-	club["commercial_revenue"] = int(club.get("commercial_revenue", 750_000 + reputation * 35_000))
-	club["debt"] = maxi(0, int(club.get("debt", 0)))
-	club["financial_status"] = String(club.get("financial_status", "secure"))
-	_ensure_sponsorships(club, reputation)
-
 func sponsorship_deals(club: Dictionary) -> Array:
-	return club.get("sponsorships", [])
+	return club.get("sponsorships", []) if club.get("sponsorships", []) is Array else []
 
 func _ensure_sponsorships(club: Dictionary, reputation: int) -> void:
 	if club.has("sponsorships") and club.sponsorships is Array and not club.sponsorships.is_empty():
@@ -132,10 +150,12 @@ func _events_emit(world: Dictionary, season_year: int, event_type: String, paylo
 func run_season_finances(world: Dictionary, season_year: int, competition_records: Array = []) -> Dictionary:
 	ensure_world(world)
 	var reports: Array = []
-	for club in world.clubs:
-		var club_id: String = String(club.id)
-		var opening_cash: int = int(club.cash)
-		var entry_start: int = world.ledger.size()
+	for club in world.get("clubs", []):
+		if not club is Dictionary:
+			continue
+		var club_id: String = String(club.get("id", ""))
+		var opening_cash: int = int(club.get("cash", 0))
+		var entry_start: int = world.get("ledger", []).size()
 		var performance := _record_performance(competition_records, club_id)
 		var sponsor: int = negotiate_sponsorships(world, club, season_year, performance)
 		var commercial: int = int(club.get("commercial_revenue", 750_000 + int(club.get("reputation", 50)) * 35_000))
@@ -159,7 +179,7 @@ func run_season_finances(world: Dictionary, season_year: int, competition_record
 		_refresh_budgets(club)
 		_update_institutions(club, competition_records)
 		var movement := 0
-		for i in range(entry_start, world.ledger.size()):
+		for i in range(entry_start, world.get("ledger", []).size()):
 			if String(world.ledger[i].club_id) == club_id:
 				movement += int(world.ledger[i].amount)
 		reports.append({"club_id": club_id, "opening_cash": opening_cash, "closing_cash": int(club.cash), "ledger_movement": movement, "income": sponsor + commercial + broadcast + gate + prize, "broadcast": broadcast, "corporate_revenue": int(gate_report.get("corporate_revenue", 0)), "standard_revenue": int(gate_report.get("standard_revenue", 0)), "expenses": wages + operations + int(club.stadium.get("annual_rent", 0)), "financial_status": club.financial_status, "average_attendance": int(gate_report.average_attendance), "attendance_rate": float(gate_report.attendance_rate)})
@@ -194,7 +214,7 @@ func _broadcast_revenue(world: Dictionary, club: Dictionary, records: Array) -> 
 
 func invest_in_facility(world: Dictionary, club_id: String, facility: String, season_year: int) -> Error:
 	ensure_world(world)
-	var club: Dictionary = _find_club(world.clubs, club_id)
+	var club: Dictionary = _find_club(world.get("clubs", []), club_id)
 	if club.is_empty():
 		return ERR_INVALID_PARAMETER
 	var normalized := "youth_training" if facility == "youth" else facility
@@ -217,7 +237,7 @@ func reconcile_club(world: Dictionary, club_id: String, opening_cash: int, ledge
 		var entry: Dictionary = world.ledger[i]
 		if String(entry.club_id) == club_id:
 			movement += int(entry.amount)
-	var club: Dictionary = _find_club(world.clubs, club_id)
+	var club: Dictionary = _find_club(world.get("clubs", []), club_id)
 	return not club.is_empty() and int(club.cash) == opening_cash + movement
 
 func _annual_gate_revenue(world: Dictionary, club: Dictionary) -> Dictionary:
@@ -226,7 +246,7 @@ func _annual_gate_revenue(world: Dictionary, club: Dictionary) -> Dictionary:
 	var standard_revenue := 0
 	var attendance_total := 0
 	var matches := 0
-	var capacity := int(club.stadium.capacity)
+	var capacity := maxi(500, int(club.stadium.capacity))
 	var corporate := clampi(int(club.stadium.get("corporate_capacity", int(capacity * 0.03))), 0, capacity)
 	var form := _season_form(world, String(club.id))
 	for fixture in world.get("fixtures", []):
@@ -260,7 +280,7 @@ func _fixture_revenue_split(club: Dictionary, opponent: Dictionary, competition:
 	var corporate_revenue := corporate_sold * corporate_price
 	return {"attendance": attendance, "revenue": standard_revenue + corporate_revenue, "corporate_revenue": corporate_revenue, "standard_revenue": standard_revenue, "corporate_sold": corporate_sold, "standard_sold": standard_sold}
 
-func _fixture_attendance(club: Dictionary, opponent: Dictionary, competition: Dictionary, rivalry: Dictionary, form: float) -> int:
+func _fixture_attendance(club: Dictionary, opponent: Dictionary, competition: Dictionary, rivalry: Dictionary, form: float, corporate: int = 0) -> int:
 	var supporters: Dictionary = club.get("supporters", {"size": 5000, "loyalty": 55, "passion": 60, "mood": 60, "wealth": 50})
 	var base := float(supporters.get("size", supporters.get("core", 5000)))
 	var loyalty := 0.72 + float(supporters.get("loyalty", 50)) / 250.0
@@ -272,31 +292,31 @@ func _fixture_attendance(club: Dictionary, opponent: Dictionary, competition: Di
 	var rivalry_factor := 1.0 + float(rivalry.get("intensity", 0)) / 500.0
 	var price_expected := 10.0 + float(supporters.get("wealth", 50)) * 0.30
 	var price_factor := clampf(1.10 - maxf(0.0, float(club.get("ticket_price", 20)) - price_expected) / 120.0, 0.65, 1.10)
-	var capacity := int(club.get("stadium", {}).get("capacity", 10000))
+	var capacity := maxi(500, int(club.get("stadium", {}).get("capacity", 10000)))
 	return clampi(int(round(base * loyalty * passion * mood * form_factor * opponent_interest * importance * rivalry_factor * price_factor)), 500, capacity)
 
 func _annual_wages(world: Dictionary, club_id: String) -> int:
 	var weekly := 0
 	for contract in world.get("contracts", []):
 		if String(contract.get("club_id", "")) == club_id:
-			weekly += int(contract.get("weekly_wage", 0))
+			weekly += maxi(0, int(contract.get("weekly_wage", 0)))
 	var contracted_staff := {}
 	for contract in world.get("staff_contracts", []):
 		if String(contract.get("club_id", "")) != club_id:
 			continue
-		weekly += int(contract.get("weekly_wage", 0))
+		weekly += maxi(0, int(contract.get("weekly_wage", 0)))
 		contracted_staff[String(contract.get("staff_id", ""))] = true
 	for staff_member in world.get("staff", []):
 		if String(staff_member.get("club_id", "")) == club_id and not contracted_staff.has(String(staff_member.get("id", ""))):
-			weekly += 200 + int(staff_member.get("ability", 50)) * 12
+			weekly += 200 + maxi(0, int(staff_member.get("ability", 50))) * 12
 	return weekly * 52
 
 func _operations_cost(club: Dictionary) -> int:
-	var stadium_cost: int = int(club.get("stadium", {}).get("capacity", 10000)) * 8
+	var stadium_cost: int = maxi(500, int(club.get("stadium", {}).get("capacity", 10000))) * 8
 	var facilities: Dictionary = club.get("facilities", {})
 	var facility_total := 0
 	for key in ["training", "youth_training", "youth_recruitment", "sports_science", "medical", "scouting"]:
-		facility_total += int(facilities.get(key, 50))
+		facility_total += clampi(int(facilities.get(key, 50)), 0, 100)
 	return 180_000 + stadium_cost + facility_total * 1_350
 
 func _prize_money(club_id: String, records: Array) -> int:
@@ -307,7 +327,7 @@ func _prize_money(club_id: String, records: Array) -> int:
 		var position := 0
 		for row in record.get("table", []):
 			position += 1
-			if String(row.club_id) == club_id:
+			if String(row.get("club_id", "")) == club_id:
 				total += maxi(50_000, 1_200_000 - (position - 1) * 55_000)
 	return total if total > 0 else 100_000
 
@@ -345,7 +365,7 @@ func _apply_wage_control(world: Dictionary, club: Dictionary, season_year: int) 
 	var ratio := float(wages) / income
 	if ratio > 0.85:
 		# Wage bill too high: board forces a transfer-budget freeze.
-		club.transfer_budget = mini(int(club.get("transfer_budget", 0)), int(float(club.get("cash", 0)) * 0.10))
+		club.transfer_budget = mini(int(club.get("transfer_budget", 0)), maxi(0, int(float(club.get("cash", 0)) * 0.10)))
 		club.board.confidence = clampi(int(club.board.get("confidence", 65)) - 4, 0, 100)
 
 func _apply_debt_service(world: Dictionary, club: Dictionary, season_year: int) -> void:
@@ -368,7 +388,9 @@ func _apply_insolvency(world: Dictionary, club: Dictionary, season_year: int) ->
 		var write_down := int(debt * 0.5)
 		club.debt = debt - write_down
 		_ledger.post(world, String(club.id), 0, "debt_service", "restructure-%s-%d" % [String(club.id), season_year], season_year)
-		world.domain_events.append({"type": "CLUB_ADMINISTRATION", "payload": {"club_id": String(club.get("id", "")), "write_down": write_down, "season_year": season_year}}) if world.has("domain_events") else null
+		if not world.has("domain_events"):
+			world["domain_events"] = []
+		world.domain_events.append({"type": "CLUB_ADMINISTRATION", "payload": {"club_id": String(club.get("id", "")), "write_down": write_down, "season_year": season_year}})
 		debt = int(club.get("debt", 0))
 	var ratio := float(debt) / maxf(1.0, float(int(club.get("cash", 0)) + debt))
 	if ratio < 0.85 and int(club.get("cash", 0)) > -1_500_000:
@@ -443,12 +465,14 @@ func _competition(world:Dictionary,id:String)->Dictionary:
 	for competition in world.get("competitions",[]):
 		if String(competition.get("id",""))==id: return competition
 	return {}
+
 func _rivalry(world:Dictionary,a:String,b:String)->Dictionary:
 	for row in world.get("rivalries",[]):
 		if (String(row.get("club_a",""))==a and String(row.get("club_b",""))==b) or (String(row.get("club_a",""))==b and String(row.get("club_b",""))==a): return row
 	return {}
+
 func _find_club(clubs: Array, club_id: String) -> Dictionary:
 	for club in clubs:
-		if String(club.id) == club_id:
+		if club is Dictionary and String(club.get("id", "")) == club_id:
 			return club
 	return {}

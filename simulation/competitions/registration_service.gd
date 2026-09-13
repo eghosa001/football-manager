@@ -1,8 +1,11 @@
 class_name RegistrationService
 extends RefCounted
 
+const HOMEGROWN_YEARS := 3.0
+
 var _cached_player_index: Dictionary = {}
 var _cached_player_signature := ""
+var _pending_registration_requests: Dictionary = {}
 
 func ensure_world(world: Dictionary) -> void:
 	world["registrations"] = world.get("registrations", {})
@@ -12,7 +15,7 @@ func eligibility(player: Dictionary, competition: Dictionary, season_year: int) 
 	var age := int(player.get("age", 0))
 	var nationality := String(player.get("country_id", ""))
 	var home_country := String(competition.get("country_id", ""))
-	var homegrown := bool(player.get("homegrown", false)) or nationality == home_country
+	var homegrown := _association_homegrown(player, home_country)
 	var reasons: Array[String] = []
 	if bool(player.get("retired", false)):
 		reasons.append("retired")
@@ -26,10 +29,37 @@ func eligibility(player: Dictionary, competition: Dictionary, season_year: int) 
 	var max_age := int(rules.get("max_age", 99))
 	if age > max_age:
 		reasons.append("too_old")
-	# Loan players registered elsewhere cannot double-register.
-	if String(player.get("loan_parent_club_id", "")) != "" and int(player.get("loan_end_year", season_year)) > season_year:
-		reasons.append("on_loan_elsewhere")
-	return {"eligible": reasons.is_empty(), "reasons": reasons, "homegrown": homegrown, "foreign": home_country != "" and nationality != "" and nationality != home_country, "u21": age <= 21}
+	# A current loanee belongs to the borrowing club for selection purposes.
+	# register_squad() already requires player.club_id == club_id, so rejecting
+	# every player with a loan_parent_club_id would incorrectly make valid
+	# borrowed players ineligible for their temporary club.
+	var squad_exempt := (bool(rules.get("u21_exempt", false)) and age <= 21) or (bool(rules.get("u19_exempt", false)) and age <= 19)
+	return {"eligible": reasons.is_empty(), "reasons": reasons, "homegrown": homegrown, "foreign": home_country != "" and nationality != "" and nationality != home_country, "u21": age <= 21, "squad_exempt": squad_exempt}
+
+func _association_homegrown(player: Dictionary, country_id: String) -> bool:
+	if country_id == "":
+		return false
+	var years_by_country: Variant = player.get("training_years_15_21_by_country", {})
+	if years_by_country is Dictionary:
+		var training: Dictionary = years_by_country
+		if float(training.get(country_id, 0.0)) >= HOMEGROWN_YEARS:
+			return true
+		# Once a modern training ledger exists, it is authoritative. Nationality
+		# alone never confers homegrown status.
+		if not training.is_empty() or player.has("training_history_version"):
+			return false
+	# Compatibility for pre-ledger saves that explicitly persisted a homegrown
+	# qualification. A player younger than 18 cannot yet have accumulated the
+	# required three full seasons, so do not preserve an impossible legacy flag.
+	return bool(player.get("homegrown", false)) and int(player.get("age", 0)) >= 18
+
+func club_trained(player: Dictionary, club_id: String) -> bool:
+	if club_id == "":
+		return false
+	var years_by_club: Variant = player.get("training_years_15_21_by_club", {})
+	if years_by_club is Dictionary:
+		return float((years_by_club as Dictionary).get(club_id, 0.0)) >= HOMEGROWN_YEARS
+	return bool(player.get("club_trained", false)) and int(player.get("age", 0)) >= 18
 
 func register_squad(world: Dictionary, club_id: String, competition: Dictionary, player_ids: Array, season_year: int, player_index: Dictionary = {}) -> Dictionary:
 	ensure_world(world)
@@ -49,6 +79,7 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 	var goalkeeper_count := 0
 	var loan_count := 0
 	var u21_count := 0
+	var counted_squad_size := 0
 	for player_id in player_ids:
 		if String(player_id) in accepted:
 			rejected.append({"player_id": String(player_id), "reason": "duplicate"})
@@ -61,7 +92,8 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 		if not bool(check.eligible):
 			rejected.append({"player_id": String(player_id), "reason": String(check.reasons[0])})
 			continue
-		if accepted.size() >= max_squad and not bool(check.u21):
+		var squad_exempt := bool(check.get("squad_exempt", false))
+		if counted_squad_size >= max_squad and not squad_exempt:
 			rejected.append({"player_id": String(player_id), "reason": "squad_full"})
 			continue
 		if bool(check.foreign) and foreign_count >= max_foreign:
@@ -71,6 +103,7 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 			rejected.append({"player_id": String(player_id), "reason": "loan_limit"})
 			continue
 		accepted.append(String(player_id))
+		if not squad_exempt: counted_squad_size += 1
 		if bool(check.homegrown): homegrown_count += 1
 		if bool(check.foreign): foreign_count += 1
 		if String(player.get("position", "")) == "GK": goalkeeper_count += 1
@@ -78,11 +111,17 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 		if bool(check.u21): u21_count += 1
 	var valid := homegrown_count >= mini(min_homegrown, accepted.size()) and goalkeeper_count >= mini(min_goalkeepers, accepted.size()) and u21_count >= mini(min_u21, accepted.size())
 	var key := _key(club_id, String(competition.get("id", "competition")), season_year)
-	world.registrations[key] = {"club_id": club_id, "competition_id": String(competition.get("id", "")), "season_year": season_year, "player_ids": accepted.duplicate(), "homegrown": homegrown_count, "foreign": foreign_count, "goalkeepers": goalkeeper_count, "loans": loan_count, "u21": u21_count, "valid": valid}
-	return {"valid": valid, "registered": accepted, "rejected": rejected, "homegrown": homegrown_count, "foreign": foreign_count, "goalkeepers": goalkeeper_count, "loans": loan_count, "u21": u21_count}
+	world.registrations[key] = {"club_id": club_id, "competition_id": String(competition.get("id", "")), "season_year": season_year, "player_ids": accepted.duplicate(), "counted_squad_size": counted_squad_size, "homegrown": homegrown_count, "foreign": foreign_count, "goalkeepers": goalkeeper_count, "loans": loan_count, "u21": u21_count, "valid": valid}
+	return {"valid": valid, "registered": accepted, "rejected": rejected, "counted_squad_size": counted_squad_size, "homegrown": homegrown_count, "foreign": foreign_count, "goalkeepers": goalkeeper_count, "loans": loan_count, "u21": u21_count}
 
 func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
 	ensure_world(world)
+	# Matchday fallback queues the exact missing club/competition registrations.
+	# Repair only those pairs instead of rebuilding every squad in the world for
+	# every fixture. Explicit season-start calls have no pending requests and
+	# retain the original full-world registration behavior.
+	if not _pending_registration_requests.is_empty():
+		return _register_pending(world, season_year)
 	var player_index: Dictionary = {}
 	var squads: Dictionary = {}
 	for player in world.get("players", []):
@@ -95,17 +134,7 @@ func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
 	var invalid := 0
 	for competition in world.get("competitions", []):
 		for club_id in competition.get("club_ids", []):
-			var candidates: Array = squads.get(String(club_id), []).duplicate()
-			candidates.sort_custom(func(a: Dictionary, b: Dictionary):
-				var a_gk := 1 if String(a.get("position", "")) == "GK" else 0
-				var b_gk := 1 if String(b.get("position", "")) == "GK" else 0
-				if a_gk != b_gk: return a_gk > b_gk
-				var aa := int(a.get("current_ability", 0)); var bb := int(b.get("current_ability", 0))
-				if aa == bb: return String(a.get("id", "")) < String(b.get("id", ""))
-				return aa > bb
-			)
-			var ids: Array = []
-			for player in candidates: ids.append(String(player.get("id", "")))
+			var ids := _candidate_ids(squads.get(String(club_id), []))
 			var result: Dictionary = register_squad(world, String(club_id), competition, ids, season_year, player_index)
 			registered += 1
 			if not bool(result.get("valid", false)): invalid += 1
@@ -113,10 +142,60 @@ func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
 	_cached_player_signature = _player_signature(world.get("players", []))
 	return {"registered":registered,"invalid":invalid}
 
+func _register_pending(world: Dictionary, season_year: int) -> Dictionary:
+	var requests: Array = _pending_registration_requests.values()
+	_pending_registration_requests.clear()
+	var player_index: Dictionary = {}
+	var requested_clubs: Dictionary = {}
+	for request in requests:
+		requested_clubs[String(request.get("club_id", ""))] = true
+	for player in world.get("players", []):
+		player_index[String(player.get("id", ""))] = player
+	var squads: Dictionary = {}
+	for club_id in requested_clubs.keys(): squads[String(club_id)] = []
+	for player in world.get("players", []):
+		if bool(player.get("retired", false)): continue
+		var club_id := String(player.get("club_id", ""))
+		if squads.has(club_id): squads[club_id].append(player)
+	var competitions: Dictionary = {}
+	for competition in world.get("competitions", []):
+		competitions[String(competition.get("id", ""))] = competition
+	var registered := 0
+	var invalid := 0
+	for request in requests:
+		var club_id := String(request.get("club_id", ""))
+		var competition_id := String(request.get("competition_id", ""))
+		var request_year := int(request.get("season_year", season_year))
+		var competition: Dictionary = competitions.get(competition_id, {})
+		if competition.is_empty(): continue
+		var ids := _candidate_ids(squads.get(club_id, []))
+		var result: Dictionary = register_squad(world, club_id, competition, ids, request_year, player_index)
+		registered += 1
+		if not bool(result.get("valid", false)): invalid += 1
+	_cached_player_index = player_index
+	_cached_player_signature = _player_signature(world.get("players", []))
+	return {"registered":registered,"invalid":invalid,"targeted":true}
+
+func _candidate_ids(input_players: Array) -> Array:
+	var candidates: Array = input_players.duplicate()
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary):
+		var a_gk := 1 if String(a.get("position", "")) == "GK" else 0
+		var b_gk := 1 if String(b.get("position", "")) == "GK" else 0
+		if a_gk != b_gk: return a_gk > b_gk
+		var aa := int(a.get("current_ability", 0)); var bb := int(b.get("current_ability", 0))
+		if aa == bb: return String(a.get("id", "")) < String(b.get("id", ""))
+		return aa > bb
+	)
+	var ids: Array = []
+	for player in candidates: ids.append(String(player.get("id", "")))
+	return ids
+
 func registered_players(world: Dictionary, club_id: String, competition_id: String, season_year: int) -> Array:
 	ensure_world(world)
 	var key := _key(club_id, competition_id, season_year)
-	if not world.registrations.has(key): return []
+	if not world.registrations.has(key):
+		_queue_registration_request(club_id, competition_id, season_year)
+		return []
 	var ids: Array = world.registrations[key].get("player_ids", [])
 	var player_index := _player_index(world)
 	var players: Array = []
@@ -124,7 +203,14 @@ func registered_players(world: Dictionary, club_id: String, competition_id: Stri
 		var player: Dictionary = player_index.get(String(player_id), {})
 		if not player.is_empty() and String(player.get("club_id", "")) == club_id and not bool(player.get("retired", false)):
 			players.append(player)
+	if players.size() < 11:
+		_queue_registration_request(club_id, competition_id, season_year)
 	return players
+
+func _queue_registration_request(club_id: String, competition_id: String, season_year: int) -> void:
+	if club_id == "" or competition_id == "": return
+	var key := _key(club_id, competition_id, season_year)
+	_pending_registration_requests[key] = {"club_id":club_id,"competition_id":competition_id,"season_year":season_year}
 
 func is_registered(world: Dictionary, club_id: String, competition_id: String, season_year: int, player_id: String) -> bool:
 	ensure_world(world)

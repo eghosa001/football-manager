@@ -52,6 +52,15 @@ jobs:
       - name: Transfer-window country contract
         run: bash tools/test-headless.sh tests/transfer_window_country_test.gd 300
 
+      - name: Codebase robustness regressions
+        run: bash tools/test-headless.sh tests/codebase_robustness_regression_test.gd 300
+
+      - name: Registration exemption ordering
+        run: bash tools/test-headless.sh tests/registration_exemption_order_test.gd 300
+
+      - name: Homegrown and playoff realism
+        run: bash tools/test-headless.sh tests/homegrown_playoff_realism_test.gd 300
+
       - name: World integrity contract
         run: bash tools/test-headless.sh tests/world_integrity_audit_test.gd 600
 
@@ -66,6 +75,12 @@ jobs:
 
       - name: Finance insolvency regression
         run: bash tools/test-headless.sh tests/club_economy_service_test.gd 300
+
+      # Fail fast on throughput regressions before spending minutes in the
+      # exhaustive simulation and release-hardening suites. This keeps the same
+      # performance contract and all later gates; it only improves ordering.
+      - name: Performance baseline
+        run: bash tools/test-headless.sh tests/performance_baseline_test.gd 1200
 
       - name: Core simulation smoke
         run: bash tools/test-headless.sh tests/test_runner.gd 1200
@@ -87,9 +102,6 @@ jobs:
 
       - name: UI2 runtime takeover contract
         run: bash tools/test-headless.sh tests/ui2_runtime_integration_test.gd 300
-
-      - name: Performance baseline
-        run: bash tools/test-headless.sh tests/performance_baseline_test.gd 1200
 
       - name: Long-save safety
         run: bash tools/test-headless.sh tests/long_save_growth_test.gd 1200

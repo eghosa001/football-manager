@@ -2,6 +2,7 @@ class_name LeagueSystem
 extends RefCounted
 
 const Models = preload("res://simulation/world/domain_models.gd")
+const BackgroundMatchEngineClass = preload("res://simulation/match/background_aggregate_engine.gd")
 
 func apply_promotion_relegation(world: Dictionary, season_records: Array, places: int = 3) -> Array:
 	var movements: Array = []
@@ -40,6 +41,7 @@ func _movement_for_pair(world: Dictionary, country_id: String, upper: Dictionary
 	var relegated: Array = []
 	var direct_promoted: Array = []
 	var direct_relegated: Array = []
+	var playoff_matches: Array = []
 	for index in range(automatic):
 		direct_promoted.append(String(lower_table[index].club_id))
 		direct_relegated.append(String(upper_table[upper_table.size() - 1 - index].club_id))
@@ -51,12 +53,15 @@ func _movement_for_pair(world: Dictionary, country_id: String, upper: Dictionary
 		var playoff_pool := _playoff_pool(lower_table, lower.get("playoff_places", []), automatic)
 		for playoff_index in range(playoff_count):
 			if playoff_pool.is_empty(): break
-			var winner := _domestic_playoff_winner(world, playoff_pool, String(lower.id), playoff_index)
+			var playoff: Dictionary = _domestic_playoff(world, playoff_pool, String(lower.id), playoff_index)
+			playoff_matches.append_array(playoff.get("matches", []))
+			var winner := String(playoff.get("winner", ""))
 			if winner == "" or winner in promoted: continue
 			var upper_index := upper_table.size() - 1 - automatic - playoff_index
 			if upper_index < 0: break
 			promoted.append(winner)
 			relegated.append(String(upper_table[upper_index].club_id))
+			playoff_pool.erase(winner)
 
 	var survival_playoff := mini(int(upper.get("relegation_playoff_places", 0)), int(lower.get("promotion_playoff_vs_upper", 0)))
 	var survival_results: Array = []
@@ -66,8 +71,10 @@ func _movement_for_pair(world: Dictionary, country_id: String, upper: Dictionary
 		if upper_index < 0 or lower_index >= lower_table.size(): continue
 		var incumbent := String(upper_table[upper_index].club_id)
 		var challenger := String(lower_table[lower_index].club_id)
-		var winner := _two_club_playoff_winner(world, incumbent, challenger, String(upper.id), playoff_index)
-		var row := {"incumbent":incumbent,"challenger":challenger,"winner":winner,"promoted":false}
+		var playoff_match: Dictionary = _playoff_fixture(world, incumbent, challenger, String(upper.id), 10_000 + playoff_index)
+		playoff_matches.append(playoff_match)
+		var winner := String(playoff_match.get("winner", ""))
+		var row := {"incumbent":incumbent,"challenger":challenger,"winner":winner,"promoted":false,"match":playoff_match}
 		if winner == challenger:
 			promoted.append(challenger)
 			relegated.append(incumbent)
@@ -90,6 +97,7 @@ func _movement_for_pair(world: Dictionary, country_id: String, upper: Dictionary
 		"automatic_promoted":direct_promoted,
 		"automatic_relegated":direct_relegated,
 		"playoff_promoted":promoted.filter(func(id): return id not in direct_promoted),
+		"playoff_matches":playoff_matches,
 		"survival_playoffs":survival_results
 	}
 
@@ -103,27 +111,61 @@ func _playoff_pool(table: Array, configured: Variant, automatic: int) -> Array:
 	for index in range(start, end + 1): result.append(String(table[index].club_id))
 	return result
 
-func _domestic_playoff_winner(world: Dictionary, pool: Array, competition_id: String, salt: int) -> String:
-	if pool.is_empty(): return ""
-	var best := String(pool[0])
-	var best_score := -1
-	for index in range(pool.size()):
-		var id := String(pool[index])
-		var score := _club_reputation(world, id) * 10 + (pool.size() - index) * 6 + posmod(_stable_hash("%s:%s:%d" % [competition_id,id,salt]), 37)
-		if score > best_score:
-			best = id
-			best_score = score
-	return best
+func _domestic_playoff(world: Dictionary, pool: Array, competition_id: String, salt: int) -> Dictionary:
+	if pool.is_empty(): return {"winner":"","matches":[]}
+	var entrants: Array = pool.duplicate()
+	var matches: Array = []
+	var round_index := 0
+	while entrants.size() > 1 and round_index < 8:
+		var next_round: Array = []
+		# Preserve league seeding: highest remaining seed faces lowest. An odd
+		# highest seed receives a bye rather than being discarded.
+		var left := 0
+		var right := entrants.size() - 1
+		while left < right:
+			var home := String(entrants[left])
+			var away := String(entrants[right])
+			var playoff_match := _playoff_fixture(world, home, away, competition_id, salt * 100 + round_index * 10 + left)
+			playoff_match["round"] = round_index + 1
+			matches.append(playoff_match)
+			next_round.append(String(playoff_match.winner))
+			left += 1
+			right -= 1
+		if left == right:
+			next_round.append(String(entrants[left]))
+		entrants = next_round
+		round_index += 1
+	return {"winner":String(entrants[0]) if entrants.size() == 1 else "", "matches":matches}
 
-func _two_club_playoff_winner(world: Dictionary, incumbent: String, challenger: String, competition_id: String, salt: int) -> String:
-	var incumbent_score := _club_reputation(world, incumbent) * 10 + posmod(_stable_hash("%s:%s:%d" % [competition_id,incumbent,salt]), 61)
-	var challenger_score := _club_reputation(world, challenger) * 10 + posmod(_stable_hash("%s:%s:%d" % [competition_id,challenger,salt]), 61)
-	return challenger if challenger_score > incumbent_score else incumbent
+func _playoff_fixture(world: Dictionary, home_id: String, away_id: String, competition_id: String, salt: int) -> Dictionary:
+	var home := _club(world, home_id)
+	var away := _club(world, away_id)
+	if home.is_empty(): home = {"id":home_id,"reputation":50}
+	if away.is_empty(): away = {"id":away_id,"reputation":50}
+	var year := int(world.get("season_year", 2026))
+	var seed := _stable_hash("%s:%s:%s:%d:%d" % [competition_id,home_id,away_id,year,salt])
+	var result: Dictionary = BackgroundMatchEngineClass.new().simulate_match(home, away, world.get("players", []), seed, {"competition_id":competition_id,"stage":"promotion_playoff"})
+	var home_goals := int(result.get("home_goals", 0))
+	var away_goals := int(result.get("away_goals", 0))
+	var winner := ""
+	var shootout_winner := ""
+	if home_goals > away_goals:
+		winner = home_id
+	elif away_goals > home_goals:
+		winner = away_id
+	else:
+		shootout_winner = home_id if posmod(_stable_hash("shootout:%s:%s:%d" % [home_id,away_id,seed]), 2) == 0 else away_id
+		winner = shootout_winner
+	return {"competition_id":competition_id,"season_year":year,"home_club_id":home_id,"away_club_id":away_id,"home_goals":home_goals,"away_goals":away_goals,"winner":winner,"shootout_winner":shootout_winner,"played":true,"model":String(result.get("model","inactive_aggregate")),"stats":result.get("stats",{})}
+
+func _club(world: Dictionary, club_id: String) -> Dictionary:
+	for club in world.get("clubs", []):
+		if String(club.get("id", "")) == club_id: return club
+	return {}
 
 func _club_reputation(world: Dictionary, club_id: String) -> int:
-	for club in world.get("clubs", []):
-		if String(club.get("id", "")) == club_id: return int(club.get("reputation", 50))
-	return 50
+	var club := _club(world, club_id)
+	return int(club.get("reputation", 50)) if not club.is_empty() else 50
 
 func rollover(world: Dictionary, next_season_year: int, first_match_date: String = "") -> void:
 	assert(next_season_year > 0)
@@ -139,18 +181,29 @@ func _build_league_fixtures(world: Dictionary, season_year: int) -> Array:
 	return fixtures
 
 func _round_robin(competition_id: String, input_club_ids: Array, season_year: int) -> Array:
-	var teams: Array = input_club_ids.duplicate(); var fixtures: Array = []; var team_count: int = teams.size()
-	assert(team_count >= 2 and team_count % 2 == 0)
+	var teams: Array = input_club_ids.duplicate()
+	var fixtures: Array = []
+	var real_team_count := teams.size()
+	assert(real_team_count >= 2)
+	# Odd-sized divisions are valid in real football and can also arise after
+	# sanctions/restructures. Add a deterministic bye slot instead of crashing.
+	if teams.size() % 2 != 0:
+		teams.append("")
+	var schedule_count: int = teams.size()
 	for leg in range(2):
-		for round_index in range(team_count - 1):
-			for pair_index in range(int(team_count / 2)):
-				var a: String = String(teams[pair_index]); var b: String = String(teams[team_count-1-pair_index])
+		for round_index in range(schedule_count - 1):
+			for pair_index in range(int(schedule_count / 2)):
+				var a: String = String(teams[pair_index]); var b: String = String(teams[schedule_count-1-pair_index])
+				if a == "" or b == "": continue
 				var home: String = a if (round_index+pair_index+leg)%2==0 else b; var away: String = b if home==a else a
 				var fixture_id := "fixture-%s-%d-%d-%d-%d" % [competition_id,season_year,leg,round_index,pair_index]
-				var fixture: Dictionary = Models.fixture(fixture_id,competition_id,leg*(team_count-1)+round_index+1,home,away)
+				var fixture: Dictionary = Models.fixture(fixture_id,competition_id,leg*(schedule_count-1)+round_index+1,home,away)
 				fixture["season_year"] = season_year
 				fixtures.append(fixture)
 			var fixed_team: String = String(teams[0]); var rotating: Array = teams.slice(1); rotating.push_front(rotating.pop_back()); teams=[fixed_team]; teams.append_array(rotating)
+	# A double round-robin always gives each real club 2*(N-1) matches,
+	# regardless of whether the schedule required a bye slot.
+	assert(fixtures.size() == real_team_count * (real_team_count - 1))
 	return fixtures
 
 func _stable_hash(text: String) -> int:

@@ -10,8 +10,10 @@ func _init() -> void:
 	_test_managed_country_fallback()
 	_test_explicit_club_country()
 	_test_offer_rejects_closed_buyer_window()
+	_test_invalid_calendar_dates_fail_closed()
+	_test_malformed_country_windows_fail_closed()
 	if failures == 0:
-		print("[TEST] TRANSFER WINDOW COUNTRY PASS: managed-club and buyer-country windows verified")
+		print("[TEST] TRANSFER WINDOW COUNTRY PASS: managed-club, buyer-country and invalid-date windows verified")
 		quit(0)
 		return
 	push_error("[TEST] TRANSFER WINDOW COUNTRY FAIL: %d failures across %d checks" % [failures,checks])
@@ -57,6 +59,22 @@ func _test_offer_rejects_closed_buyer_window() -> void:
 	var offer := Negotiation.new().create_offer(world,player,buyer,10_000_000,{})
 	_require(String(offer.get("status","")) == "invalid","offer creation must reject a buyer whose domestic window is closed")
 	_require("transfer_window_closed" in offer.get("reason_codes",[]),"closed-window offer must expose transfer_window_closed reason")
+
+func _test_invalid_calendar_dates_fail_closed() -> void:
+	var world := _world()
+	var service = WindowService.new()
+	for date_value in ["2026-02-31","2025-02-29","2026-04-31","2026-aa-20","2026-13-01"]:
+		var status := service.window_status(world,String(date_value),"eng")
+		_require(not bool(status.get("open",true)),"invalid calendar date %s must never open a transfer window" % date_value)
+		_require(String(status.get("reason","")) == "invalid_date","invalid calendar date %s must report invalid_date" % date_value)
+	_require(service.is_open(world,"2028-02-29","eng") == false,"valid leap day outside England's summer window must parse normally and remain closed")
+
+func _test_malformed_country_windows_fail_closed() -> void:
+	var world := _world()
+	world.transfer_windows_by_country.eng = "not-an-array"
+	var status := WindowService.new().window_status(world,"2026-06-20","eng")
+	_require(not bool(status.get("open",true)),"malformed country window data must fail closed")
+	_require(String(status.get("reason","")) == "no_registered_window","malformed country window data must surface no_registered_window")
 
 func _require(condition: bool, message: String) -> void:
 	checks += 1
