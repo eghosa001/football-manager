@@ -8,7 +8,11 @@ const PITCH_LENGTH := 105.0
 const PITCH_WIDTH := 68.0
 
 func simulate_possession(home_lineup: Array, away_lineup: Array, seed: int, max_actions: int = 24, starting_side: String = "home", previous_state: Dictionary = {}) -> Dictionary:
-	var state := _initial_state(home_lineup, away_lineup, starting_side) if previous_state.is_empty() else previous_state.duplicate(true)
+	var has_spatial_state := previous_state.has("home_positions") and previous_state.has("away_positions") and previous_state.has("possession_side") and previous_state.has("ball") and previous_state.has("ball_owner_id")
+	var state := previous_state.duplicate(true) if has_spatial_state else _initial_state(home_lineup, away_lineup, starting_side)
+	if not has_spatial_state:
+		for key in previous_state:
+			state[key] = previous_state[key].duplicate(true) if previous_state[key] is Dictionary or previous_state[key] is Array else previous_state[key]
 	_sync_players(state, home_lineup, away_lineup)
 	var initial: Dictionary = state.duplicate(true)
 	var events: Array = []
@@ -111,7 +115,7 @@ func _choose_action(actor: Dictionary, state: Dictionary, seed: int, index: int)
 		shoot_utility += 16.0
 	elif not in_final_third:
 		shoot_utility -= 26.0
-	if String(instructions.get("shoot_on_sight", false)) == "true" or bool(instructions.get("shoot_on_sight", false)):
+	if bool(instructions.get("shoot_on_sight", false)):
 		shoot_utility += 6.0
 	if bool(instructions.get("work_ball_into_box", false)):
 		shoot_utility -= 7.0
@@ -292,7 +296,7 @@ func _shot_body_part(actor: Dictionary, seed: int, index: int) -> String:
 		return "head"
 	if foot == "both":
 		return "right_foot" if roll < 0.55 else "left_foot"
-	if String(actor.get("traits", []).has("avoids_weak_foot")):
+	if actor.get("traits", []).has("avoids_weak_foot"):
 		return foot + "_foot"
 	return foot + "_foot" if roll < 0.82 else ("left_foot" if foot == "right" else "right_foot")
 func _best_receiver(actor: Dictionary, team: Array, state: Dictionary, side: String, seed: int, index: int, through_bias: bool = false) -> Dictionary:
