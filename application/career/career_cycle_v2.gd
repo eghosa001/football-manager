@@ -57,6 +57,7 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 
 	var completed_courses:=_staff_ops_v2.advance_courses(world,365)
 	var completed_facilities:=_facilities_v2.advance(world,365)
+	var summary_count := _persist_season_summaries(world,result,completed_year)
 	var record_book_result := _record_books.refresh(world)
 	var integrity_result := _integrity.audit(world)
 	world["integrity_report"] = {"season_year":int(world.get("season_year",0)),"ok":bool(integrity_result.ok),"error_count":integrity_result.errors.size(),"warning_count":integrity_result.warnings.size()}
@@ -66,6 +67,42 @@ func complete_year(world: Dictionary, history: Array, season_seed: int, promotio
 	result["squad_plans"] = world.get("squad_plans",{}).size()
 	result["staff_courses_completed"] = completed_courses
 	result["facility_projects_completed"] = completed_facilities
+	result["season_summary_rows"] = summary_count
 	result["record_books"] = record_book_result
 	result["integrity"] = integrity_result
 	return result
+
+func _persist_season_summaries(world: Dictionary, result: Dictionary, completed_year: int) -> int:
+	world["history_archive"] = world.get("history_archive",{})
+	world.history_archive["season_summaries"] = world.history_archive.get("season_summaries",[])
+	var rows: Array = world.history_archive.season_summaries
+	var by_key := {}
+	for i in range(rows.size()):
+		var row: Dictionary = rows[i]
+		by_key["%d|%s" % [int(row.get("year",0)),String(row.get("competition_id",""))]] = i
+	var written := 0
+	for record in result.get("season",{}).get("records",[]):
+		var competition_id := String(record.get("competition_id",""))
+		if competition_id == "": continue
+		var summary: Dictionary = record.get("record_summary",{}).duplicate(true)
+		var row := {
+			"year":completed_year,
+			"competition_id":competition_id,
+			"competition_name":String(record.get("competition_name",competition_id)),
+			"competition_type":String(record.get("competition_type","league")),
+			"champion_club_id":String(record.get("champion_club_id","")),
+			"runner_up_club_id":String(record.get("runner_up_club_id","")),
+			"summary":summary
+		}
+		var key := "%d|%s" % [completed_year,competition_id]
+		if by_key.has(key): rows[int(by_key[key])] = row
+		else:
+			by_key[key] = rows.size()
+			rows.append(row)
+		written += 1
+	rows.sort_custom(func(a: Dictionary,b: Dictionary):
+		if int(a.get("year",0)) != int(b.get("year",0)): return int(a.get("year",0)) < int(b.get("year",0))
+		return String(a.get("competition_id","")) < String(b.get("competition_id",""))
+	)
+	world.history_archive["season_summaries"] = rows
+	return written
