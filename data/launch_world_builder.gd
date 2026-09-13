@@ -12,7 +12,7 @@ const LAST_NAMES := ["Okoro","Mensah","Diallo","Banda","Mokoena","Abdullahi","Ad
 const POSITIONS := ["GK","GK","DR","DC","DC","DC","DL","DM","MC","MC","AMC","AMR","AML","ST","ST"]
 const STAFF_ROLES := ["manager","assistant","coach","scout","physio"]
 
-func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25, expanded: bool = false, selected_country_ids: Array = []) -> Dictionary:
+func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25, expanded: bool = false, selected_country_ids: Array = [], selected_league_ids: Array = []) -> Dictionary:
 	var loader = DatabaseLoaderClass.new()
 	var realism = RealismProfileClass.new()
 	var abilities = SpecialAbilityServiceClass.new()
@@ -21,37 +21,46 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 	var world := {"seed":seed,"date":"2026-07-01","season_year":2026,"countries":[],"clubs":[],"players":[],"staff":[],"competitions":[],"contracts":[],"fixtures":[],"launch_database_schema":int(data.schema_version)}
 	var source_countries: Array = data.countries
 	var countries: Array = []
-	if selected_country_ids.is_empty():
+	var wanted_countries := {}
+	for id in selected_country_ids:
+		wanted_countries[String(id)] = true
+	for token in selected_league_ids:
+		var parts := String(token).split(":")
+		if parts.size() == 2:
+			wanted_countries[String(parts[0])] = true
+	if wanted_countries.is_empty():
 		var count: int = source_countries.size() if max_countries <= 0 else mini(max_countries, source_countries.size())
 		for country_index in range(count): countries.append(source_countries[country_index])
 	else:
-		var wanted := {}
-		for id in selected_country_ids: wanted[String(id)] = true
 		for raw_country in source_countries:
-			if wanted.has(String(raw_country.get("id", ""))): countries.append(raw_country)
+			if wanted_countries.has(String(raw_country.get("id", ""))): countries.append(raw_country)
 	if countries.is_empty(): return {}
+	var exact_leagues := {}
+	for token in selected_league_ids:
+		exact_leagues[String(token)] = true
 	var loaded_country_ids: Array = []
 	for country in countries: loaded_country_ids.append(String(country.id))
 	var used_names: Dictionary = {}
-	var registration_cache: Dictionary = {}
 	for raw_country in countries:
 		var country_id := String(raw_country.id)
 		var registration_rules := _registration_rules(loader, data, country_id)
-		registration_cache[country_id] = registration_rules
 		world.countries.append(DomainModelsClass.country(country_id, String(raw_country.name), String(raw_country.code), int(raw_country.youth_rating)))
 		var system: Dictionary = loader.league_system(data, country_id)
 		var country_club_ids: Array = []
 		for tier_index in range(system.get("tiers", []).size()):
+			var tier_number := tier_index + 1
+			if not exact_leagues.is_empty() and not exact_leagues.has("%s:%d" % [country_id, tier_number]):
+				continue
 			var tier: Dictionary = system.tiers[tier_index]
 			var template: Dictionary = loader.template_by_id(data, String(tier.template))
 			var team_count := int(template.get("teams", 20))
 			var club_ids: Array = []
 			for club_index in range(team_count):
-				var club_id := "%s-t%d-c%02d" % [country_id, tier_index + 1, club_index + 1]
-				var profile: Dictionary = realism.club_profile(raw_country, club_index, tier_index + 1, seed, club_id)
+				var club_id := "%s-t%d-c%02d" % [country_id, tier_number, club_index + 1]
+				var profile: Dictionary = realism.club_profile(raw_country, club_index, tier_number, seed, club_id)
 				var club: Dictionary = DomainModelsClass.club(club_id, country_id, String(profile.name), int(profile.reputation))
 				club["city"] = String(profile.city)
-				club["tier"] = tier_index + 1
+				club["tier"] = tier_number
 				club["stadium_capacity"] = int(profile.stadium_capacity)
 				club["training_facilities"] = int(profile.training_facilities)
 				club["homegrown_country_id"] = country_id
@@ -61,9 +70,9 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 				country_club_ids.append(club_id)
 				_generate_staff(world, club, country_id, data, seed, used_names, realism)
 				_generate_players(world, club, country_id, loaded_country_ids, data, players_per_club, seed, used_names, realism, abilities)
-			var competition_id := "%s-league-%d" % [country_id, tier_index + 1]
+			var competition_id := "%s-league-%d" % [country_id, tier_number]
 			var competition: Dictionary = DomainModelsClass.competition(competition_id, country_id, String(tier.name), club_ids)
-			competition["tier"] = tier_index + 1
+			competition["tier"] = tier_number
 			competition["promotion_places"] = int(tier.get("promotion", 0))
 			competition["automatic_promotion_places"] = int(tier.get("automatic_promotion", tier.get("promotion", 0)))
 			competition["playoff_promotion_places"] = int(tier.get("playoff_promotion", 0))
@@ -88,8 +97,16 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 		if String(id) in loaded_country_ids: featured.append(String(id))
 	world["featured_country_ids"] = featured
 	world["active_country_ids"] = loaded_country_ids.duplicate()
+	world["active_league_ids"] = selected_league_ids.duplicate() if not selected_league_ids.is_empty() else _generated_league_ids(world)
 	world["transfer_windows"] = world.transfer_windows_by_country.get(String(world.default_country_id), [])
 	return world
+
+func _generated_league_ids(world: Dictionary) -> Array:
+	var result: Array = []
+	for competition in world.get("competitions", []):
+		if String(competition.get("competition_type", "league")) == "league":
+			result.append("%s:%d" % [String(competition.get("country_id", "")), int(competition.get("tier", 1))])
+	return result
 
 func _add_domestic_cup(world: Dictionary, data: Dictionary, system: Dictionary, country_id: String, suffix: String, loader, country_club_ids: Array, registration_rules: Dictionary) -> void:
 	var cup: Dictionary = system.get("cup", {})
