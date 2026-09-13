@@ -22,9 +22,6 @@ func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionar
 		if pid != "" and own.has(pid):
 			before[pid] = (own[pid] as Dictionary).duplicate(true)
 
-	# v3 computes the tactical target and physical load. We then reinterpret the
-	# proposed point as steering intent so acceleration, braking and turning are
-	# continuous instead of marker-like point stepping.
 	super._move_side(lineup, own, opp, ball, profile, loads, marking, in_possession, dt, tick)
 	var refresh_context := tick % STATE_REFRESH_TICKS == 0
 	if refresh_context:
@@ -169,6 +166,18 @@ func _decide_action(ball: Dictionary, owner: Dictionary, possession: String, hom
 	if "avoids_weak_foot" in traits:
 		outcome["preferred_foot_bias"] = true
 	return outcome
+
+# Replay frames only need energy for the condition ring. The full physical load
+# remains authoritative in run.loads/final state but is not duplicated into all
+# ~thousands of replay frames, cutting managed-match memory substantially.
+func _copy_loads(loads: Dictionary) -> Dictionary:
+	var result := {}
+	for side in loads.keys():
+		result[side] = {}
+		var side_loads: Dictionary = loads[side]
+		for id in side_loads.keys():
+			result[side][id] = {"energy":float((side_loads[id] as Dictionary).get("energy",1.0))}
+	return result
 
 func runtime_player_state(player_id: String) -> Dictionary:
 	var state: Dictionary = _motion_states.get(player_id, {}).duplicate(true)
