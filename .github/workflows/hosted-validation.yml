@@ -58,6 +58,9 @@ jobs:
       - name: Registration exemption ordering
         run: bash tools/test-headless.sh tests/registration_exemption_order_test.gd 300
 
+      - name: Homegrown and playoff realism
+        run: bash tools/test-headless.sh tests/homegrown_playoff_realism_test.gd 300
+
       - name: World integrity contract
         run: bash tools/test-headless.sh tests/world_integrity_audit_test.gd 600
 
