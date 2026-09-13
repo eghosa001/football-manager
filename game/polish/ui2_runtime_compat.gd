@@ -1,10 +1,11 @@
 extends "res://game/polish/ui2_runtime.gd"
 
-# UI2 used to have eight independent autoloads recursively scanning the complete
-# scene tree on 250–900 ms timers. On a live career that can exceed a dozen full
-# tree walks per second even while nothing changes. Production UI is rebuilt in
-# bursts, so schedule one debounced enhancement pass when nodes are actually
-# added and disable the legacy polling loops on the scan-only UI2 runtimes.
+# Most polish/UI runtimes are idempotent scene decorators. Historically each one
+# polled the entire scene tree on its own 250–1200 ms timer. With a ~2,000-node
+# career UI that means many complete tree walks every second while the game is
+# otherwise idle. Production now uses one debounced node-added scheduler instead.
+# AutosaveRuntime is intentionally excluded because its timer owns save policy,
+# not just presentation wiring.
 const SCAN_RUNTIME_NAMES := [
 	"UI2Runtime",
 	"UI2ExtendedRuntime",
@@ -14,9 +15,26 @@ const SCAN_RUNTIME_NAMES := [
 	"UI2RemainingRuntime",
 	"UI2LayoutFixRuntime",
 	"UI2MenuRuntime",
+	"CompletionRuntime",
+	"TacticsRuntime",
+	"SearchRuntime",
+	"MatchHudRuntime",
+	"ManagementRuntime",
+	"CareerControlsRuntime",
+	"GraphicsRuntime",
+	"SquadRuntime",
+	"DashboardRuntime",
+	"NavigationRuntime",
+	"TrainingRuntime",
+	"HappinessRuntime",
+	"PresentationRuntime",
+	"CompositionRuntime",
+	"ArtDirectionRuntime",
+	"PolishRuntime",
 ]
 
 var _compat_scan_pending := false
+var _compat_scan_running := false
 
 func _ready() -> void:
 	set_process(false)
@@ -41,17 +59,29 @@ func _on_ui_node_added(_node: Node) -> void:
 	_queue_ui_scan()
 
 func _queue_ui_scan() -> void:
+	# A decoration pass can itself add controls. Coalesce those additions into one
+	# follow-up stabilization pass instead of recursively scanning immediately.
 	if _compat_scan_pending:
 		return
 	_compat_scan_pending = true
 	call_deferred("_run_ui_scan_batch")
 
 func _run_ui_scan_batch() -> void:
+	if _compat_scan_running:
+		return
 	_compat_scan_pending = false
+	_compat_scan_running = true
 	for runtime_name in SCAN_RUNTIME_NAMES:
 		var runtime := get_node_or_null("/root/%s" % runtime_name)
-		if runtime != null and runtime.has_method("_scan"):
+		if runtime == null:
+			continue
+		if runtime.has_method("_scan"):
 			runtime.call("_scan")
+		elif runtime.has_method("_scan_tree"):
+			runtime.call("_scan_tree")
+	_compat_scan_running = false
+	# If any decorator created more nodes while this pass was running, node_added
+	# has already queued one deferred follow-up; metadata guards make it cheap.
 
 # The production scene uses registry_career_app.gd, which subclasses career_app.gd.
 # Resolve the live app by capabilities rather than by an exact script filename.
