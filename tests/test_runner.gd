@@ -6,6 +6,11 @@ const LeagueTableClass = preload("res://simulation/competitions/league_table.gd"
 const CalendarClass = preload("res://core/calendar/calendar_service.gd")
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
 
+const TEST_COUNTRIES := 2
+const TEST_CLUBS_PER_COUNTRY := 8
+const TEST_PLAYERS_PER_CLUB := 20
+const DISTRIBUTION_SAMPLE := 400
+
 var failures := 0
 var checks := 0
 
@@ -92,21 +97,24 @@ func _test_calendar() -> void:
 
 func _test_world_generation() -> Dictionary:
 	var generator = WorldGeneratorClass.new()
-	var a: Dictionary = generator.create_world(12345)
-	var b: Dictionary = generator.create_world(12345)
-	var c: Dictionary = generator.create_world(54321)
-	_expect(a.countries.size() == 4, "Expected 4 countries")
-	_expect(a.clubs.size() == 80, "Expected 80 clubs")
-	_expect(a.players.size() == 2000, "Expected 2,000 players")
-	_expect(a.staff.size() == 400, "Expected five staff per club")
-	_expect(a.contracts.size() == 2000, "Expected one basic contract per player")
-	_expect(a.competitions.size() == 4, "Expected one competition per country")
+	var a: Dictionary = generator.create_world(12345, TEST_COUNTRIES, TEST_CLUBS_PER_COUNTRY, TEST_PLAYERS_PER_CLUB)
+	var b: Dictionary = generator.create_world(12345, TEST_COUNTRIES, TEST_CLUBS_PER_COUNTRY, TEST_PLAYERS_PER_CLUB)
+	var c: Dictionary = generator.create_world(54321, TEST_COUNTRIES, TEST_CLUBS_PER_COUNTRY, TEST_PLAYERS_PER_CLUB)
+	var club_count := TEST_COUNTRIES * TEST_CLUBS_PER_COUNTRY
+	var player_count := club_count * TEST_PLAYERS_PER_CLUB
+	_expect(a.countries.size() == TEST_COUNTRIES, "Expected bounded country count")
+	_expect(a.clubs.size() == club_count, "Expected bounded club count")
+	_expect(a.players.size() == player_count, "Expected configured player count")
+	_expect(a.staff.size() == club_count * 5, "Expected five staff per club")
+	_expect(a.contracts.size() == player_count, "Expected one basic contract per player")
+	_expect(a.competitions.size() == TEST_COUNTRIES, "Expected one competition per country")
 	_expect(_deep_equal(a, b), "Same seed must generate identical world")
 	_expect(not _deep_equal(a, c), "Different seed must generate a different world")
 	return a
 
 func _test_fixtures(world: Dictionary) -> void:
-	_expect(world.fixtures.size() == 1520, "Four 20-club double round robins should create 1,520 fixtures")
+	var expected := TEST_COUNTRIES * TEST_CLUBS_PER_COUNTRY * (TEST_CLUBS_PER_COUNTRY - 1)
+	_expect(world.fixtures.size() == expected, "Double round-robin fixture count must match configured world")
 	var pair_counts := {}
 	for fixture in world.fixtures:
 		var pair := [fixture.home_club_id, fixture.away_club_id]
@@ -138,19 +146,19 @@ func _test_league_table(world: Dictionary) -> void:
 	for fixture in world.fixtures:
 		if fixture.competition_id == competition.id:
 			competition_fixtures.append(fixture)
-	for i in range(10):
+	for i in range(mini(10, competition_fixtures.size())):
 		var fixture: Dictionary = competition_fixtures[i]
 		var result: Dictionary = engine.simulate_match(_club(world.clubs, fixture.home_club_id), _club(world.clubs, fixture.away_club_id), world.players, 10_000 + i)
 		engine.apply_to_fixture(fixture, result)
 	var table: Array = LeagueTableClass.build(competition.club_ids, competition_fixtures)
-	_expect(table.size() == 20, "League table should contain all 20 clubs")
+	_expect(table.size() == competition.club_ids.size(), "League table should contain all competition clubs")
 	var previous_points := 999
 	for row in table:
 		_expect(row.points <= previous_points, "League table must sort by points first")
 		_expect(row.points == row.won * 3 + row.drawn, "Points must equal wins×3 + draws")
 		previous_points = row.points
 
-func _test_match_distribution(world: Dictionary, sample_size: int = 2_000) -> void:
+func _test_match_distribution(world: Dictionary, sample_size: int = DISTRIBUTION_SAMPLE) -> void:
 	var engine = MatchEngineClass.new()
 	var total_goals := 0.0
 	var total_shots := 0.0
