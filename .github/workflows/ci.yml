@@ -50,6 +50,9 @@ jobs:
       - name: Selected leagues regression
         run: bash tools/test-headless.sh tests/selected_leagues_regression_test.gd 180
 
+      - name: Squad realism regression
+        run: bash tools/test-headless.sh tests/squad_realism_regression_test.gd 120
+
       - name: Spatial engine robustness regression
         run: bash tools/test-headless.sh tests/spatial_engine_robustness_test.gd 600
 
