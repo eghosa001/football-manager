@@ -34,7 +34,8 @@ func _run() -> void:
 	var shell := tabs.get_parent()
 	assert(shell != null and String(shell.name) == "CareerNavigationShell")
 	if not bool(tabs.get_meta("career_navigation_mobile", false)):
-		assert(shell.get_node_or_null("CareerSidebar") != null)
+		assert(shell.find_child("CareerSidebar", true, false) != null)
+		assert(shell.get_node_or_null("CareerSidebarScroll") != null)
 
 	scene.queue_free()
 	await process_frame
