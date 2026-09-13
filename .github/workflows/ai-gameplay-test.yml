@@ -1,0 +1,135 @@
+name: Football Dynasty AI Gameplay Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      steps:
+        description: Adaptive gameplay actions
+        required: false
+        default: '140'
+      seed:
+        description: Reproducible random seed
+        required: false
+        default: '20260913'
+  push:
+    branches: [main]
+    paths:
+      - 'application/**'
+      - 'core/**'
+      - 'game/**'
+      - 'persistence/**'
+      - 'simulation/**'
+      - 'ui/**'
+      - 'data/**'
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - 'tools/ai_gameplay_tester.py'
+      - '.github/workflows/ai-gameplay-test.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: football-dynasty-ai-gameplay-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PACKAGE_NAME: com.footballdynasty.game
+
+jobs:
+  adaptive-player:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install playtest dependency
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Validate gameplay agent
+        run: |
+          python -m py_compile tools/ai_gameplay_tester.py
+          python tools/ai_gameplay_tester.py --help >/dev/null
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Import project and run release contract
+        run: |
+          bash tools/test-headless.sh import 600
+          bash tools/test-headless.sh tests/production_readiness_contract_test.gd 600
+
+      - name: Configure emulator APK export
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp export_presets.cfg /tmp/export_presets.cfg.original
+          cp project.godot /tmp/project.godot.original
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('export_presets.cfg'); s=p.read_text(); start=s.index('[preset.2]'); end=s.index('[preset.3]'); b=s[start:end]
+          b=b.replace('export_path="build/android/FootballDynasty.aab"','export_path="build/android/FootballDynasty-ai.apk"')
+          b=b.replace('gradle_build/use_gradle_build=true','gradle_build/use_gradle_build=false')
+          b=b.replace('gradle_build/export_format=1','gradle_build/export_format=0')
+          b=re.sub(r'^gradle_build/(?:min_sdk|target_sdk)=.*\n','',b,flags=re.MULTILINE)
+          b=b.replace('architectures/arm64-v8a=true','architectures/arm64-v8a=false').replace('architectures/x86_64=false','architectures/x86_64=true')
+          p.write_text(s[:start]+b+s[end:])
+          project=Path('project.godot'); q=project.read_text(); flag='textures/vram_compression/import_etc2_astc=true'
+          if flag not in q: q=q.replace('[rendering]\n','[rendering]\n'+flag+'\n',1); project.write_text(q)
+          PY
+          mkdir -p build/android build/ai-gameplay
+          godot --headless --editor --path . --import --quit
+          godot --headless --path . --export-debug "Android" build/android/FootballDynasty-ai.apk
+          test -s build/android/FootballDynasty-ai.apk
+
+      - name: Run adaptive gameplay exploration
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          cores: 2
+          ram-size: 4096M
+          heap-size: 512M
+          disk-size: 6G
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader -noaudio -no-boot-anim -camera-back none -no-metrics
+          script: python tools/ai_gameplay_tester.py --apk build/android/FootballDynasty-ai.apk --package ${PACKAGE_NAME} --out build/ai-gameplay --steps ${{ github.event.inputs.steps || '140' }} --seed ${{ github.event.inputs.seed || '20260913' }}
+
+      - name: Add report to workflow summary
+        if: always()
+        run: |
+          if [ -f build/ai-gameplay/report.md ]; then cat build/ai-gameplay/report.md >> "$GITHUB_STEP_SUMMARY"; else echo 'AI gameplay report was not produced.' >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Upload gameplay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Football-Dynasty-AI-Gameplay-${{ github.run_number }}
+          path: |
+            build/ai-gameplay/
+            build/android/FootballDynasty-ai.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Restore and verify source cleanliness
+        if: always()
+        shell: bash
+        run: |
+          [ -f /tmp/export_presets.cfg.original ] && mv -f /tmp/export_presets.cfg.original export_presets.cfg || true
+          [ -f /tmp/project.godot.original ] && mv -f /tmp/project.godot.original project.godot || true
+          git diff --exit-code -- .
