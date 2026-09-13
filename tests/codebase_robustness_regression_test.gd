@@ -14,6 +14,7 @@ func _init() -> void:
 	_test_transfer_terms_are_executed()
 	_test_transfer_completion_rechecks_window()
 	_test_finance_defaults()
+	_test_odd_sized_league_byes()
 	if failures == 0:
 		print("[TEST] CODEBASE ROBUSTNESS REGRESSION PASS: %d checks" % checks)
 		quit(0)
@@ -70,6 +71,19 @@ func _test_finance_defaults() -> void:
 	_require(int(club.get("commercial_revenue",0)) > 0, "finance facade must initialize commercial revenue")
 	_require(club.get("sponsorships",[]) is Array and not club.get("sponsorships",[]).is_empty(), "finance facade must initialize sponsorship portfolio")
 	_require(club.has("debt") and club.has("financial_status"), "finance facade must initialize debt/status fields")
+
+func _test_odd_sized_league_byes() -> void:
+	var clubs := ["A","B","C","D","E"]
+	var fixtures: Array = LeagueSystemClass.new()._round_robin("odd", clubs, 2026)
+	_require(fixtures.size() == 20, "five-team double round-robin must create 20 fixtures")
+	var counts := {}
+	for fixture in fixtures:
+		var home := String(fixture.get("home_club_id","")); var away := String(fixture.get("away_club_id",""))
+		_require(home != "" and away != "" and home != away, "bye slot must never become a real fixture")
+		counts[home] = int(counts.get(home,0)) + 1
+		counts[away] = int(counts.get(away,0)) + 1
+	for club_id in clubs:
+		_require(int(counts.get(club_id,0)) == 8, "%s must play every opponent home and away" % club_id)
 
 func _transfer_world(date_string: String) -> Dictionary:
 	return {
