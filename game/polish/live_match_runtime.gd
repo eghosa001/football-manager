@@ -33,17 +33,24 @@ func _scan_node(node: Node) -> void:
 		_scan_node(child)
 
 func _hook_continue(button: Button) -> void:
-	if button.has_meta("live_match_continue") or not button.visible:
+	if not button.visible:
 		return
 	if not button.text.strip_edges().to_upper().begins_with("CONTINUE"):
 		return
 	var app := _career_app(button)
 	if app == null:
 		return
-	button.set_meta("live_match_continue", true)
+	var live_callable := _continue.bind(app)
+	# UI polish runtimes can rebuild/rebind Continue after this runtime first sees it.
+	# Remove stale advance-day handlers on every scan while preserving the UI click cue.
 	for connection in button.pressed.get_connections():
-		button.pressed.disconnect(connection.callable)
-	button.pressed.connect(_continue.bind(app))
+		var callable: Callable = connection.callable
+		if callable == live_callable or String(callable.get_method()) == "_play_ui_click":
+			continue
+		button.pressed.disconnect(callable)
+	if not button.pressed.is_connected(live_callable):
+		button.pressed.connect(live_callable)
+	button.set_meta("live_match_continue", true)
 
 func _continue(app: Node) -> void:
 	if _active_window != null and is_instance_valid(_active_window):
@@ -124,8 +131,11 @@ func _open_match_window(app: Node, state: Dictionary) -> void:
 	var window := Window.new()
 	_active_window = window
 	window.title = "Live Match"
-	window.min_size = Vector2i(1120, 700)
-	window.size = Vector2i(1180, 740)
+	var viewport_size: Vector2 = app.get_viewport_rect().size
+	var window_width := mini(1180, maxi(960, int(viewport_size.x) - 80))
+	var window_height := mini(680, maxi(560, int(viewport_size.y) - 40))
+	window.min_size = Vector2i(mini(1040, window_width), mini(620, window_height))
+	window.size = Vector2i(window_width, window_height)
 	window.transient = true
 	window.exclusive = true
 	window.close_requested.connect(func():
@@ -154,7 +164,7 @@ func _open_match_window(app: Node, state: Dictionary) -> void:
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(body)
 	var viewer := MatchViewer.new()
-	viewer.custom_minimum_size = Vector2(760, 520)
+	viewer.custom_minimum_size = Vector2(maxi(620, window_width - 420), maxi(400, window_height - 220))
 	viewer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	viewer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(viewer)
@@ -189,10 +199,16 @@ func _open_match_window(app: Node, state: Dictionary) -> void:
 	controls.add_child(mentality)
 	var apply_tactic := Button.new(); apply_tactic.text = "Apply tactic now"; controls.add_child(apply_tactic)
 
+	var events_scroll := ScrollContainer.new()
+	events_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	events_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	events_scroll.custom_minimum_size = Vector2(0, 96)
+	events_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	controls.add_child(events_scroll)
 	var events_label := Label.new()
 	events_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	events_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	controls.add_child(events_label)
+	events_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	events_scroll.add_child(events_label)
 
 	var bottom := HBoxContainer.new(); root.add_child(bottom)
 	var cancel := Button.new(); cancel.text = "Leave without playing"; bottom.add_child(cancel)
@@ -324,6 +340,9 @@ func _career_app(node: Node) -> Node:
 	var current: Node = node
 	while current != null:
 		var script = current.get_script()
-		if script != null and String(script.resource_path).ends_with("game/career/career_app.gd"): return current
+		while script != null:
+			if String(script.resource_path).ends_with("game/career/career_app.gd"):
+				return current
+			script = script.get_base_script()
 		current = current.get_parent()
 	return null
