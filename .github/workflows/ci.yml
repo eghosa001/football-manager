@@ -44,6 +44,15 @@ jobs:
       - name: UI2 interaction regression
         run: bash tools/test-headless.sh tests/ui2_runtime_integration_test.gd 600
 
+      - name: Legacy core regression
+        run: bash tools/test-headless.sh tests/test_runner.gd 240
+
+      - name: Career session regression
+        run: bash tools/test-headless.sh tests/career_session_test.gd 240
+
+      - name: Performance baseline
+        run: bash tools/test-headless.sh tests/performance_baseline_test.gd 240
+
       - name: Save and backup safety
         run: bash tools/test-headless.sh tests/save_safety_test.gd 600
 
