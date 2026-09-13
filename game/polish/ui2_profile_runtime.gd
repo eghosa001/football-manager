@@ -1,6 +1,7 @@
 extends Node
 
 const UI = preload("res://game/presentation/fd_ui2.gd")
+const TransferMarket = preload("res://simulation/transfers/transfer_market.gd")
 
 var _next_scan: int = 0
 
@@ -77,11 +78,14 @@ func _add_overview_hero(page: Control, world: Dictionary, player: Dictionary) ->
 	chips.add_child(UI.chip(String(player.get("position", "—")), UI.CYAN))
 	chips.add_child(UI.chip("AGE %d" % int(player.get("age", 0)), UI.PURPLE))
 	chips.add_child(UI.chip(String(player.get("country_id", player.get("nationality_id", "—"))).to_upper(), UI.GREEN))
-	UI.metric(identity, "Estimated value", UI.money(_estimated_value(player)), "Market valuation", UI.GREEN)
+	UI.metric(identity, "Estimated value", UI.money(_estimated_value(world, player)), "Market valuation", UI.GREEN)
 	var level: VBoxContainer = UI.panel(hero, Vector2(280, 190), UI.PURPLE)
 	UI.section(level, "PLAYER LEVEL", UI.PURPLE)
 	UI.metric(level, "Current ability", UI.stars(int(player.get("current_ability", 0))), "%d / 100" % int(player.get("current_ability", 0)), UI.AMBER)
 	UI.metric(level, "Potential", UI.stars(int(player.get("potential", 0))), "%d / 100" % int(player.get("potential", 0)), UI.AMBER)
+	var development_gain := int(player.get("last_development_gain", 0))
+	if player.has("academy_join_ca") or development_gain != 0:
+		UI.body(level, "Development: %+d last cycle • +%d since intake" % [development_gain, int(player.get("current_ability",0)) - int(player.get("academy_join_ca",player.get("current_ability",0)))], true)
 	var readiness: VBoxContainer = UI.panel(hero, Vector2(280, 190), UI.GREEN)
 	UI.section(readiness, "READINESS", UI.GREEN)
 	_ready_row(readiness, "Condition", int(player.get("fitness", 0)))
@@ -240,9 +244,15 @@ func _player_name(player: Dictionary) -> String:
 		return name
 	return (String(player.get("first_name", "")) + " " + String(player.get("last_name", ""))).strip_edges()
 
-func _estimated_value(player: Dictionary) -> int:
-	var ability: int = int(player.get("current_ability", 50))
-	var potential: int = int(player.get("potential", ability))
-	var age: int = int(player.get("age", 25))
-	var factor: float = 1.25 if age <= 23 else (1.0 if age <= 28 else maxf(0.35, 1.0 - float(age - 28) * 0.09))
-	return int((ability * ability * 900 + maxi(0, potential - ability) * ability * 450) * factor)
+func _estimated_value(world: Dictionary, player: Dictionary) -> int:
+	var club := {}
+	var club_id := String(player.get("club_id", ""))
+	for row in world.get("clubs", []):
+		if String(row.get("id", "")) == club_id:
+			club = row
+			break
+	var enriched := player.duplicate(true)
+	var contract := _contract(world, String(player.get("id", "")))
+	if not contract.is_empty():
+		enriched["contract_end_year"] = int(contract.get("end_year", int(world.get("season_year", 2026)) + 2))
+	return TransferMarket.new().estimated_value(enriched, club, {}, int(world.get("season_year", 2026)))
