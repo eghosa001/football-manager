@@ -1,17 +1,76 @@
 class_name ContinuousSpatialEngineV4
 extends "res://simulation/match/continuous_spatial_engine_v3.gd"
 
+const MotionClass = preload("res://simulation/match/player_motion.gd")
+const SpatialHashClass = preload("res://simulation/match/spatial_hash.gd")
+
 const MIN_PLAYER_SEPARATION := 1.65
 const SPACING_PUSH := 0.34
+const PERCEPTION_REFRESH_TICKS := 2
+const STATE_REFRESH_TICKS := 3
+const PERCEPTION_RANGE := 32.0
+
+var _motion_states: Dictionary = {}
+var _perception_cache: Dictionary = {}
+var _context_states: Dictionary = {}
+var _grid = SpatialHashClass.new(6.0)
 
 func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionary, profile: Dictionary, loads: Dictionary, marking: Dictionary, in_possession: bool, dt: float, tick: int) -> void:
-	# Keep the v3 tactical/physical movement model as the source of truth, then
-	# resolve unrealistic same-point convergence. This preserves deterministic
-	# decisions and fitness load while making press/support movement read like
-	# football rather than markers collapsing into one coordinate.
+	var before: Dictionary = {}
+	for player in lineup:
+		var pid := String(player.get("id", ""))
+		if pid != "" and own.has(pid):
+			before[pid] = (own[pid] as Dictionary).duplicate(true)
+
+	# v3 computes the tactical target and physical load. We then reinterpret the
+	# proposed point as steering intent so acceleration, braking and turning are
+	# continuous instead of marker-like point stepping.
 	super._move_side(lineup, own, opp, ball, profile, loads, marking, in_possession, dt, tick)
-	_resolve_team_spacing(lineup, own)
-	_keep_outfield_inside_playable_lane(lineup, own)
+	_grid.clear()
+	for own_id in own.keys(): _grid.insert(String(own_id), own[own_id], "own")
+	for opp_id in opp.keys(): _grid.insert(String(opp_id), opp[opp_id], "opp")
+	var ball_v := Vector2(float(ball.get("x",0.0)),float(ball.get("y",0.0)))
+
+	for i in range(1,lineup.size()):
+		var player: Dictionary = lineup[i]
+		var id := String(player.get("id", ""))
+		if id == "" or not before.has(id) or not own.has(id):
+			continue
+		var previous: Dictionary = before[id]
+		var proposed: Dictionary = own[id]
+		var state: Dictionary = _motion_states.get(id, {})
+		if state.is_empty():
+			var facing := Vector2.RIGHT if float(proposed.get("x",0.0)) >= float(previous.get("x",0.0)) else Vector2.LEFT
+			state = MotionClass.make_state(previous,facing)
+		else:
+			state["position"] = Vector2(float(previous.get("x",0.0)),float(previous.get("y",0.0)))
+
+		if tick % PERCEPTION_REFRESH_TICKS == 0 or not _perception_cache.has(id):
+			var fov := lerpf(105.0,155.0,_quality(player,["vision","anticipation","concentration"]))
+			_perception_cache[id] = MotionClass.can_perceive(state,ball_v,PERCEPTION_RANGE,fov)
+		var target := Vector2(float(proposed.get("x",0.0)),float(proposed.get("y",0.0)))
+		var previous_v := Vector2(float(previous.get("x",0.0)),float(previous.get("y",0.0)))
+		if not in_possession and not bool(_perception_cache.get(id,true)) and previous_v.distance_to(ball_v) > 12.0:
+			var anchor: Dictionary = _role_anchor(player,i,profile)
+			target = target.lerp(Vector2(float(anchor.x),float(anchor.y)),0.48)
+
+		var athleticism := _quality(player,["pace","acceleration","agility"])
+		var max_speed := lerpf(5.8,9.1,athleticism)
+		var accel := lerpf(3.8,7.2,_quality(player,["acceleration","agility","balance"]))
+		var decel := lerpf(5.0,8.6,_quality(player,["agility","balance","strength"]))
+		var turn_rate := lerpf(3.1,6.4,_quality(player,["agility","balance","technique"]))
+		MotionClass.step(state,target,dt,max_speed,accel,decel,turn_rate)
+		var p: Vector2 = state.position
+		own[id] = SpatialStateClass.clamp_position({"x":p.x,"y":p.y})
+		_motion_states[id] = state
+
+		if tick % STATE_REFRESH_TICKS == 0 or not _context_states.has(id):
+			var nearby := _grid.query_radius(own[id],12.0,id,"opp")
+			var opponent_distance := 99.0 if nearby.is_empty() else float(nearby[0].distance)
+			_context_states[id] = MotionClass.contextual_state(in_possession,false,p.distance_to(ball_v),opponent_distance,float(p.x)/PITCH_LENGTH)
+
+	_resolve_team_spacing(lineup,own)
+	_keep_outfield_inside_playable_lane(lineup,own)
 
 func _resolve_team_spacing(lineup: Array, positions: Dictionary) -> void:
 	for i in range(1, lineup.size()):
@@ -32,7 +91,6 @@ func _resolve_team_spacing(lineup: Array, positions: Dictionary) -> void:
 			var nx: float
 			var ny: float
 			if distance < 0.001:
-				# Stable tie-breaker instead of random jitter.
 				var sign := -1.0 if String(a_id) < String(b_id) else 1.0
 				nx = 0.35 * sign
 				ny = 0.94
@@ -52,8 +110,6 @@ func _keep_outfield_inside_playable_lane(lineup: Array, positions: Dictionary) -
 		if id == "" or not positions.has(id):
 			continue
 		var pos: Dictionary = positions[id]
-		# Small safety gutter keeps labels/markers readable and prevents tactical
-		# targets from pinning outfield players exactly onto the touchline.
 		pos.x = clampf(float(pos.get("x", 0.0)), 0.75, PITCH_LENGTH - 0.75)
 		pos.y = clampf(float(pos.get("y", 0.0)), 0.75, PITCH_WIDTH - 0.75)
 		positions[id] = pos
@@ -68,8 +124,6 @@ func _decide_action(ball: Dictionary, owner: Dictionary, possession: String, hom
 	var direction := 1.0 if possession == "home" else -1.0
 	var event_type := String(outcome.get("event", ""))
 	var roll := SeededRngClass.unit_for(seed, 32000 + tick + _trait_key(String(player.get("id", ""))))
-
-	# Traits modify action-selection weights rather than granting attribute bonuses.
 	if "tries_long_shots" in traits and event_type not in ["shot", "goal"]:
 		var goal_x := PITCH_LENGTH if possession == "home" else 0.0
 		var distance := absf(goal_x - float(ball.x))
@@ -110,10 +164,16 @@ func _decide_action(ball: Dictionary, owner: Dictionary, possession: String, hom
 			target.x = clampf(float(target.get("x", ball.x)) - direction * 4.5, 0.0, PITCH_LENGTH)
 			outcome["trait_drops_deep"] = true
 		outcome["target"] = SpatialStateClass.clamp_position(target)
-
 	if "avoids_weak_foot" in traits:
 		outcome["preferred_foot_bias"] = true
 	return outcome
+
+func runtime_player_state(player_id: String) -> Dictionary:
+	var state: Dictionary = _motion_states.get(player_id, {}).duplicate(true)
+	if not state.is_empty():
+		state["context"] = String(_context_states.get(player_id,"shape"))
+		state["perceives_ball"] = bool(_perception_cache.get(player_id,true))
+	return state
 
 func _trait_key(text: String) -> int:
 	var value := 97
