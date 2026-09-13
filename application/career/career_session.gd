@@ -16,6 +16,7 @@ const RegistrationServiceClass = preload("res://simulation/competitions/registra
 const ModernRulesCatalogClass = preload("res://simulation/competitions/modern_rules_catalog.gd")
 const ModIntegrationClass = preload("res://application/career/mod_integration.gd")
 const NamePoolServiceClass = preload("res://application/career/name_pool_service.gd")
+const PlayerValuationClass = preload("res://simulation/transfers/player_valuation_service.gd")
 
 var world: Dictionary = {}
 var history: Array = []
@@ -106,6 +107,7 @@ func _initialize_world(is_new: bool) -> void:
 	var registration = RegistrationServiceClass.new()
 	registration.ensure_world(world)
 	if is_new or world.get("registrations", {}).is_empty(): registration.auto_register_world(world, season_year)
+	PlayerValuationClass.new().refresh_world(world)
 	world["seed"] = seed
 
 func _ensure_match_factor_fields() -> void:
