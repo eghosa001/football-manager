@@ -35,9 +35,6 @@ func dashboard(world: Dictionary, club_id: String) -> Dictionary:
 		"wage_budget": int(club.get("wage_budget", 0)),
 		"unread_messages": unread,
 		"next_fixture": _next_fixture(world, club_id),
-		# The dashboard only needs summary data. Deep-copying last_managed_match
-		# copied thousands of replay frames on every career refresh after the first
-		# fixture, creating multi-megabyte temporary payloads and UI stalls.
 		"last_managed_match": last_match_summary,
 	}
 
@@ -60,9 +57,14 @@ func player_profile(world: Dictionary, player_id: String, observer_club_id: Stri
 	var own_player := observer_club_id != "" and String(player.get("club_id", "")) == observer_club_id
 	var report := {}
 	if not own_player:
-		# ScoutingService ensures collections exist, so run it on deep copies to keep
-		# presentation queries strictly read-only.
-		report = ScoutingServiceClass.new().player_report(world.duplicate(true), player.duplicate(true), 50, int(world.get("seed", 1)) + _stable_key(player_id))
+		# A scouting report only reads these knowledge maps. Copying the complete
+		# career world here used to clone clubs, players, fixtures and full replay
+		# payloads just to render one external player profile.
+		var scouting_view := {
+			"scouting_knowledge": world.get("scouting_knowledge", {}),
+			"country_knowledge": world.get("country_knowledge", {}),
+		}
+		report = ScoutingServiceClass.new().player_report(scouting_view, player.duplicate(true), 50, int(world.get("seed", 1)) + _stable_key(player_id))
 	var contract := _contract_for_player(world.get("contracts", []), player_id)
 	var history: Array = []
 	for row in world.get("player_history", []):
@@ -202,7 +204,10 @@ func match_analysis(result: Dictionary) -> Dictionary:
 		if side not in ["home", "away"]: continue
 		if String(event.get("type", "")) == "shot": shots[side].append(event.duplicate(true))
 		if String(event.get("type", "")) in ["corner", "free_kick"]: set_pieces[side] += 1
-	return {"score": [result.get("home_goals", 0), result.get("away_goals", 0)], "stats": result.get("stats", {}).duplicate(true), "shots": shots, "set_pieces": set_pieces, "frames": result.get("spatial", {}).get("frames", []).duplicate(true)}
+	# Replay frames are immutable presentation data. Returning the stored array
+	# reference avoids cloning thousands of spatial snapshots on every career
+	# screen rebuild after the first match.
+	return {"score": [result.get("home_goals", 0), result.get("away_goals", 0)], "stats": result.get("stats", {}).duplicate(true), "shots": shots, "set_pieces": set_pieces, "frames": result.get("spatial", {}).get("frames", [])}
 
 func last_match_analysis(world: Dictionary) -> Dictionary:
 	var row: Dictionary = world.get("last_managed_match", {})
