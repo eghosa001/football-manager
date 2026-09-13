@@ -38,6 +38,9 @@ jobs:
       - name: Managed matchday compile regression
         run: bash tools/test-headless.sh tests/managed_matchday_compile_test.gd 120
 
+      - name: Live managed match regression
+        run: bash tools/test-headless.sh tests/live_managed_match_regression_test.gd 240
+
       - name: Architecture regression
         run: bash tools/test-headless.sh tests/architecture_convergence_test.gd 600
 
