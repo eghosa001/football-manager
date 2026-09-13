@@ -13,6 +13,12 @@ const DEFAULTS := {
 	"autosave_interval_days": 7,
 	"autosave_mode": "weekly",
 	"autosave_rolling_count": 3,
+	"mute_audio": false,
+	"master_volume": 1.0,
+	"music_volume": 0.75,
+	"effects_volume": 0.85,
+	"crowd_volume": 0.8,
+	"interface_volume": 0.8,
 }
 
 func defaults() -> Dictionary:
@@ -32,6 +38,12 @@ func sanitize(input: Dictionary) -> Dictionary:
 	if value.autosave_mode not in AUTOSAVE_MODES:
 		value.autosave_mode = "weekly"
 	value.autosave_rolling_count = 5 if int(input.get("autosave_rolling_count", value.autosave_rolling_count)) >= 5 else 3
+	value.mute_audio = bool(input.get("mute_audio", value.mute_audio))
+	value.master_volume = clampf(float(input.get("master_volume", value.master_volume)), 0.0, 1.0)
+	value.music_volume = clampf(float(input.get("music_volume", value.music_volume)), 0.0, 1.0)
+	value.effects_volume = clampf(float(input.get("effects_volume", value.effects_volume)), 0.0, 1.0)
+	value.crowd_volume = clampf(float(input.get("crowd_volume", value.crowd_volume)), 0.0, 1.0)
+	value.interface_volume = clampf(float(input.get("interface_volume", value.interface_volume)), 0.0, 1.0)
 	if not value.autosave:
 		value.autosave_mode = "manual"
 	return value

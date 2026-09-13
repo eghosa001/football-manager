@@ -1,17 +1,29 @@
 class_name InboxService
 extends RefCounted
 
+const MAX_MESSAGES := 20
+
 func ensure_world(world: Dictionary) -> void:
 	world["inbox"] = world.get("inbox", [])
 	world["inbox_next_id"] = int(world.get("inbox_next_id", 1))
+	_trim(world)
 
 func add_message(world: Dictionary, category: String, title: String, body: String, requires_action: bool = false, actions: Array = []) -> Dictionary:
 	ensure_world(world)
 	var id := int(world.inbox_next_id)
 	world.inbox_next_id = id + 1
-	var message := {"id":id,"category":category,"title":title,"body":body,"requires_action":requires_action,"actions":actions.duplicate(true),"resolved":false,"read":false}
+	var message := {"id":id,"category":category,"title":title,"body":body,"requires_action":requires_action,"actions":actions.duplicate(true),"resolved":false,"read":false,"date":String(world.get("date", ""))}
 	world.inbox.append(message)
+	_trim(world)
 	return message
+
+func recent(world: Dictionary, limit: int = MAX_MESSAGES) -> Array:
+	ensure_world(world)
+	var messages: Array = world.inbox.duplicate(true)
+	if messages.size() > limit:
+		messages = messages.slice(messages.size() - limit, messages.size())
+	messages.reverse()
+	return messages
 
 func unread(world: Dictionary) -> Array:
 	ensure_world(world)
@@ -51,6 +63,7 @@ func resolve(world: Dictionary, message_id: int, action_id: String) -> Error:
 	if message.is_empty(): return ERR_DOES_NOT_EXIST
 	if not bool(message.get("requires_action", false)):
 		message.resolved = true
+		message.read = true
 		return OK
 	var valid := false
 	for action in message.get("actions", []):
@@ -62,6 +75,12 @@ func resolve(world: Dictionary, message_id: int, action_id: String) -> Error:
 	message.selected_action = action_id
 	message.read = true
 	return OK
+
+func _trim(world: Dictionary) -> void:
+	var messages: Array = world.get("inbox", [])
+	while messages.size() > MAX_MESSAGES:
+		messages.remove_at(0)
+	world["inbox"] = messages
 
 func _find(world: Dictionary, message_id: int) -> Dictionary:
 	ensure_world(world)
