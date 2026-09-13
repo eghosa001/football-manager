@@ -1,6 +1,63 @@
 class_name ContinuousSpatialEngineV4
 extends "res://simulation/match/continuous_spatial_engine_v3.gd"
 
+const MIN_PLAYER_SEPARATION := 1.65
+const SPACING_PUSH := 0.34
+
+func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionary, profile: Dictionary, loads: Dictionary, marking: Dictionary, in_possession: bool, dt: float, tick: int) -> void:
+	# Keep the v3 tactical/physical movement model as the source of truth, then
+	# resolve unrealistic same-point convergence. This preserves deterministic
+	# decisions and fitness load while making press/support movement read like
+	# football rather than markers collapsing into one coordinate.
+	super._move_side(lineup, own, opp, ball, profile, loads, marking, in_possession, dt, tick)
+	_resolve_team_spacing(lineup, own)
+	_keep_outfield_inside_playable_lane(lineup, own)
+
+func _resolve_team_spacing(lineup: Array, positions: Dictionary) -> void:
+	for i in range(1, lineup.size()):
+		var a_id := String(lineup[i].get("id", ""))
+		if a_id == "" or not positions.has(a_id):
+			continue
+		for j in range(i + 1, lineup.size()):
+			var b_id := String(lineup[j].get("id", ""))
+			if b_id == "" or not positions.has(b_id):
+				continue
+			var a: Dictionary = positions[a_id]
+			var b: Dictionary = positions[b_id]
+			var dx := float(b.get("x", 0.0)) - float(a.get("x", 0.0))
+			var dy := float(b.get("y", 0.0)) - float(a.get("y", 0.0))
+			var distance := sqrt(dx * dx + dy * dy)
+			if distance >= MIN_PLAYER_SEPARATION:
+				continue
+			var nx: float
+			var ny: float
+			if distance < 0.001:
+				# Stable tie-breaker instead of random jitter.
+				var sign := -1.0 if String(a_id) < String(b_id) else 1.0
+				nx = 0.35 * sign
+				ny = 0.94
+				distance = 1.0
+			else:
+				nx = dx / distance
+				ny = dy / distance
+			var overlap := (MIN_PLAYER_SEPARATION - distance) * 0.5 * SPACING_PUSH
+			a = SpatialStateClass.clamp_position({"x": float(a.x) - nx * overlap, "y": float(a.y) - ny * overlap})
+			b = SpatialStateClass.clamp_position({"x": float(b.x) + nx * overlap, "y": float(b.y) + ny * overlap})
+			positions[a_id] = a
+			positions[b_id] = b
+
+func _keep_outfield_inside_playable_lane(lineup: Array, positions: Dictionary) -> void:
+	for i in range(1, lineup.size()):
+		var id := String(lineup[i].get("id", ""))
+		if id == "" or not positions.has(id):
+			continue
+		var pos: Dictionary = positions[id]
+		# Small safety gutter keeps labels/markers readable and prevents tactical
+		# targets from pinning outfield players exactly onto the touchline.
+		pos.x = clampf(float(pos.get("x", 0.0)), 0.75, PITCH_LENGTH - 0.75)
+		pos.y = clampf(float(pos.get("y", 0.0)), 0.75, PITCH_WIDTH - 0.75)
+		positions[id] = pos
+
 func _decide_action(ball: Dictionary, owner: Dictionary, possession: String, home_lineup: Array, away_lineup: Array, home_pos: Dictionary, away_pos: Dictionary, home_profile: Dictionary, away_profile: Dictionary, loads: Dictionary, seed: int, tick: int) -> Dictionary:
 	var outcome: Dictionary = super._decide_action(ball, owner, possession, home_lineup, away_lineup, home_pos, away_pos, home_profile, away_profile, loads, seed, tick)
 	var team: Array = home_lineup if possession == "home" else away_lineup
