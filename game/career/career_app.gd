@@ -42,7 +42,9 @@ func _ready() -> void:
 	_show_main_menu()
 
 func _clear() -> VBoxContainer:
-	for child in get_children(): child.queue_free()
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
 	var background := ColorRect.new()
 	background.color = Color.BLACK if bool(settings.get("high_contrast", false)) else Color(0.035, 0.055, 0.09)
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
