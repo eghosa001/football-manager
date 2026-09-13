@@ -26,9 +26,17 @@ func simulate_continuous(home_lineup: Array, away_lineup: Array, seed: int, home
 	var ball_owner := {"side":possession,"id":String(starting_lineup[mini(6,starting_lineup.size()-1)].id) if not starting_lineup.is_empty() else ""}
 	var frames: Array=[]; var events:Array=[]; var interceptions:=0; var shots:=0; var goals:=0
 	var dt:=1.0/TICK_HZ; var stride:=maxi(1,frame_stride)
+	# Marking assignments do not need to be recomputed at the 10 Hz physics rate.
+	# Rebuild them once per simulated second; movement/pressing still updates every
+	# tick. This removes the dominant O(players²) hot path from full 90-minute
+	# simulations without changing the physics frequency or event cadence.
+	var marking_home: Dictionary = {}
+	var marking_away: Dictionary = {}
+	const MARKING_REFRESH_TICKS := 10
 	for tick in range(maxi(0,ticks)):
-		var marking_home:=_assignments(away_pos,home_pos)
-		var marking_away:=_assignments(home_pos,away_pos)
+		if tick % MARKING_REFRESH_TICKS == 0:
+			marking_home = _assignments(away_pos,home_pos)
+			marking_away = _assignments(home_pos,away_pos)
 		_move_side(home_lineup,home_pos,away_pos,ball,home_profile,loads.home,marking_home,possession=="home",dt,tick)
 		_move_side(away_lineup,away_pos,home_pos,ball,away_profile,loads.away,marking_away,possession=="away",dt,tick)
 		_move_goalkeeper(home_pos,home_lineup,ball,true); _move_goalkeeper(away_pos,away_lineup,ball,false)
