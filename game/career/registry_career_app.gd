@@ -139,3 +139,33 @@ func _show_career() -> void:
 			views.call(builder, tabs)
 		else:
 			push_error("Career tab builder missing on views: %s" % builder)
+
+func _run_job(job: Callable, message: String) -> Dictionary:
+	if _busy:
+		return {"error": ERR_BUSY}
+	_busy = true
+	var progress: Label = null
+	var keep_career_visible := message == "Advancing your career" and is_instance_valid(status)
+	if keep_career_visible:
+		progress = status
+		progress.text = tr("Processing next day…")
+	else:
+		var box := _clear()
+		_add_heading(box, message, 28)
+		progress = Label.new()
+		progress.text = tr("Please wait. Your career is being processed.")
+		box.add_child(progress)
+	_worker = Thread.new()
+	var err := _worker.start(job)
+	if err != OK:
+		_busy = false
+		_worker = null
+		return {"error": err, "message": "Unable to start the simulation worker."}
+	while _worker.is_alive():
+		await get_tree().process_frame
+		if is_instance_valid(progress):
+			progress.text = tr("Processing") + ".".repeat(1 + int(Time.get_ticks_msec() / 300) % 3)
+	var result: Dictionary = _worker.wait_to_finish()
+	_worker = null
+	_busy = false
+	return result
