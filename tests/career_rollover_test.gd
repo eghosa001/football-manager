@@ -35,7 +35,7 @@ func _init() -> void:
 		var loaded = Session.new()
 		assert(loaded.load_career(boundary_path) == OK)
 
-		var history_before := session.history.size()
+		var history_before: int = session.history.size()
 		var result: Dictionary = days.advance_day(session.world, session.history, 1234 + year)
 		var reloaded: Dictionary = days.advance_day(loaded.world, loaded.history, 1234 + year)
 		assert(not result.has("error") and not result.rollover.is_empty())
@@ -46,7 +46,7 @@ func _init() -> void:
 		assert(result.rollover.season.movements.size() > 0)
 		assert(session.world.registrations.size() > 0)
 
-		var history_count := session.history.size()
+		var history_count: int = session.history.size()
 		var next_day: Dictionary = days.advance_day(session.world, session.history, 2234 + year)
 		assert(not next_day.has("error"))
 		assert(session.history.size() == history_count)
