@@ -23,7 +23,7 @@ func _init() -> void:
 			})
 	var live_session = Session.new()
 	var started: Dictionary = live_session.start_match(home,away,players,919191,{})
-	assert(int(started.get("error",FAILED)) == OK)
+	assert(not started.has("error"))
 	live_session.advance_to_minute(45)
 	var half: Dictionary = live_session.snapshot()
 	assert(int(half.get("minute",0)) >= 45)
