@@ -132,8 +132,7 @@ func finish_match() -> Dictionary:
 
 func snapshot() -> Dictionary:
 	var score := _score()
-	return {
-		"error":error,
+	var data := {
 		"minute":current_minute(),
 		"finished":finished,
 		"home_goals":score.home,
@@ -148,6 +147,9 @@ func snapshot() -> Dictionary:
 		"tactics":{"home":home_tactic.duplicate(true),"away":away_tactic.duplicate(true)},
 		"weather":weather.duplicate(true),
 	}
+	if error != OK:
+		data["error"] = error
+	return data
 
 func result() -> Dictionary:
 	if error != OK:
