@@ -12,21 +12,29 @@ const LAST_NAMES := ["Okoro","Mensah","Diallo","Banda","Mokoena","Abdullahi","Ad
 const POSITIONS := ["GK","GK","DR","DC","DC","DC","DL","DM","MC","MC","AMC","AMR","AML","ST","ST"]
 const STAFF_ROLES := ["manager","assistant","coach","scout","physio"]
 
-func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25, expanded: bool = false) -> Dictionary:
+func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25, expanded: bool = false, selected_country_ids: Array = []) -> Dictionary:
 	var loader = DatabaseLoaderClass.new()
 	var realism = RealismProfileClass.new()
 	var abilities = SpecialAbilityServiceClass.new()
 	var data: Dictionary = loader.load_seed("res://data/seed/launch_database.json", expanded)
 	if data.is_empty() or not loader.validate_seed(data).is_empty(): return {}
 	var world := {"seed":seed,"date":"2026-07-01","season_year":2026,"countries":[],"clubs":[],"players":[],"staff":[],"competitions":[],"contracts":[],"fixtures":[],"launch_database_schema":int(data.schema_version)}
-	var countries: Array = data.countries
-	var count: int = countries.size() if max_countries <= 0 else mini(max_countries, countries.size())
+	var source_countries: Array = data.countries
+	var countries: Array = []
+	if selected_country_ids.is_empty():
+		var count: int = source_countries.size() if max_countries <= 0 else mini(max_countries, source_countries.size())
+		for country_index in range(count): countries.append(source_countries[country_index])
+	else:
+		var wanted := {}
+		for id in selected_country_ids: wanted[String(id)] = true
+		for raw_country in source_countries:
+			if wanted.has(String(raw_country.get("id", ""))): countries.append(raw_country)
+	if countries.is_empty(): return {}
 	var loaded_country_ids: Array = []
-	for country_index in range(count): loaded_country_ids.append(String(countries[country_index].id))
+	for country in countries: loaded_country_ids.append(String(country.id))
 	var used_names: Dictionary = {}
 	var registration_cache: Dictionary = {}
-	for country_index in range(count):
-		var raw_country: Dictionary = countries[country_index]
+	for raw_country in countries:
 		var country_id := String(raw_country.id)
 		var registration_rules := _registration_rules(loader, data, country_id)
 		registration_cache[country_id] = registration_rules
@@ -73,8 +81,13 @@ func build(seed: int = 12345, max_countries: int = 0, players_per_club: int = 25
 	world["transfer_windows_by_country"] = {}
 	for country_id in loaded_country_ids:
 		world.transfer_windows_by_country[country_id] = _transfer_windows(loader, data, String(country_id))
-	world["default_country_id"] = loader.default_country_id(data)
-	world["featured_country_ids"] = loader.featured_country_ids(data)
+	var database_default := loader.default_country_id(data)
+	world["default_country_id"] = database_default if database_default in loaded_country_ids else String(loaded_country_ids[0])
+	var featured: Array = []
+	for id in loader.featured_country_ids(data):
+		if String(id) in loaded_country_ids: featured.append(String(id))
+	world["featured_country_ids"] = featured
+	world["active_country_ids"] = loaded_country_ids.duplicate()
 	world["transfer_windows"] = world.transfer_windows_by_country.get(String(world.default_country_id), [])
 	return world
 
