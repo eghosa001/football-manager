@@ -12,6 +12,35 @@ func rebuild(world: Dictionary, club_id: String) -> Dictionary:
 	for player in world.get("players", []):
 		if String(player.get("club_id", "")) == club_id and not bool(player.get("retired", false)):
 			squad.append(player)
+	return _rebuild_from_squad(world, club_id, squad)
+
+func rebuild_all(world: Dictionary) -> Dictionary:
+	# Weekly maintenance used to call rebuild() once per club. rebuild() scans the
+	# entire player world, so that path was O(clubs * players) before sorting even
+	# started. Group the player array once and rebuild each room from its own squad.
+	ensure_world(world)
+	var by_club: Dictionary = {}
+	_player_index.clear()
+	for player in world.get("players", []):
+		if bool(player.get("retired", false)):
+			continue
+		var player_id := String(player.get("id", ""))
+		if player_id != "":
+			_player_index[player_id] = player
+		var club_id := String(player.get("club_id", ""))
+		if club_id == "":
+			continue
+		if not by_club.has(club_id):
+			by_club[club_id] = []
+		by_club[club_id].append(player)
+	for club in world.get("clubs", []):
+		var club_id := String(club.get("id", ""))
+		if club_id == "":
+			continue
+		_rebuild_from_squad(world, club_id, by_club.get(club_id, []))
+	return world.dressing_rooms
+
+func _rebuild_from_squad(world: Dictionary, club_id: String, squad: Array) -> Dictionary:
 	var ranked := squad.duplicate()
 	ranked.sort_custom(func(a: Dictionary, b: Dictionary):
 		var a_score := influence_score(a)
