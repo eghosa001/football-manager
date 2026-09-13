@@ -120,7 +120,7 @@ jobs:
           disable-animations: true
           disable-linux-hw-accel: false
           emulator-boot-timeout: 600
-          emulator-options: -no-snapshot -no-window -gpu swiftshader -noaudio -no-boot-anim -camera-back none -no-metrics
+          emulator-options: -no-snapshot -no-window -gpu host -noaudio -no-boot-anim -camera-back none -no-metrics
           script: python tools/chaos_gameplay_tester.py --apk build/android/FootballDynasty-chaos.apk --package ${PACKAGE_NAME} --out build/chaos-gameplay --steps ${{ github.event.inputs.steps || '750' }} --seed ${{ github.event.inputs.seed || '20260913' }} --checkpoint-every 25
 
       - name: Add chaos report to workflow summary
