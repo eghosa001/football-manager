@@ -5,6 +5,7 @@ const HOMEGROWN_YEARS := 3.0
 
 var _cached_player_index: Dictionary = {}
 var _cached_player_signature := ""
+var _pending_registration_requests: Dictionary = {}
 
 func ensure_world(world: Dictionary) -> void:
 	world["registrations"] = world.get("registrations", {})
@@ -115,6 +116,12 @@ func register_squad(world: Dictionary, club_id: String, competition: Dictionary,
 
 func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
 	ensure_world(world)
+	# Matchday fallback queues the exact missing club/competition registrations.
+	# Repair only those pairs instead of rebuilding every squad in the world for
+	# every fixture. Explicit season-start calls have no pending requests and
+	# retain the original full-world registration behavior.
+	if not _pending_registration_requests.is_empty():
+		return _register_pending(world, season_year)
 	var player_index: Dictionary = {}
 	var squads: Dictionary = {}
 	for player in world.get("players", []):
@@ -127,17 +134,7 @@ func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
 	var invalid := 0
 	for competition in world.get("competitions", []):
 		for club_id in competition.get("club_ids", []):
-			var candidates: Array = squads.get(String(club_id), []).duplicate()
-			candidates.sort_custom(func(a: Dictionary, b: Dictionary):
-				var a_gk := 1 if String(a.get("position", "")) == "GK" else 0
-				var b_gk := 1 if String(b.get("position", "")) == "GK" else 0
-				if a_gk != b_gk: return a_gk > b_gk
-				var aa := int(a.get("current_ability", 0)); var bb := int(b.get("current_ability", 0))
-				if aa == bb: return String(a.get("id", "")) < String(b.get("id", ""))
-				return aa > bb
-			)
-			var ids: Array = []
-			for player in candidates: ids.append(String(player.get("id", "")))
+			var ids := _candidate_ids(squads.get(String(club_id), []))
 			var result: Dictionary = register_squad(world, String(club_id), competition, ids, season_year, player_index)
 			registered += 1
 			if not bool(result.get("valid", false)): invalid += 1
@@ -145,10 +142,60 @@ func auto_register_world(world: Dictionary, season_year: int) -> Dictionary:
 	_cached_player_signature = _player_signature(world.get("players", []))
 	return {"registered":registered,"invalid":invalid}
 
+func _register_pending(world: Dictionary, season_year: int) -> Dictionary:
+	var requests: Array = _pending_registration_requests.values()
+	_pending_registration_requests.clear()
+	var player_index: Dictionary = {}
+	var requested_clubs: Dictionary = {}
+	for request in requests:
+		requested_clubs[String(request.get("club_id", ""))] = true
+	for player in world.get("players", []):
+		player_index[String(player.get("id", ""))] = player
+	var squads: Dictionary = {}
+	for club_id in requested_clubs.keys(): squads[String(club_id)] = []
+	for player in world.get("players", []):
+		if bool(player.get("retired", false)): continue
+		var club_id := String(player.get("club_id", ""))
+		if squads.has(club_id): squads[club_id].append(player)
+	var competitions: Dictionary = {}
+	for competition in world.get("competitions", []):
+		competitions[String(competition.get("id", ""))] = competition
+	var registered := 0
+	var invalid := 0
+	for request in requests:
+		var club_id := String(request.get("club_id", ""))
+		var competition_id := String(request.get("competition_id", ""))
+		var request_year := int(request.get("season_year", season_year))
+		var competition: Dictionary = competitions.get(competition_id, {})
+		if competition.is_empty(): continue
+		var ids := _candidate_ids(squads.get(club_id, []))
+		var result: Dictionary = register_squad(world, club_id, competition, ids, request_year, player_index)
+		registered += 1
+		if not bool(result.get("valid", false)): invalid += 1
+	_cached_player_index = player_index
+	_cached_player_signature = _player_signature(world.get("players", []))
+	return {"registered":registered,"invalid":invalid,"targeted":true}
+
+func _candidate_ids(input_players: Array) -> Array:
+	var candidates: Array = input_players.duplicate()
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary):
+		var a_gk := 1 if String(a.get("position", "")) == "GK" else 0
+		var b_gk := 1 if String(b.get("position", "")) == "GK" else 0
+		if a_gk != b_gk: return a_gk > b_gk
+		var aa := int(a.get("current_ability", 0)); var bb := int(b.get("current_ability", 0))
+		if aa == bb: return String(a.get("id", "")) < String(b.get("id", ""))
+		return aa > bb
+	)
+	var ids: Array = []
+	for player in candidates: ids.append(String(player.get("id", "")))
+	return ids
+
 func registered_players(world: Dictionary, club_id: String, competition_id: String, season_year: int) -> Array:
 	ensure_world(world)
 	var key := _key(club_id, competition_id, season_year)
-	if not world.registrations.has(key): return []
+	if not world.registrations.has(key):
+		_queue_registration_request(club_id, competition_id, season_year)
+		return []
 	var ids: Array = world.registrations[key].get("player_ids", [])
 	var player_index := _player_index(world)
 	var players: Array = []
@@ -156,7 +203,14 @@ func registered_players(world: Dictionary, club_id: String, competition_id: Stri
 		var player: Dictionary = player_index.get(String(player_id), {})
 		if not player.is_empty() and String(player.get("club_id", "")) == club_id and not bool(player.get("retired", false)):
 			players.append(player)
+	if players.size() < 11:
+		_queue_registration_request(club_id, competition_id, season_year)
 	return players
+
+func _queue_registration_request(club_id: String, competition_id: String, season_year: int) -> void:
+	if club_id == "" or competition_id == "": return
+	var key := _key(club_id, competition_id, season_year)
+	_pending_registration_requests[key] = {"club_id":club_id,"competition_id":competition_id,"season_year":season_year}
 
 func is_registered(world: Dictionary, club_id: String, competition_id: String, season_year: int, player_id: String) -> bool:
 	ensure_world(world)
