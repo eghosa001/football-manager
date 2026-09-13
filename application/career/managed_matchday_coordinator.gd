@@ -5,6 +5,7 @@ const Calendar = preload("res://core/calendar/calendar_service.gd")
 const SeasonRunner = preload("res://application/season/season_runner.gd")
 const MatchdayService = preload("res://application/career/career_matchday_service.gd")
 const MatchSession = preload("res://simulation/match/managed_match_session.gd")
+const DetailedEngine = preload("res://simulation/match/full_match_engine_v2.gd")
 const PlayerStats = preload("res://application/career/player_stats_service.gd")
 const DailyServices = preload("res://application/career/daily_services.gd")
 const RecruitmentDaily = preload("res://application/career/recruitment_daily.gd")
@@ -33,6 +34,9 @@ func next_managed_fixture(world: Dictionary, club_id: String) -> Dictionary:
 	SeasonRunner.new().assign_fixture_dates(world)
 	var date := _next_date(String(world.get("date","2026-07-01")))
 	if date == "": return {}
+	var season_year := int(world.get("season_year",2026))
+	# Let the normal DayRunner own season rollover validation and generation.
+	if date >= "%04d-07-01" % (season_year + 1): return {}
 	for row in world.get("fixtures",[]):
 		if bool(row.get("played",false)) or String(row.get("date","")) != date: continue
 		if String(row.get("home_club_id","")) == club_id or String(row.get("away_club_id","")) == club_id:
@@ -90,7 +94,7 @@ func commit(world: Dictionary) -> Dictionary:
 	var result: Dictionary = match.finish_match()
 	if result.has("error"): return result
 	service._build_indexes(world)
-	service._detailed.apply_to_fixture(fixture,result)
+	DetailedEngine.new().apply_to_fixture(fixture,result)
 	PlayerStats.new().record_match(world,fixture,result)
 	service._apply_dressing_room_result(world,home,away,result)
 	service._apply_match_load(world,result)
