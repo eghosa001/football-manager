@@ -227,7 +227,7 @@ func _open_match_window(app: Node, coordinator) -> void:
 	make_sub.pressed.connect(func():
 		if off.selected < 0 or on.selected < 0:
 			return
-		var err := coordinator.substitute(String(off.get_item_metadata(off.selected)), String(on.get_item_metadata(on.selected)))
+		var err: int = int(coordinator.substitute(String(off.get_item_metadata(off.selected)), String(on.get_item_metadata(on.selected))))
 		refresh.call("Substitution applied." if err == OK else "Substitution could not be made (%d)." % err)
 	)
 	apply_tactic.pressed.connect(func():
@@ -235,7 +235,7 @@ func _open_match_window(app: Node, coordinator) -> void:
 		var side := String(snap.get("managed_side", "home"))
 		var current: Dictionary = snap.get("tactics", {}).get(side, {})
 		var tactic := Tactics.new().create_tactic(formation.get_item_text(formation.selected), String(mentality.get_item_metadata(mentality.selected)), String(current.get("tempo", "standard")), String(current.get("pressing", "standard")))
-		var err := coordinator.change_tactic(tactic)
+		var err: int = int(coordinator.change_tactic(tactic))
 		refresh.call("Tactical change applied." if err == OK else "Tactical change failed (%d)." % err)
 	)
 	full_time.pressed.connect(func():
