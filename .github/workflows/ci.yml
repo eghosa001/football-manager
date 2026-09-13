@@ -53,6 +53,9 @@ jobs:
       - name: Database editor UI regression
         run: bash tools/test-headless.sh tests/database_editor_ui_test.gd 600
 
+      - name: Spatial engine robustness regression
+        run: bash tools/test-headless.sh tests/spatial_engine_robustness_test.gd 600
+
       - name: Legacy core regression
         run: bash tools/test-headless.sh tests/test_runner.gd 240
 
