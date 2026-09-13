@@ -3,8 +3,20 @@ extends RefCounted
 
 const LaunchWorldBuilder = preload("res://data/launch_world_builder.gd")
 
-func create(session, manager_name: String, club_id: String, selected_country_ids: Array, seed: int = 12345) -> Dictionary:
-	var world: Dictionary = LaunchWorldBuilder.new().build(seed, 0, 25, false, selected_country_ids)
+func create(session, manager_name: String, club_id: String, selected_league_ids: Array, seed: int = 12345) -> Dictionary:
+	var selected_countries: Array = []
+	var exact_leagues: Array = []
+	for raw in selected_league_ids:
+		var token := String(raw)
+		if ":" in token:
+			var parts := token.split(":")
+			if parts.size() == 2 and int(parts[1]) > 0:
+				exact_leagues.append("%s:%d" % [String(parts[0]), int(parts[1])])
+				if String(parts[0]) not in selected_countries:
+					selected_countries.append(String(parts[0]))
+		elif token != "" and token not in selected_countries:
+			selected_countries.append(token)
+	var world: Dictionary = LaunchWorldBuilder.new().build(seed, 0, 25, false, selected_countries, exact_leagues)
 	if world.is_empty():
 		return {"error": ERR_CANT_CREATE, "message": "Unable to build selected leagues."}
 	var club_found := false
@@ -13,7 +25,7 @@ func create(session, manager_name: String, club_id: String, selected_country_ids
 			club_found = true
 			break
 	if not club_found:
-		return {"error": ERR_DOES_NOT_EXIST, "message": "Selected club is not in the active leagues."}
+		return {"error": ERR_DOES_NOT_EXIST, "message": "Selected club is not in the active leagues. Enable its division and try again."}
 	session.set("save_path", "")
 	session.set("seed", seed)
 	world["detailed_match_model"] = "persistent_action_v2"
