@@ -44,11 +44,17 @@ jobs:
       - name: App speed breakdown
         run: bash tools/test-headless.sh tests/app_speed_breakdown_test.gd 120
 
+      - name: Selected leagues regression
+        run: bash tools/test-headless.sh tests/selected_leagues_regression_test.gd 180
+
       - name: Spatial engine robustness regression
         run: bash tools/test-headless.sh tests/spatial_engine_robustness_test.gd 600
 
       - name: Market realism regression
         run: bash tools/test-headless.sh tests/market_realism_regression_test.gd 120
+
+      - name: Competitive bidding regression
+        run: bash tools/test-headless.sh tests/competitive_bidding_regression_test.gd 120
 
       - name: Interactive substitution regression
         run: bash tools/test-headless.sh tests/interactive_substitution_regression_test.gd 240
