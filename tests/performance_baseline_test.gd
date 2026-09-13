@@ -2,7 +2,7 @@ extends SceneTree
 
 const CareerSessionClass = preload("res://application/career/career_session.gd")
 const DayRunnerClass = preload("res://application/career/day_runner.gd")
-const ContinuousEngineClass = preload("res://simulation/match/continuous_spatial_engine_v3.gd")
+const ContinuousEngineClass = preload("res://simulation/match/continuous_spatial_engine_v4.gd")
 const ProfilerClass = preload("res://application/performance/matchday_profiler.gd")
 
 func _init() -> void:
@@ -39,6 +39,7 @@ func _run() -> void:
 	assert(int(matchday.get("fixtures_played", 0)) > 0)
 	_check_time(matchday_ms, "matchday_162_ms")
 
+	# Exercise the same spatial engine class that production managed matches use.
 	var home := _lineup("home", 66)
 	var away := _lineup("away", 64)
 	t0 = Time.get_ticks_msec()
