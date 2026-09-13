@@ -109,10 +109,6 @@ func _build_home(page: Control, tabs: TabContainer, session) -> void:
 		meta.add_child(UI.chip(_competition_name(world, String(fixture.get("competition_id", ""))), UI.PURPLE))
 		meta.add_child(UI.chip("HOME" if String(fixture.get("home_club_id", "")) == session.managed_club_id else "AWAY", UI.GREEN))
 		UI.body(hero, "Prepare the squad, review availability and confirm your tactical plan before continuing.", true)
-	var continue_button := UI.action("CONTINUE  ›", UI.CYAN)
-	continue_button.custom_minimum_size = Vector2(180, 46)
-	continue_button.pressed.connect(func(): _career_app(tabs).call("_advance_day"))
-	hero.add_child(continue_button)
 
 	var news := UI.panel(top, Vector2(300, 220), UI.PURPLE)
 	(news.get_parent() as Control).size_flags_stretch_ratio = 1.0
@@ -420,7 +416,7 @@ func _career_app(node: Node) -> Node:
 	var current: Node = node
 	while current != null:
 		var script = current.get_script()
-		if script != null and String(script.resource_path).ends_with("game/career/career_app.gd"): return current
+		if script != null and String(script.resource_path).ends_with("career_app.gd"): return current
 		current = current.get_parent()
 	return null
 
