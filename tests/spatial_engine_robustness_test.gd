@@ -31,7 +31,10 @@ func _test_ball_determinism() -> void:
 		BallClass.step(b,1.0/40.0)
 	assert((a.position as Vector3).distance_to(b.position as Vector3) < 0.00001)
 	assert((a.velocity as Vector3).distance_to(b.velocity as Vector3) < 0.00001)
-	assert(float((a.position as Vector3).z) >= BallClass.BALL_RADIUS)
+	# Vector3 components are stored at engine vector precision while BALL_RADIUS
+	# is evaluated as a script float. Accept sub-micrometre representation noise
+	# without weakening the physical invariant that the ball stays above ground.
+	assert(float((a.position as Vector3).z) >= BallClass.BALL_RADIUS - 0.000001)
 
 func _test_motion_and_perception() -> void:
 	var state := MotionClass.make_state({"x":20.0,"y":30.0},Vector2.RIGHT)
