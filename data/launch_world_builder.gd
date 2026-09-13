@@ -128,13 +128,12 @@ func _generate_staff(world: Dictionary, club: Dictionary, country_id: String, da
 
 func _generate_players(world: Dictionary, club: Dictionary, country_id: String, loaded_country_ids: Array, data: Dictionary, count: int, seed: int, used_names: Dictionary, realism, abilities) -> void:
 	var club_rep := int(club.reputation)
-	var band: Vector2i = realism.ability_band(club_rep)
-	var wage_band: Vector2i = realism.wage_band(club_rep)
-	for i in range(maxi(15, count)):
+	var squad_size := maxi(15, count)
+	for i in range(squad_size):
 		var id := "player-%s-%02d" % [String(club.id), i + 1]
 		var key := _key(id)
 		var nationality := String(realism.nationality(country_id, loaded_country_ids, club_rep, seed, key + 40))
-		var ca := _range(seed,key+1,band.x,band.y)
+		var ca := int(realism.squad_ability(club_rep, i, squad_size, seed, key + 1))
 		var age := _range(seed,key+5,17,34)
 		var growth_cap := 34 if age <= 21 else (18 if age <= 25 else 8)
 		var pa := mini(100, ca + _range(seed,key+2,0,growth_cap))
@@ -146,10 +145,12 @@ func _generate_players(world: Dictionary, club: Dictionary, country_id: String, 
 		player["fictional_identity"] = true
 		player["preferred_foot"] = "left" if i % 7 == 0 else "right"
 		player["role_profile"] = realism.role_profile(position, key)
+		player["squad_status"] = "star" if i < 3 else ("first_team" if i < 11 else ("rotation" if i < 18 else "prospect"))
 		player["special_abilities"] = abilities.assign_for_player(player, seed, key + 5000)
 		player["special_ability_labels"] = abilities.labels_for(player)
 		world.players.append(player)
-		world.contracts.append(DomainModelsClass.contract("contract-"+id,id,String(club.id),2026,_range(seed,key+6,2027,2031),_range(seed,key+7,wage_band.x,wage_band.y)))
+		var wage := int(realism.player_wage(club_rep, ca, seed, key + 7))
+		world.contracts.append(DomainModelsClass.contract("contract-"+id,id,String(club.id),2026,_range(seed,key+6,2027,2031),wage))
 
 func _round_robin(competition_id: String, club_ids: Array) -> Array:
 	var teams: Array = club_ids.duplicate(); var fixtures: Array = []; var n: int = teams.size()
