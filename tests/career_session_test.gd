@@ -35,9 +35,9 @@ func _init() -> void:
 	assert(slots.load_slot(1).has("world"))
 	assert(slots.delete_slot(1) == OK)
 
-	var result: Dictionary = loaded.continue_season()
-	assert(not result.is_empty())
-	assert(int(loaded.snapshot().season_year) == int(snap.season_year) + 1)
+	# Full-season progression/save-load equivalence is intentionally covered by
+	# career_rollover_test.gd. Keeping that expensive simulation out of this
+	# session-contract test prevents one regression from duplicating a soak test.
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path + ".bak"))
 	print("[TEST] CAREER SESSION PASS")
