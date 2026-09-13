@@ -4,6 +4,7 @@ extends RefCounted
 const AbstractMatchEngineClass = preload("res://simulation/match/modern_abstract_match_engine.gd")
 const TacticalMatchEngineClass = preload("res://simulation/match/modern_tactical_match_engine.gd")
 const LeagueTableClass = preload("res://simulation/competitions/league_table.gd")
+const CompetitionRecordSummaryClass = preload("res://simulation/world/competition_record_summary.gd")
 const DisciplineServiceClass = preload("res://simulation/competitions/discipline_service.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
 const ModernRulesClass = preload("res://simulation/competitions/modern_rules_catalog.gd")
@@ -68,7 +69,9 @@ func complete_competition(world: Dictionary, competition_id: String, season_seed
 	while true:
 		var played: Dictionary = play_next_fixture(world, competition_id, season_seed)
 		if played.is_empty(): break
-	return build_season_record(world, competition_id)
+	var record := build_season_record(world, competition_id)
+	_decorate_record(world,record)
+	return record
 
 func complete_world_season(world: Dictionary, season_seed: int) -> Array:
 	assign_fixture_dates(world)
@@ -77,7 +80,10 @@ func complete_world_season(world: Dictionary, season_seed: int) -> Array:
 		var results: Array = advance_to_next_matchday(world, season_seed, player_index)
 		if results.is_empty(): break
 	var records: Array = []
-	for competition in world.competitions: records.append(build_season_record(world, String(competition.id)))
+	for competition in world.competitions:
+		var record: Dictionary = build_season_record(world, String(competition.id))
+		_decorate_record(world,record)
+		records.append(record)
 	return records
 
 func complete_and_rollover(world: Dictionary, history: Array, season_seed: int, promotion_places: int = 3) -> Dictionary:
@@ -111,6 +117,39 @@ func build_season_record(world: Dictionary, competition_id: String) -> Dictionar
 		if not bool(fixture.get("played", false)): complete = false; break
 	var season_year: int = int(world.get("season_year", _year_from_date(String(world.get("date", "2026-07-01")))))
 	return {"competition_id":competition_id,"competition_name":competition.name,"season_start_year":season_year,"tier":int(competition.get("tier",1)),"complete":complete,"fixture_count":fixtures.size(),"table":table,"champion_club_id":table[0].club_id if complete and not table.is_empty() else "","competition_type":"league"}
+
+func _decorate_record(world: Dictionary, record: Dictionary) -> void:
+	var competition_id := String(record.get("competition_id",""))
+	var fixtures: Array = []
+	for fixture in world.get("fixtures",[]):
+		if String(fixture.get("competition_id","")) == competition_id and bool(fixture.get("played",false)): fixtures.append(fixture)
+	record["record_summary"] = CompetitionRecordSummaryClass.new().build(fixtures)
+	var table: Array = record.get("table",[])
+	if table.size() > 1:
+		record["runner_up_club_id"] = String(table[1].get("club_id",""))
+	else:
+		record["runner_up_club_id"] = _runner_up_from_fixtures(fixtures,String(record.get("champion_club_id","")))
+
+func _runner_up_from_fixtures(fixtures: Array, champion_id: String) -> String:
+	if champion_id == "": return ""
+	var final_candidates: Array = []
+	var max_round := -1
+	for fixture in fixtures:
+		if String(fixture.get("stage","")) == "final": final_candidates.append(fixture)
+		max_round = maxi(max_round,int(fixture.get("round",0)))
+	if final_candidates.is_empty():
+		for fixture in fixtures:
+			if int(fixture.get("round",0)) == max_round: final_candidates.append(fixture)
+	final_candidates.sort_custom(func(a: Dictionary,b: Dictionary):
+		var ad := String(a.get("date","")); var bd := String(b.get("date",""))
+		if ad != bd: return ad < bd
+		return String(a.get("id","")) < String(b.get("id",""))
+	)
+	for fixture in final_candidates:
+		var home := String(fixture.get("home_club_id","")); var away := String(fixture.get("away_club_id",""))
+		if home == champion_id and away != "": return away
+		if away == champion_id and home != "": return home
+	return ""
 
 func _play_fixture(world: Dictionary, fixture: Dictionary, season_seed: int, player_index: Dictionary = {}) -> Dictionary:
 	var match_seed: int = _fixture_seed(season_seed, fixture)
