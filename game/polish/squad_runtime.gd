@@ -99,7 +99,7 @@ func _wire(tabs: TabContainer) -> void:
 			var open := Button.new()
 			open.text = text
 			open.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			open.pressed.connect(_open_profile.bind(session.world, String(row.id), session.managed_club_id, tabs))
+			open.pressed.connect(_open_profile.bind(session.world, str(row.id), session.managed_club_id, tabs))
 			line.add_child(open)
 
 	var actions := HBoxContainer.new()
@@ -155,25 +155,25 @@ func _squad_rows(world: Dictionary, club_id: String) -> Array:
 	var last_ratings := {}
 	if world.has("last_managed_match"):
 		for row in preload("res://application/career/match_rating_service.gd").new().ratings(world.last_managed_match.get("result", {})):
-			last_ratings[String(row.player_id)] = float(row.rating)
+			last_ratings[str(row.player_id)] = float(row.rating)
 	var contracts := {}
 	for contract in world.get("contracts", []):
-		if String(contract.get("club_id","")) == club_id and not bool(contract.get("expired",false)):
-			contracts[String(contract.get("player_id",""))] = contract
+		if str(contract.get("club_id","")) == club_id and not bool(contract.get("expired",false)):
+			contracts[str(contract.get("player_id",""))] = contract
 	var rows: Array = []
 	for player in world.get("players", []):
-		if String(player.get("club_id","")) != club_id or bool(player.get("retired",false)):
+		if str(player.get("club_id","")) != club_id or bool(player.get("retired",false)):
 			continue
 		var history_goals := 0
 		for stat in world.get("player_match_stats", []):
-			if String(stat.get("player_id","")) == String(player.id) and int(stat.get("season_year",0)) == int(world.get("season_year",0)):
+			if str(stat.get("player_id","")) == str(player.get("id", "")) and int(stat.get("season_year",0)) == int(world.get("season_year",0)):
 				history_goals += int(stat.get("goals",0))
-		var contract: Dictionary = contracts.get(String(player.id), {})
+		var contract: Dictionary = contracts.get(str(player.get("id", "")), {})
 		rows.append({
-			"id":String(player.id),"name":_name(player),"position":String(player.get("position","")),"age":int(player.get("age",0)),
+			"id":str(player.get("id", "")),"name":_name(player),"position":str(player.get("position","")),"age":int(player.get("age",0)),
 			"condition":int(player.get("fitness",0)),"sharpness":int(player.get("match_sharpness",0)),"morale":int(player.get("morale",0)),"form":str(player.get("form","-")),
-			"appearances":int(player.get("season_appearances",0)),"goals":history_goals,"assists":int(player.get("season_assists",0)),"rating":float(last_ratings.get(String(player.id),6.0)),
-			"value":_estimated_value(player),"contract":String(contract.get("end_year","-"))
+			"appearances":int(player.get("season_appearances",0)),"goals":history_goals,"assists":int(player.get("season_assists",0)),"rating":float(last_ratings.get(str(player.get("id", "")),6.0)),
+			"value":_estimated_value(player),"contract":str(contract.get("end_year","-"))
 		})
 	return rows
 
@@ -223,7 +223,7 @@ func _career_session(node: Node):
 	var current: Node = node
 	while current != null:
 		var script = current.get_script()
-		if script != null and String(script.resource_path).ends_with("game/career/career_app.gd"):
+		if current.has_method("_show_career") and current.has_method("_advance_day"):
 			return current.get("session")
 		current = current.get_parent()
 	return null
@@ -231,13 +231,13 @@ func _refresh_app(node: Node) -> void:
 	var current: Node = node
 	while current != null:
 		var script = current.get_script()
-		if script != null and String(script.resource_path).ends_with("game/career/career_app.gd"):
+		if current.has_method("_show_career") and current.has_method("_advance_day"):
 			current.call("_show_career")
 			return
 		current = current.get_parent()
 func _name(player: Dictionary) -> String:
-	var name := String(player.get("name","")).strip_edges()
-	return name if name != "" else (String(player.get("first_name",""))+" "+String(player.get("last_name",""))).strip_edges()
+	var name := str(player.get("name","")).strip_edges()
+	return name if name != "" else (str(player.get("first_name",""))+" "+str(player.get("last_name",""))).strip_edges()
 func _estimated_value(player: Dictionary) -> int:
 	var ca := int(player.get("current_ability",50)); var pa := int(player.get("potential",ca)); var age := int(player.get("age",25))
 	var age_factor := 1.25 if age <= 23 else (1.0 if age <= 28 else maxf(0.35,1.0-float(age-28)*0.09))
