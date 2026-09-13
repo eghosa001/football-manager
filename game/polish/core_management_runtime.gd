@@ -45,9 +45,6 @@ func _focus_new_career(app: Node) -> void:
 	var create_button := _button_by_text(app, "Create Career")
 	if create_button == null:
 		return
-	for button in _buttons(app):
-		if "Expanded world" in button.text:
-			button.visible = false
 	if create_button.has_meta("core_league_selector"):
 		return
 	create_button.set_meta("core_league_selector", true)
@@ -132,14 +129,14 @@ func _focus_career_tabs(app: Node) -> void:
 		var has_dashboard := false
 		var has_squad := false
 		for i in range(tabs.get_tab_count()):
-			var title := tabs.get_tab_title(i)
+			var title: String = tabs.get_tab_title(i)
 			if title == "Dashboard" or title == "Home": has_dashboard = true
 			if title == "Squad": has_squad = true
 		if not has_dashboard or not has_squad:
 			continue
 		var keep := ["Dashboard","Home","Inbox","Squad","Tactics","Training","Medical","Staff","Scouting","Transfers","Schedule","Competitions","Youth Academy","Finances","Search","Match Analysis","Club"]
 		for i in range(tabs.get_tab_count()):
-			var title := tabs.get_tab_title(i)
+			var title: String = tabs.get_tab_title(i)
 			tabs.set_tab_hidden(i, title not in keep)
 		_add_staff_responsibilities(tabs, session)
 
@@ -238,9 +235,9 @@ func _tab_containers(root: Node) -> Array:
 	_collect_type(root, TabContainer, result)
 	return result
 
-func _collect_type(node: Node, type, result: Array) -> void:
-	if is_instance_of(node, type): result.append(node)
-	for child in node.get_children(): _collect_type(child, type, result)
+func _collect_type(node: Node, class_ref, result: Array) -> void:
+	if is_instance_of(node, class_ref): result.append(node)
+	for child in node.get_children(): _collect_type(child, class_ref, result)
 
 func _button_by_text(root: Node, text: String) -> Button:
 	for button in _buttons(root):
