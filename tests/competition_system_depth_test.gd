@@ -70,12 +70,33 @@ func _test_modern_regional_formats() -> void:
 		_require(int(africa.get("format",{}).get("groups",0)) == 4,"Africa top competition must have four groups")
 		_require(bool(africa.get("format",{}).get("final_two_leg",false)),"Africa final must be two-legged")
 		_require(_fixture_count(world,String(africa.id),"group_stage") == 48,"Africa group stage must create 48 matches")
+	var asia := _competition(world,"continental-asia-champions")
+	if not asia.is_empty() and asia.get("club_ids",[]).size() >= 32:
+		_require(String(asia.get("format_kind","")) == "afc_elite_32","Asia top competition must use the expanded 32-club elite format")
+		_require(int(asia.get("format",{}).get("teams_per_region",0)) == 16,"Asian elite format must split into two 16-club regional leagues")
+		_require(int(asia.get("format",{}).get("league_matches_per_club",0)) == 8,"Asian elite clubs must play eight league-stage matches")
+		_require(_fixture_count(world,String(asia.id),"league_stage") == 128,"Asian elite league stage must create 128 matches")
+		_verify_afc_home_away(world,String(asia.id),asia.get("club_ids",[]))
 	var north := _competition(world,"continental-north_america-champions")
 	if not north.is_empty() and north.get("club_ids",[]).size() >= 27:
 		_require(String(north.get("format_kind","")) == "concacaf_27","North America top competition must use 27-club format")
 		_require(int(north.get("format",{}).get("round_one_clubs",0)) == 22,"Concacaf-style Round One must contain 22 clubs")
 		_require(int(north.get("format",{}).get("round_of_16_byes",0)) == 5,"Concacaf-style format must award five R16 byes")
 		_require(_fixture_count(world,String(north.id),"round_one") == 22,"Concacaf-style Round One must create 11 two-legged ties")
+
+func _verify_afc_home_away(world: Dictionary, competition_id: String, club_ids: Array) -> void:
+	var counts: Dictionary = {}
+	for club_id_value in club_ids:
+		counts[String(club_id_value)] = {"home":0,"away":0,"opponents":{}}
+	for fixture in world.get("fixtures",[]):
+		if String(fixture.get("competition_id","")) != competition_id or String(fixture.get("stage","")) != "league_stage": continue
+		var home := String(fixture.get("home_club_id","")); var away := String(fixture.get("away_club_id",""))
+		if counts.has(home): counts[home].home = int(counts[home].home)+1; counts[home].opponents[away]=true
+		if counts.has(away): counts[away].away = int(counts[away].away)+1; counts[away].opponents[home]=true
+	for club_id in counts.keys():
+		_require(int(counts[club_id].home) == 4,"Asian elite club %s must have four home league-stage matches" % String(club_id))
+		_require(int(counts[club_id].away) == 4,"Asian elite club %s must have four away league-stage matches" % String(club_id))
+		_require((counts[club_id].opponents as Dictionary).size() == 8,"Asian elite club %s must face eight different league-stage opponents" % String(club_id))
 
 func _test_club_world_cup_format() -> void:
 	var world: Dictionary = Builder.new().build(66221,0,25,true)
