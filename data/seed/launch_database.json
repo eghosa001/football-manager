@@ -1,40 +1,198 @@
 {
   "schema_version": 1,
   "default_country_id": "eng",
-  "featured_country_ids": ["eng", "esp"],
+  "featured_country_ids": ["eng", "esp", "deu", "ita", "fra"],
   "countries": [
-    {"id":"eng","name":"England","code":"ENG","youth_rating":86,"cities":["London","Manchester","Liverpool","Birmingham","Leeds","Newcastle","Sheffield","Bristol","Nottingham","Leicester","Southampton","Norwich"]},
-    {"id":"esp","name":"Spain","code":"ESP","youth_rating":88,"cities":["Madrid","Barcelona","Seville","Valencia","Bilbao","Zaragoza","Malaga","Vigo","Granada","La Coruna","Oviedo","Cadiz"]},
-    {"id":"deu","name":"Germany","code":"GER","youth_rating":87,"cities":["Berlin","Munich","Dortmund","Hamburg","Cologne","Frankfurt","Stuttgart","Leipzig","Bremen","Hanover"]},
-    {"id":"fra","name":"France","code":"FRA","youth_rating":87,"cities":["Paris","Marseille","Lyon","Lille","Bordeaux","Nantes","Nice","Toulouse","Rennes","Lens"]},
-    {"id":"ita","name":"Italy","code":"ITA","youth_rating":85,"cities":["Rome","Milan","Naples","Turin","Palermo","Genoa","Bologna","Florence","Bari","Verona"]},
+    {"id":"eng","name":"England","code":"ENG","youth_rating":86,"cities":["London","Manchester","Liverpool","Birmingham","Leeds","Newcastle","Sheffield","Bristol","Nottingham","Leicester","Southampton","Norwich"],"club_profiles":{"1":[
+      {"name":"Manchester Red","city":"Manchester","reputation":92,"stadium_capacity":74200,"training_facilities":92},
+      {"name":"Manchester Sky","city":"Manchester","reputation":94,"stadium_capacity":53500,"training_facilities":96},
+      {"name":"Merseyside Red","city":"Liverpool","reputation":94,"stadium_capacity":61200,"training_facilities":94},
+      {"name":"Merseyside Blue","city":"Liverpool","reputation":78,"stadium_capacity":52000,"training_facilities":82},
+      {"name":"North London Red","city":"London","reputation":91,"stadium_capacity":60700,"training_facilities":92},
+      {"name":"North London White","city":"London","reputation":87,"stadium_capacity":62800,"training_facilities":89},
+      {"name":"West London Blue","city":"London","reputation":88,"stadium_capacity":40200,"training_facilities":92},
+      {"name":"Birmingham Claret","city":"Birmingham","reputation":84,"stadium_capacity":42800,"training_facilities":85},
+      {"name":"Tyneside Black & White","city":"Newcastle","reputation":88,"stadium_capacity":52300,"training_facilities":87},
+      {"name":"West London Whites","city":"London","reputation":76,"stadium_capacity":25700,"training_facilities":78},
+      {"name":"South Coast Blue","city":"Brighton","reputation":78,"stadium_capacity":31800,"training_facilities":85},
+      {"name":"South Coast Red","city":"Bournemouth","reputation":72,"stadium_capacity":11800,"training_facilities":75},
+      {"name":"West London Stripes","city":"London","reputation":75,"stadium_capacity":17300,"training_facilities":82},
+      {"name":"Nottingham Reds","city":"Nottingham","reputation":78,"stadium_capacity":30500,"training_facilities":77},
+      {"name":"East London Claret","city":"London","reputation":79,"stadium_capacity":62500,"training_facilities":79},
+      {"name":"Crystal South","city":"London","reputation":76,"stadium_capacity":25400,"training_facilities":76},
+      {"name":"Wolverhampton Gold","city":"Wolverhampton","reputation":77,"stadium_capacity":32000,"training_facilities":79},
+      {"name":"Leicester Foxes","city":"Leicester","reputation":76,"stadium_capacity":32200,"training_facilities":81},
+      {"name":"Yorkshire Whites","city":"Leeds","reputation":79,"stadium_capacity":37600,"training_facilities":80},
+      {"name":"Sunderland Red & White","city":"Sunderland","reputation":74,"stadium_capacity":49000,"training_facilities":76}
+    ]}},
+    {"id":"esp","name":"Spain","code":"ESP","youth_rating":88,"cities":["Madrid","Barcelona","Seville","Valencia","Bilbao","Zaragoza","Malaga","Vigo","Granada","La Coruna","Oviedo","Cadiz"],"club_profiles":{"1":[
+      {"name":"Madrid White","city":"Madrid","reputation":96,"stadium_capacity":81000,"training_facilities":97},
+      {"name":"Barcelona Azure","city":"Barcelona","reputation":95,"stadium_capacity":99000,"training_facilities":96},
+      {"name":"Madrid Red & White","city":"Madrid","reputation":91,"stadium_capacity":70000,"training_facilities":93},
+      {"name":"Basque Red","city":"Bilbao","reputation":84,"stadium_capacity":53000,"training_facilities":91},
+      {"name":"San Sebastian Blue","city":"San Sebastian","reputation":84,"stadium_capacity":39500,"training_facilities":89},
+      {"name":"Seville Green","city":"Seville","reputation":82,"stadium_capacity":60000,"training_facilities":85},
+      {"name":"Seville Red","city":"Seville","reputation":82,"stadium_capacity":43000,"training_facilities":86},
+      {"name":"Valencia Orange","city":"Valencia","reputation":82,"stadium_capacity":49000,"training_facilities":82},
+      {"name":"Villarreal Yellow","city":"Villarreal","reputation":83,"stadium_capacity":23500,"training_facilities":89},
+      {"name":"Girona Red","city":"Girona","reputation":78,"stadium_capacity":14500,"training_facilities":82},
+      {"name":"Vigo Sky","city":"Vigo","reputation":75,"stadium_capacity":24800,"training_facilities":78},
+      {"name":"Mallorca Island","city":"Palma","reputation":75,"stadium_capacity":26000,"training_facilities":78},
+      {"name":"Pamplona Red","city":"Pamplona","reputation":75,"stadium_capacity":23500,"training_facilities":79},
+      {"name":"Madrid South Blue","city":"Madrid","reputation":74,"stadium_capacity":17000,"training_facilities":77},
+      {"name":"Vallecas Red","city":"Madrid","reputation":73,"stadium_capacity":14800,"training_facilities":73},
+      {"name":"Catalonia White & Blue","city":"Barcelona","reputation":74,"stadium_capacity":40500,"training_facilities":79},
+      {"name":"Alaves Blue","city":"Vitoria","reputation":72,"stadium_capacity":19800,"training_facilities":73},
+      {"name":"Canary Yellow","city":"Las Palmas","reputation":73,"stadium_capacity":32400,"training_facilities":75},
+      {"name":"Oviedo Blue","city":"Oviedo","reputation":71,"stadium_capacity":30500,"training_facilities":73},
+      {"name":"Levante Blue & Red","city":"Valencia","reputation":71,"stadium_capacity":26000,"training_facilities":72}
+    ]}},
+    {"id":"deu","name":"Germany","code":"GER","youth_rating":87,"cities":["Berlin","Munich","Dortmund","Hamburg","Cologne","Frankfurt","Stuttgart","Leipzig","Bremen","Hanover"],"club_profiles":{"1":[
+      {"name":"Munich Red","city":"Munich","reputation":95,"stadium_capacity":75000,"training_facilities":97},
+      {"name":"Dortmund Yellow","city":"Dortmund","reputation":91,"stadium_capacity":81300,"training_facilities":94},
+      {"name":"Leverkusen Black","city":"Leverkusen","reputation":88,"stadium_capacity":30200,"training_facilities":93},
+      {"name":"Leipzig Red","city":"Leipzig","reputation":87,"stadium_capacity":47000,"training_facilities":93},
+      {"name":"Frankfurt Black & Red","city":"Frankfurt","reputation":84,"stadium_capacity":58000,"training_facilities":88},
+      {"name":"Stuttgart White & Red","city":"Stuttgart","reputation":84,"stadium_capacity":60000,"training_facilities":87},
+      {"name":"Freiburg Red","city":"Freiburg","reputation":80,"stadium_capacity":34700,"training_facilities":86},
+      {"name":"Berlin Iron","city":"Berlin","reputation":78,"stadium_capacity":22000,"training_facilities":80},
+      {"name":"Bremen Green","city":"Bremen","reputation":78,"stadium_capacity":42100,"training_facilities":80},
+      {"name":"Gladbach Black & White","city":"Monchengladbach","reputation":80,"stadium_capacity":54000,"training_facilities":84},
+      {"name":"Mainz Red","city":"Mainz","reputation":76,"stadium_capacity":34000,"training_facilities":80},
+      {"name":"Augsburg Red","city":"Augsburg","reputation":73,"stadium_capacity":30600,"training_facilities":75},
+      {"name":"Wolfsburg Green","city":"Wolfsburg","reputation":78,"stadium_capacity":30000,"training_facilities":85},
+      {"name":"Hoffenheim Blue","city":"Sinsheim","reputation":76,"stadium_capacity":30100,"training_facilities":88},
+      {"name":"Hamburg Blue","city":"Hamburg","reputation":81,"stadium_capacity":57000,"training_facilities":83},
+      {"name":"Cologne Red & White","city":"Cologne","reputation":79,"stadium_capacity":50000,"training_facilities":82},
+      {"name":"Heidenheim Blue & Red","city":"Heidenheim","reputation":71,"stadium_capacity":15000,"training_facilities":72},
+      {"name":"St Pauli Brown","city":"Hamburg","reputation":74,"stadium_capacity":29500,"training_facilities":74}
+    ]}},
+    {"id":"fra","name":"France","code":"FRA","youth_rating":87,"cities":["Paris","Marseille","Lyon","Lille","Bordeaux","Nantes","Nice","Toulouse","Rennes","Lens"],"club_profiles":{"1":[
+      {"name":"Paris Blue","city":"Paris","reputation":94,"stadium_capacity":48000,"training_facilities":97},
+      {"name":"Marseille Sky","city":"Marseille","reputation":87,"stadium_capacity":67000,"training_facilities":89},
+      {"name":"Monaco Red & White","city":"Monaco","reputation":85,"stadium_capacity":18500,"training_facilities":92},
+      {"name":"Lyon Red & Blue","city":"Lyon","reputation":84,"stadium_capacity":59000,"training_facilities":91},
+      {"name":"Lille Red","city":"Lille","reputation":82,"stadium_capacity":50000,"training_facilities":87},
+      {"name":"Nice Black & Red","city":"Nice","reputation":80,"stadium_capacity":36000,"training_facilities":85},
+      {"name":"Rennes Red & Black","city":"Rennes","reputation":80,"stadium_capacity":29700,"training_facilities":88},
+      {"name":"Lens Gold & Red","city":"Lens","reputation":80,"stadium_capacity":38000,"training_facilities":82},
+      {"name":"Strasbourg Blue","city":"Strasbourg","reputation":78,"stadium_capacity":26000,"training_facilities":84},
+      {"name":"Toulouse Violet","city":"Toulouse","reputation":75,"stadium_capacity":33000,"training_facilities":79},
+      {"name":"Nantes Yellow","city":"Nantes","reputation":75,"stadium_capacity":35000,"training_facilities":77},
+      {"name":"Brest Red","city":"Brest","reputation":74,"stadium_capacity":15000,"training_facilities":74},
+      {"name":"Auxerre Blue","city":"Auxerre","reputation":73,"stadium_capacity":18000,"training_facilities":78},
+      {"name":"Le Havre Sky","city":"Le Havre","reputation":71,"stadium_capacity":25000,"training_facilities":72},
+      {"name":"Metz Maroon","city":"Metz","reputation":71,"stadium_capacity":28700,"training_facilities":72},
+      {"name":"Lorient Orange","city":"Lorient","reputation":72,"stadium_capacity":18500,"training_facilities":74},
+      {"name":"Angers Black & White","city":"Angers","reputation":71,"stadium_capacity":18000,"training_facilities":72},
+      {"name":"Paris Red Star","city":"Paris","reputation":70,"stadium_capacity":20000,"training_facilities":70}
+    ]}},
+    {"id":"ita","name":"Italy","code":"ITA","youth_rating":85,"cities":["Rome","Milan","Naples","Turin","Palermo","Genoa","Bologna","Florence","Bari","Verona"],"club_profiles":{"1":[
+      {"name":"Milan Black & Blue","city":"Milan","reputation":91,"stadium_capacity":75000,"training_facilities":93},
+      {"name":"Milan Red & Black","city":"Milan","reputation":90,"stadium_capacity":75000,"training_facilities":92},
+      {"name":"Turin Black & White","city":"Turin","reputation":91,"stadium_capacity":41500,"training_facilities":94},
+      {"name":"Naples Blue","city":"Naples","reputation":89,"stadium_capacity":55000,"training_facilities":88},
+      {"name":"Rome Red","city":"Rome","reputation":86,"stadium_capacity":70000,"training_facilities":87},
+      {"name":"Rome Sky","city":"Rome","reputation":83,"stadium_capacity":70000,"training_facilities":85},
+      {"name":"Bergamo Blue & Black","city":"Bergamo","reputation":85,"stadium_capacity":25000,"training_facilities":91},
+      {"name":"Bologna Red & Blue","city":"Bologna","reputation":82,"stadium_capacity":36500,"training_facilities":86},
+      {"name":"Florence Violet","city":"Florence","reputation":82,"stadium_capacity":43000,"training_facilities":85},
+      {"name":"Turin Maroon","city":"Turin","reputation":78,"stadium_capacity":28000,"training_facilities":80},
+      {"name":"Genoa Red & Blue","city":"Genoa","reputation":77,"stadium_capacity":36500,"training_facilities":79},
+      {"name":"Genoa Blue","city":"Genoa","reputation":75,"stadium_capacity":36500,"training_facilities":77},
+      {"name":"Udine Black & White","city":"Udine","reputation":76,"stadium_capacity":25000,"training_facilities":81},
+      {"name":"Verona Yellow & Blue","city":"Verona","reputation":74,"stadium_capacity":39000,"training_facilities":76},
+      {"name":"Parma Yellow & Blue","city":"Parma","reputation":74,"stadium_capacity":28000,"training_facilities":79},
+      {"name":"Como Blue","city":"Como","reputation":74,"stadium_capacity":14000,"training_facilities":82},
+      {"name":"Lecce Yellow & Red","city":"Lecce","reputation":72,"stadium_capacity":30000,"training_facilities":73},
+      {"name":"Cagliari Red & Blue","city":"Cagliari","reputation":73,"stadium_capacity":16000,"training_facilities":75},
+      {"name":"Pisa Black & Blue","city":"Pisa","reputation":70,"stadium_capacity":25000,"training_facilities":71},
+      {"name":"Cremona Grey & Red","city":"Cremona","reputation":70,"stadium_capacity":16000,"training_facilities":70}
+    ]}},
     {"id":"prt","name":"Portugal","code":"POR","youth_rating":83,"cities":["Lisbon","Porto","Braga","Coimbra","Faro","Aveiro","Viseu","Setubal","Guimaraes","Funchal"]},
     {"id":"nld","name":"Netherlands","code":"NED","youth_rating":84,"cities":["Amsterdam","Rotterdam","Utrecht","Eindhoven","Groningen","Arnhem","Breda","Tilburg","Zwolle","Alkmaar"]},
     {"id":"bra","name":"Brazil","code":"BRA","youth_rating":92,"cities":["Sao Paulo","Rio de Janeiro","Belo Horizonte","Porto Alegre","Salvador","Fortaleza","Curitiba","Recife","Goiania","Belem"]},
     {"id":"arg","name":"Argentina","code":"ARG","youth_rating":89,"cities":["Buenos Aires","Cordoba","Rosario","Mendoza","La Plata","Salta","Santa Fe","Tucuman","Mar del Plata","Neuquen"]},
     {"id":"nga","name":"Nigeria","code":"NGA","youth_rating":72,"cities":["Lagos","Abuja","Kano","Ibadan","Port Harcourt","Benin City","Enugu","Kaduna","Jos","Ilorin"]},
     {"id":"gha","name":"Ghana","code":"GHA","youth_rating":70,"cities":["Accra","Kumasi","Tamale","Takoradi","Cape Coast","Ho","Sunyani","Koforidua","Obuasi","Tema"]},
-    {"id":"zaf","name":"South Africa","code":"RSA","youth_rating":75,"cities":["Johannesburg","Cape Town","Durban","Pretoria","Port Elizabeth","Bloemfontein","Polokwane","Nelspruit","Kimberley","Rustenburg"]}
+    {"id":"zaf","name":"South Africa","code":"RSA","youth_rating":75,"cities":["Johannesburg","Cape Town","Durban","Pretoria","Gqeberha","Bloemfontein","Polokwane","Mbombela","Kimberley","Rustenburg"]}
   ],
   "competition_templates": [
-    {"id":"league-20","type":"league","teams":20,"rounds":2,"points_win":3,"points_draw":1},
+    {"id":"league-16","type":"league","teams":16,"rounds":2,"points_win":3,"points_draw":1},
     {"id":"league-18","type":"league","teams":18,"rounds":2,"points_win":3,"points_draw":1},
+    {"id":"league-20","type":"league","teams":20,"rounds":2,"points_win":3,"points_draw":1},
+    {"id":"league-22","type":"league","teams":22,"rounds":2,"points_win":3,"points_draw":1},
+    {"id":"league-24","type":"league","teams":24,"rounds":2,"points_win":3,"points_draw":1},
+    {"id":"league-30","type":"league","teams":30,"rounds":2,"points_win":3,"points_draw":1},
+    {"id":"cup-16","type":"knockout","teams":16,"legs":1,"extra_time":true,"penalties":true},
     {"id":"cup-32","type":"knockout","teams":32,"legs":1,"extra_time":true,"penalties":true},
-    {"id":"cup-64","type":"knockout","teams":64,"legs":1,"extra_time":true,"penalties":true}
+    {"id":"cup-64","type":"knockout","teams":64,"legs":1,"extra_time":true,"penalties":true},
+    {"id":"cup-128","type":"knockout","teams":128,"legs":1,"extra_time":true,"penalties":true}
   ],
   "league_systems": [
-    {"country_id":"eng","tiers":[{"name":"Premier League","template":"league-20","promotion":0,"relegation":3},{"name":"Championship","template":"league-20","promotion":3,"relegation":3},{"name":"League One","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"FA Cup","template":"cup-64"},"league_cup":{"name":"League Cup","template":"cup-32"}},
-    {"country_id":"esp","tiers":[{"name":"LaLiga","template":"league-20","promotion":0,"relegation":3},{"name":"Segunda Division","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"Copa del Rey","template":"cup-32"}},
-    {"country_id":"deu","tiers":[{"name":"Bundesliga","template":"league-18","promotion":0,"relegation":3},{"name":"2. Bundesliga","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"DFB-Pokal","template":"cup-32"}},
-    {"country_id":"fra","tiers":[{"name":"Ligue 1","template":"league-18","promotion":0,"relegation":3},{"name":"Ligue 2","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"Coupe de France","template":"cup-32"}},
-    {"country_id":"ita","tiers":[{"name":"Serie A","template":"league-20","promotion":0,"relegation":3},{"name":"Serie B","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"Coppa Italia","template":"cup-32"}},
-    {"country_id":"prt","tiers":[{"name":"Primeira Liga","template":"league-18","promotion":0,"relegation":3},{"name":"Segunda Liga","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"Taca de Portugal","template":"cup-32"}},
-    {"country_id":"nld","tiers":[{"name":"Eredivisie","template":"league-18","promotion":0,"relegation":3},{"name":"Eerste Divisie","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"KNVB Cup","template":"cup-32"}},
-    {"country_id":"bra","tiers":[{"name":"Serie A","template":"league-20","promotion":0,"relegation":4},{"name":"Serie B","template":"league-20","promotion":4,"relegation":4}],"cup":{"name":"Copa do Brasil","template":"cup-32"}},
-    {"country_id":"arg","tiers":[{"name":"Primera Division","template":"league-20","promotion":0,"relegation":4},{"name":"Primera Nacional","template":"league-20","promotion":4,"relegation":4}],"cup":{"name":"Copa Argentina","template":"cup-32"}},
-    {"country_id":"nga","tiers":[{"name":"National Premier Division","template":"league-20","promotion":0,"relegation":3},{"name":"National League","template":"league-20","promotion":3,"relegation":3}],"cup":{"name":"Federation Cup","template":"cup-32"}},
-    {"country_id":"gha","tiers":[{"name":"Premier League","template":"league-18","promotion":0,"relegation":3},{"name":"Division One","template":"league-18","promotion":3,"relegation":3}],"cup":{"name":"FA Cup","template":"cup-32"}},
-    {"country_id":"zaf","tiers":[{"name":"Premiership","template":"league-18","promotion":0,"relegation":2},{"name":"First Division","template":"league-18","promotion":2,"relegation":2}],"cup":{"name":"Nedbank Cup","template":"cup-32"}}
+    {"country_id":"eng","tiers":[
+      {"name":"English Premier Division","template":"league-20","promotion":0,"relegation":3},
+      {"name":"English Championship","template":"league-24","promotion":3,"automatic_promotion":2,"playoff_promotion":1,"playoff_places":[3,6],"relegation":3},
+      {"name":"English League One","template":"league-24","promotion":3,"automatic_promotion":2,"playoff_promotion":1,"playoff_places":[3,6],"relegation":4}
+    ],"cup":{"name":"English National Cup","template":"cup-128"},"league_cup":{"name":"English League Cup","template":"cup-64"},"registration":{"max_squad":25,"min_goalkeepers":2,"max_foreign":17,"homegrown_required":8},"transfer_windows":[{"start_month":6,"start_day":12,"end_month":9,"end_day":1},{"start_month":1,"start_day":1,"end_month":2,"end_day":2}]},
+    {"country_id":"esp","tiers":[
+      {"name":"Spanish First Division","template":"league-20","promotion":0,"relegation":3},
+      {"name":"Spanish Second Division","template":"league-22","promotion":3,"automatic_promotion":2,"playoff_promotion":1,"playoff_places":[3,6],"relegation":4}
+    ],"cup":{"name":"Spanish Royal Cup","template":"cup-64"},"registration":{"max_squad":25,"min_goalkeepers":2,"max_foreign":3,"homegrown_required":0},"transfer_windows":[{"start_month":7,"start_day":1,"end_month":9,"end_day":1},{"start_month":1,"start_day":2,"end_month":2,"end_day":2}]},
+    {"country_id":"deu","tiers":[
+      {"name":"German First Division","template":"league-18","promotion":0,"relegation":2,"relegation_playoff":1},
+      {"name":"German Second Division","template":"league-18","promotion":2,"automatic_promotion":2,"promotion_playoff_vs_upper":1,"relegation":2,"relegation_playoff":1}
+    ],"cup":{"name":"German National Cup","template":"cup-64"},"registration":{"max_squad":25,"min_goalkeepers":2,"max_foreign":25,"homegrown_required":8}},
+    {"country_id":"fra","tiers":[
+      {"name":"French First Division","template":"league-18","promotion":0,"relegation":2,"relegation_playoff":1},
+      {"name":"French Second Division","template":"league-18","promotion":2,"automatic_promotion":2,"promotion_playoff_vs_upper":1,"relegation":3}
+    ],"cup":{"name":"French National Cup","template":"cup-64"}},
+    {"country_id":"ita","tiers":[
+      {"name":"Italian First Division","template":"league-20","promotion":0,"relegation":3},
+      {"name":"Italian Second Division","template":"league-20","promotion":3,"automatic_promotion":2,"playoff_promotion":1,"playoff_places":[3,8],"relegation":3}
+    ],"cup":{"name":"Italian National Cup","template":"cup-32"}},
+    {"country_id":"prt","tiers":[
+      {"name":"Portuguese Premier Division","template":"league-18","promotion":0,"relegation":2,"relegation_playoff":1},
+      {"name":"Portuguese Second Division","template":"league-18","promotion":2,"automatic_promotion":2,"promotion_playoff_vs_upper":1,"relegation":3}
+    ],"cup":{"name":"Portuguese National Cup","template":"cup-64"}},
+    {"country_id":"nld","tiers":[
+      {"name":"Dutch Premier Division","template":"league-18","promotion":0,"relegation":2,"relegation_playoff":1},
+      {"name":"Dutch First Division","template":"league-20","promotion":2,"automatic_promotion":2,"promotion_playoff_vs_upper":1,"relegation":0}
+    ],"cup":{"name":"Dutch National Cup","template":"cup-64"}},
+    {"country_id":"bra","tiers":[
+      {"name":"Brazilian National A","template":"league-20","promotion":0,"relegation":4},
+      {"name":"Brazilian National B","template":"league-20","promotion":4,"automatic_promotion":4,"relegation":4}
+    ],"cup":{"name":"Brazil National Cup","template":"cup-64"}},
+    {"country_id":"arg","tiers":[
+      {"name":"Argentine First Division","template":"league-30","promotion":0,"relegation":2},
+      {"name":"Argentine National Division","template":"league-20","promotion":2,"automatic_promotion":1,"playoff_promotion":1,"playoff_places":[2,8],"relegation":2}
+    ],"cup":{"name":"Argentina National Cup","template":"cup-64"}},
+    {"country_id":"nga","tiers":[
+      {"name":"Nigeria Premier Division","template":"league-20","promotion":0,"relegation":4},
+      {"name":"Nigeria National League","template":"league-20","promotion":4,"automatic_promotion":4,"relegation":4}
+    ],"cup":{"name":"Nigeria Federation Cup","template":"cup-64"},"registration":{"max_squad":30,"min_goalkeepers":3,"max_foreign":7,"homegrown_required":8}},
+    {"country_id":"gha","tiers":[
+      {"name":"Ghana Premier Division","template":"league-18","promotion":0,"relegation":3},
+      {"name":"Ghana Division One","template":"league-18","promotion":3,"automatic_promotion":3,"relegation":3}
+    ],"cup":{"name":"Ghana National Cup","template":"cup-32"}},
+    {"country_id":"zaf","tiers":[
+      {"name":"South Africa Premiership","template":"league-16","promotion":0,"relegation":1,"relegation_playoff":1},
+      {"name":"South Africa Championship","template":"league-16","promotion":1,"automatic_promotion":1,"promotion_playoff_vs_upper":1,"relegation":2}
+    ],"cup":{"name":"South Africa National Cup","template":"cup-32"}}
   ],
-  "registration_defaults": {"max_squad":25,"min_goalkeepers":2,"max_foreign":17,"homegrown_required":8,"transfer_windows":["summer","winter"]}
+  "name_pools": [
+    {"country_id":"eng","first_names":["Aaron","Callum","Dylan","Elliot","Finley","Harvey","Isaac","Jamie","Lewis","Mason","Nathan","Owen","Reece","Theo","William","Zachary"],"last_names":["Atwood","Bennett","Coleman","Dawson","Everett","Fletcher","Griffin","Hughes","Kendall","Lawson","Mercer","Palmer","Rowe","Sutton","Turner","Wells"]},
+    {"country_id":"esp","first_names":["Adrian","Alejo","Bruno","Dario","Enzo","Fabian","Hector","Iker","Javier","Leo","Marcos","Nico","Pablo","Ruben","Sergio","Unai"],"last_names":["Alarcon","Beltran","Cabrera","Dominguez","Escudero","Ferrer","Galan","Herrera","Ibarra","Lorenzo","Montero","Navarro","Ortega","Paredes","Soler","Vidal"]},
+    {"country_id":"deu","first_names":["Anton","Bastian","Emil","Felix","Henrik","Jonas","Kai","Leon","Lukas","Marius","Nico","Oskar","Robin","Timo","Vincent","Yannick"],"last_names":["Adler","Brandtner","Eberle","Falk","Hartwig","Keller","Lorenz","Meier","Neumann","Reuter","Schade","Vogel","Wendt","Winter","Ziegler","Zimmer"]},
+    {"country_id":"fra","first_names":["Adrien","Bastien","Cedric","Dorian","Etienne","Florian","Gael","Hugo","Julien","Luc","Mathis","Noe","Remi","Sacha","Theo","Yanis"],"last_names":["Armand","Benoit","Chevalier","Delorme","Fabre","Garnier","Hubert","Lacroix","Marchand","Morel","Perrin","Renard","Roux","Simon","Valette","Vasseur"]},
+    {"country_id":"ita","first_names":["Alessio","Andrea","Carlo","Daniele","Elia","Fabio","Giorgio","Lorenzo","Matteo","Nicolo","Paolo","Riccardo","Simone","Stefano","Tommaso","Vittorio"],"last_names":["Barone","Conti","De Luca","Ferrari","Gentile","Lombardi","Marini","Moretti","Orsini","Pellegrini","Rinaldi","Romano","Serra","Valenti","Vitale","Zanetti"]},
+    {"country_id":"prt","first_names":["Afonso","Andre","Diogo","Eduardo","Francisco","Goncalo","Joao","Luis","Martim","Miguel","Nuno","Pedro","Rafael","Rodrigo","Tiago","Vasco"],"last_names":["Abreu","Barros","Correia","Esteves","Faria","Gomes","Leal","Macedo","Neves","Pinto","Queiroz","Rocha","Santos","Tavares","Vieira","Xavier"]},
+    {"country_id":"nld","first_names":["Bram","Daan","Finn","Jesse","Joris","Koen","Lars","Luuk","Mats","Mees","Niels","Sem","Sven","Teun","Thijs","Wout"],"last_names":["Bakker","Dekker","De Wit","Hoek","Jansen","Koster","Mulder","Post","Smit","Van Dijker","Van Leeuwen","Vermeer","Visser","Vos","Willems","Zwart"]},
+    {"country_id":"bra","first_names":["Andre","Breno","Caio","Danilo","Everton","Fabricio","Gustavo","Henrique","Igor","Joao","Leandro","Mateus","Rafael","Renato","Thiago","Vinicius"],"last_names":["Almeida","Barbosa","Cardoso","Duarte","Freitas","Gomes","Lima","Macedo","Nogueira","Oliveira","Pereira","Ramos","Silveira","Teixeira","Vieira","Xavier"]},
+    {"country_id":"arg","first_names":["Agustin","Bruno","Cristian","Dario","Ezequiel","Facundo","Franco","Gaston","Ignacio","Joaquin","Lautaro","Matias","Nicolas","Ramiro","Tomas","Valentin"],"last_names":["Acosta","Benitez","Cabrera","Dominguez","Farias","Gimenez","Herrera","Ibarra","Ledesma","Molina","Navarro","Paz","Quiroga","Roldan","Suarez","Vega"]},
+    {"country_id":"nga","first_names":["Adewale","Chibueze","Daniel","Emeka","Femi","Ifeanyi","Kelechi","Moses","Obinna","Samuel","Seyi","Tobi","Uche","Victor","Yemi","Zubairu"],"last_names":["Adebayo","Anyanwu","Balogun","Eze","Ibrahim","Lawal","Nnadi","Obasi","Okafor","Okechukwu","Oladipo","Onyeka","Salisu","Udo","Yakubu","Yusuf"]},
+    {"country_id":"gha","first_names":["Abdul","Bright","Daniel","Emmanuel","Ernest","Francis","Ibrahim","Joseph","Kofi","Kwame","Michael","Nana","Prince","Samuel","Yaw","Yeboah"],"last_names":["Addo","Agyeman","Asante","Boateng","Danso","Frimpong","Koomson","Mensah","Nyarko","Ofori","Owusu","Quaye","Sarpong","Tetteh","Yeboah","Zakaria"]},
+    {"country_id":"zaf","first_names":["Aphiwe","Bongani","Gift","Kagiso","Lethabo","Mandla","Neo","Nkosi","Paseka","Sibusiso","Sipho","Thabo","Themba","Tshepo","Vuyo","Wandile"],"last_names":["Dlamini","Khumalo","Mabena","Mahlangu","Mokoena","Mthembu","Naidoo","Ndlovu","Ngcobo","Nkosi","Pillay","Radebe","Sithole","Tau","Zulu","Zwane"]}
+  ],
+  "registration_defaults": {"max_squad":25,"min_goalkeepers":2,"max_foreign":17,"homegrown_required":8,"transfer_windows":[{"start_month":6,"start_day":15,"end_month":9,"end_day":1},{"start_month":1,"start_day":1,"end_month":1,"end_day":31}]}
 }

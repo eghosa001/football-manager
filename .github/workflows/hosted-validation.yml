@@ -37,6 +37,33 @@ jobs:
       - name: Architecture convergence
         run: bash tools/test-headless.sh tests/architecture_convergence_test.gd 300
 
+      - name: Football database realism contract
+        run: bash tools/test-headless.sh tests/realism_database_test.gd 600
+
+      - name: Modern football rules contract
+        run: bash tools/test-headless.sh tests/modern_football_rules_test.gd 600
+
+      - name: Competition system depth contract
+        run: bash tools/test-headless.sh tests/competition_system_depth_test.gd 600
+
+      - name: Matchday rules contract
+        run: bash tools/test-headless.sh tests/matchday_rules_test.gd 600
+
+      - name: Transfer-window country contract
+        run: bash tools/test-headless.sh tests/transfer_window_country_test.gd 300
+
+      - name: World integrity contract
+        run: bash tools/test-headless.sh tests/world_integrity_audit_test.gd 600
+
+      - name: Persistent record-book contract
+        run: bash tools/test-headless.sh tests/record_book_depth_test.gd 300
+
+      - name: Player special ability contract
+        run: bash tools/test-headless.sh tests/special_ability_test.gd 300
+
+      - name: Future-player newgen contract
+        run: bash tools/test-headless.sh tests/newgen_system_test.gd 300
+
       - name: Finance insolvency regression
         run: bash tools/test-headless.sh tests/club_economy_service_test.gd 300
 

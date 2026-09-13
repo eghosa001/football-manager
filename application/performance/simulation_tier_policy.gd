@@ -12,11 +12,16 @@ func tier_for_fixture(world: Dictionary, home_club: Dictionary, away_club: Dicti
 	var competition := _competition(world, competition_id)
 	if not bool(competition.get("active", true)):
 		return INACTIVE_WORLD
-	var managed := _club(world, managed_club_id)
-	var managed_country := String(managed.get("country_id", ""))
-	var competition_country := String(competition.get("country_id", ""))
-	if managed_country != "" and (competition_country == managed_country or String(home_club.get("country_id", "")) == managed_country or String(away_club.get("country_id", "")) == managed_country):
+
+	# Keep every fixture in competitions containing the human club at detailed
+	# fidelity, so league rivals and continental opponents evolve consistently.
+	# Other divisions in the same country use the faster background model unless
+	# the user explicitly marks that country as detailed. This prevents realistic
+	# 24/30-club pyramids from multiplying expensive tactical simulations.
+	if managed_club_id != "" and managed_club_id in competition.get("club_ids", []):
 		return DETAILED_LEAGUE
+
+	var competition_country := String(competition.get("country_id", ""))
 	var detailed: Array = world.get("detailed_country_ids", [])
 	if competition_country != "" and competition_country in detailed:
 		return DETAILED_LEAGUE

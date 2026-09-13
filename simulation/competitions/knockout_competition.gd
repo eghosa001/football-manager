@@ -21,10 +21,19 @@ func advance_round(bracket: Dictionary, results: Array) -> Dictionary:
 		if away == "": winners.append(home); continue
 		if i >= results.size(): return {}
 		var result: Dictionary = results[i]
-		var winner := home if int(result.home_goals) > int(result.away_goals) else away
-		if int(result.home_goals) == int(result.away_goals):
-			winner = String(result.get("shootout_winner", ""))
-			if winner not in [home, away]: return {}
+		var winner := ""
+		var home_goals: int = int(result.get("home_goals", 0))
+		var away_goals: int = int(result.get("away_goals", 0))
+		if home_goals != away_goals:
+			winner = home if home_goals > away_goals else away
+		else:
+			var et_home: int = int(result.get("extra_time_home_goals", 0))
+			var et_away: int = int(result.get("extra_time_away_goals", 0))
+			if et_home != et_away:
+				winner = home if et_home > et_away else away
+			else:
+				winner = String(result.get("shootout_winner", ""))
+				if winner not in [home, away]: return {}
 		winners.append(winner)
 	if winners.size() == 1:
 		bracket.complete = true; bracket.winner = winners[0]; bracket.entrants = winners; bracket.matches = []

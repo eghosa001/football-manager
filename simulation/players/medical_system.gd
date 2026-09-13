@@ -11,6 +11,7 @@ const INJURIES := [
 ]
 
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
+const SpecialAbilityServiceClass = preload("res://simulation/players/special_ability_service.gd")
 
 func ensure_player(player: Dictionary) -> void:
 	player["medical"] = player.get("medical", {"current":{},"history":[],"rehab_progress":0.0,"match_fitness":100.0})
@@ -18,46 +19,47 @@ func ensure_player(player: Dictionary) -> void:
 func injury_risk(player: Dictionary, context: Dictionary = {}) -> Dictionary:
 	ensure_player(player)
 	var hidden: Dictionary = player.get("hidden_attributes", {})
-	var proneness := clampf(float(hidden.get("injury_proneness", 50)) / 50.0, 0.35, 2.0)
-	var fatigue := clampf(float(context.get("fatigue", player.get("fatigue", 20))) / 100.0, 0.0, 1.0)
-	var match_intensity := clampf(float(context.get("match_intensity", 0.6)), 0.0, 1.5)
-	var training_load := clampf(float(context.get("training_load", 0.5)), 0.0, 1.5)
-	var age := int(player.get("age", 25))
-	var age_factor := 1.0 + maxf(0.0, float(age - 28)) * 0.035
-	var surface := String(context.get("surface", "good"))
-	var surface_factor := 1.0
+	var proneness: float = clampf(float(hidden.get("injury_proneness", 50)) / 50.0, 0.35, 2.0)
+	var trait_multiplier: float = SpecialAbilityServiceClass.new().injury_risk_multiplier(player)
+	var fatigue: float = clampf(float(context.get("fatigue", player.get("fatigue", 20))) / 100.0, 0.0, 1.0)
+	var match_intensity: float = clampf(float(context.get("match_intensity", 0.6)), 0.0, 1.5)
+	var training_load: float = clampf(float(context.get("training_load", 0.5)), 0.0, 1.5)
+	var age: int = int(player.get("age", 25))
+	var age_factor: float = 1.0 + maxf(0.0, float(age - 28)) * 0.035
+	var surface: String = String(context.get("surface", "good"))
+	var surface_factor: float = 1.0
 	match surface:
 		"poor": surface_factor = 1.28
 		"wet": surface_factor = 1.12
 		"hard": surface_factor = 1.16
 		_: surface_factor = 1.0
-	var recurrence_factor := 1.0
-	var region := String(context.get("body_region", ""))
+	var recurrence_factor: float = 1.0
+	var region: String = String(context.get("body_region", ""))
 	for prior in player.medical.get("history", []):
 		if region != "" and String(prior.get("body_region", "")) != region:
 			continue
 		recurrence_factor += float(prior.get("recurrence", 0.08)) * 0.25
-	var base := float(context.get("base_risk", 0.004))
-	var exposure := 0.55 + fatigue * 0.65 + match_intensity * 0.45 + training_load * 0.35
-	var probability := clampf(base * proneness * age_factor * surface_factor * recurrence_factor * exposure, 0.001, 0.12)
-	return {"probability":probability,"proneness_factor":proneness,"fatigue_factor":fatigue,"intensity_factor":match_intensity,"training_factor":training_load,"age_factor":age_factor,"surface_factor":surface_factor,"recurrence_factor":recurrence_factor}
+	var base: float = float(context.get("base_risk", 0.004))
+	var exposure: float = 0.55 + fatigue * 0.65 + match_intensity * 0.45 + training_load * 0.35
+	var probability: float = clampf(base * proneness * trait_multiplier * age_factor * surface_factor * recurrence_factor * exposure, 0.001, 0.12)
+	return {"probability":probability,"proneness_factor":proneness,"trait_multiplier":trait_multiplier,"fatigue_factor":fatigue,"intensity_factor":match_intensity,"training_factor":training_load,"age_factor":age_factor,"surface_factor":surface_factor,"recurrence_factor":recurrence_factor}
 
 func maybe_suffer_injury(player: Dictionary, seed: int, cause: String = "match", context: Dictionary = {}) -> Dictionary:
-	var risk := injury_risk(player, context)
-	var key := _stable_key(String(player.get("id", "")) + cause + str(player.medical.get("history", []).size()) + "risk")
+	var risk: Dictionary = injury_risk(player, context)
+	var key: int = _stable_key(String(player.get("id", "")) + cause + str(player.medical.get("history", []).size()) + "risk")
 	if SeededRngClass.unit_for(seed, key) >= float(risk.probability):
 		return {"injured":false,"risk":risk}
-	var injury := suffer_injury(player, seed, cause)
+	var injury: Dictionary = suffer_injury(player, seed, cause)
 	injury["injured"] = true
 	injury["risk"] = risk
 	return injury
 
 func suffer_injury(player: Dictionary, seed: int, cause: String = "match") -> Dictionary:
 	ensure_player(player)
-	var key := _stable_key(String(player.get("id", "")) + cause + str(player.medical.history.size()))
+	var key: int = _stable_key(String(player.get("id", "")) + cause + str(player.medical.history.size()))
 	var template: Dictionary = INJURIES[int(SeededRngClass.value_for(seed, key) % INJURIES.size())]
-	var days := int(template.min_days) + int(SeededRngClass.value_for(seed, key + 1) % (int(template.max_days) - int(template.min_days) + 1))
-	var injury := {
+	var days: int = int(template.min_days) + int(SeededRngClass.value_for(seed, key + 1) % (int(template.max_days) - int(template.min_days) + 1))
+	var injury: Dictionary = {
 		"name":String(template.name),"cause":cause,"days_total":days,"days_remaining":days,"recurrence":float(template.recurrence),
 		"body_region":_body_region(String(template.name)),"severity":_severity(days),"rehab_stage":"acute"
 	}
@@ -74,10 +76,9 @@ func advance_day(player: Dictionary, physio_quality: int = 50, rehab_intensity: 
 	if current.is_empty():
 		player.medical.match_fitness = minf(100.0, float(player.medical.match_fitness) + 1.5)
 		return {"recovered": false, "available": true}
-	var effectiveness := medical_effectiveness(department, physio_quality)
-	var recovery_rate := 1.0 + effectiveness * 0.55
-	var recovered_days := maxf(0.5, recovery_rate * clampf(rehab_intensity, 0.25, 1.0))
-	# Sports science reduces recurrence on return; poor departments risk setbacks.
+	var effectiveness: float = medical_effectiveness(department, physio_quality)
+	var recovery_rate: float = 1.0 + effectiveness * 0.55
+	var recovered_days: float = maxf(0.5, recovery_rate * clampf(rehab_intensity, 0.25, 1.0))
 	current.days_remaining = maxf(0.0, float(current.days_remaining) - recovered_days)
 	player.injured_days = int(ceil(float(current.days_remaining)))
 	player.medical.rehab_progress = clampf(1.0 - float(current.days_remaining) / maxf(float(current.days_total), 1.0), 0.0, 1.0)
@@ -94,13 +95,11 @@ func availability(player: Dictionary, physio_quality: int = 50, department: Dict
 	var current: Dictionary = player.medical.current
 	if current.is_empty():
 		return {"available": true, "injury": "", "days_remaining": 0, "estimated_min_days": 0, "estimated_max_days": 0, "estimated_range": "", "match_fitness": float(player.medical.match_fitness), "rehab_stage": "available"}
-	var remaining := int(ceil(float(current.get("days_remaining", 0))))
-	# Doctor diagnoses, physio treats, sports scientist conditions. Better
-	# departments narrow the estimate around the hidden canonical duration.
-	var effectiveness := medical_effectiveness(department, physio_quality)
-	var uncertainty := clampf(0.42 - effectiveness * 0.34, 0.08, 0.42)
-	var min_days := maxi(1, int(floor(float(remaining) * (1.0 - uncertainty))))
-	var max_days := maxi(min_days + 1, int(ceil(float(remaining) * (1.0 + uncertainty))))
+	var remaining: int = int(ceil(float(current.get("days_remaining", 0))))
+	var effectiveness: float = medical_effectiveness(department, physio_quality)
+	var uncertainty: float = clampf(0.42 - effectiveness * 0.34, 0.08, 0.42)
+	var min_days: int = maxi(1, int(floor(float(remaining) * (1.0 - uncertainty))))
+	var max_days: int = maxi(min_days + 1, int(ceil(float(remaining) * (1.0 + uncertainty))))
 	return {
 		"available":false,"injury":String(current.get("name", "")),"days_remaining":int(round((min_days + max_days) / 2.0)),
 		"estimated_min_days":min_days,"estimated_max_days":max_days,"estimated_range":"%d–%d days" % [min_days,max_days],
@@ -109,39 +108,30 @@ func availability(player: Dictionary, physio_quality: int = 50, department: Dict
 	}
 
 func _severity(days: int) -> String:
-	if days <= 10:
-		return "minor"
-	if days <= 35:
-		return "moderate"
-	if days <= 90:
-		return "serious"
+	if days <= 10: return "minor"
+	if days <= 35: return "moderate"
+	if days <= 90: return "serious"
 	return "major"
 
 func _rehab_stage(progress: float) -> String:
-	if progress < 0.20:
-		return "acute"
-	if progress < 0.55:
-		return "rehabilitation"
-	if progress < 0.82:
-		return "conditioning"
+	if progress < 0.20: return "acute"
+	if progress < 0.55: return "rehabilitation"
+	if progress < 0.82: return "conditioning"
 	return "return_to_play"
 
 func _body_region(name: String) -> String:
-	if "hamstring" in name or "calf" in name or "groin" in name:
-		return "lower_limb"
-	if "ankle" in name or "knee" in name:
-		return "joint"
-	if "concussion" in name:
-		return "head"
+	if "hamstring" in name or "calf" in name or "groin" in name: return "lower_limb"
+	if "ankle" in name or "knee" in name: return "joint"
+	if "concussion" in name: return "head"
 	return "other"
 
 func medical_effectiveness(department: Dictionary, fallback_quality: int = 50) -> float:
 	if department.is_empty():
 		return clampf(float(fallback_quality) / 100.0, 0.0, 1.0)
-	var doctor := clampf(float(department.get("doctor", department.get("medical", fallback_quality))) / 100.0, 0.0, 1.0)
-	var physio := clampf(float(department.get("physio", department.get("medical", fallback_quality))) / 100.0, 0.0, 1.0)
-	var science := clampf(float(department.get("sports_science", department.get("sports_scientist", 50))) / 100.0, 0.0, 1.0)
-	var fitness_coach := clampf(float(department.get("fitness_coach", 50)) / 100.0, 0.0, 1.0)
+	var doctor: float = clampf(float(department.get("doctor", department.get("medical", fallback_quality))) / 100.0, 0.0, 1.0)
+	var physio: float = clampf(float(department.get("physio", department.get("medical", fallback_quality))) / 100.0, 0.0, 1.0)
+	var science: float = clampf(float(department.get("sports_science", department.get("sports_scientist", 50))) / 100.0, 0.0, 1.0)
+	var fitness_coach: float = clampf(float(department.get("fitness_coach", 50)) / 100.0, 0.0, 1.0)
 	return clampf(doctor * 0.32 + physio * 0.38 + science * 0.20 + fitness_coach * 0.10, 0.0, 1.0)
 
 func department_from_club(club: Dictionary) -> Dictionary:
@@ -149,7 +139,7 @@ func department_from_club(club: Dictionary) -> Dictionary:
 	return {"doctor": int(facilities.get("medical", 50)), "physio": int(facilities.get("medical", 50)), "sports_science": int(facilities.get("sports_science", 50)), "fitness_coach": int(facilities.get("training", 50))}
 
 func _stable_key(text: String) -> int:
-	var value := 53
+	var value: int = 53
 	for character in text.to_utf8_buffer():
 		value = posmod(value * 157 + int(character), 2_147_483_647)
 	return value

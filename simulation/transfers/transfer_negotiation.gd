@@ -2,6 +2,7 @@ class_name TransferNegotiation
 extends RefCounted
 
 const TransferMarketClass = preload("res://simulation/transfers/transfer_market.gd")
+const TransferWindowServiceClass = preload("res://simulation/transfers/transfer_window_service.gd")
 const NegotiationDepthClass = preload("res://simulation/transfers/negotiation_depth.gd")
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
 
@@ -9,22 +10,20 @@ func ensure_world(world: Dictionary) -> void:
 	world["transfer_offers"] = world.get("transfer_offers", [])
 	world["transfer_windows"] = world.get("transfer_windows", [{"start_month":6,"start_day":15,"end_month":9,"end_day":1},{"start_month":1,"start_day":1,"end_month":1,"end_day":31}])
 
-func is_window_open(world: Dictionary, date_string: String) -> bool:
+func is_window_open(world: Dictionary, date_string: String, country_id: String = "") -> bool:
 	ensure_world(world)
-	var parts := date_string.split("-")
-	if parts.size() != 3:
-		return false
-	var mmdd := int(parts[1]) * 100 + int(parts[2])
-	for window in world.transfer_windows:
-		var start := int(window.start_month) * 100 + int(window.start_day)
-		var finish := int(window.end_month) * 100 + int(window.end_day)
-		if mmdd >= start and mmdd <= finish:
-			return true
-	return false
+	return TransferWindowServiceClass.new().is_open(world,date_string,country_id)
+
+func is_window_open_for_club(world: Dictionary, club_id: String, date_string: String = "") -> bool:
+	ensure_world(world)
+	return TransferWindowServiceClass.new().is_open_for_club(world,club_id,date_string)
 
 func create_offer(world: Dictionary, player: Dictionary, buyer: Dictionary, fee: int, clauses: Dictionary = {}) -> Dictionary:
 	ensure_world(world)
 	var normalized := _normalized_clauses(fee, clauses)
+	var country_id := String(buyer.get("country_id",""))
+	var date := String(world.get("date",world.get("current_date","")))
+	var window_status := TransferWindowServiceClass.new().window_status(world,date,country_id)
 	var offer := {
 		"id":"offer-%s-%s-%d" % [String(player.id), String(buyer.id), world.transfer_offers.size()+1],
 		"player_id":String(player.id),
@@ -32,8 +31,10 @@ func create_offer(world: Dictionary, player: Dictionary, buyer: Dictionary, fee:
 		"seller_id":String(player.get("club_id", "")),
 		"fee":maxi(0, fee),
 		"clauses":normalized,
-		"status":"submitted",
-		"reason_codes":[]
+		"status":"submitted" if bool(window_status.get("open",false)) else "invalid",
+		"reason_codes":[] if bool(window_status.get("open",false)) else ["transfer_window_closed"],
+		"window_country_id":country_id,
+		"window_status":window_status
 	}
 	world.transfer_offers.append(offer)
 	return offer
@@ -41,20 +42,27 @@ func create_offer(world: Dictionary, player: Dictionary, buyer: Dictionary, fee:
 func evaluate_offer(world: Dictionary, offer: Dictionary, seed: int) -> String:
 	var player := _find_player(world.get("players", []), String(offer.player_id))
 	var seller := _find_club(world.get("clubs", []), String(offer.seller_id))
-	if player.is_empty() or (String(offer.seller_id) != "" and seller.is_empty()):
+	var buyer := _find_club(world.get("clubs", []), String(offer.buyer_id))
+	if player.is_empty() or buyer.is_empty() or (String(offer.seller_id) != "" and seller.is_empty()):
 		offer.status = "invalid"
-		offer.reason_codes = ["missing_player_or_seller"]
+		offer.reason_codes = ["missing_player_buyer_or_seller"]
+		return offer.status
+	var date := String(world.get("date",world.get("current_date","")))
+	var window_status := TransferWindowServiceClass.new().window_status(world,date,String(buyer.get("country_id","")))
+	offer["window_status"] = window_status
+	if not bool(window_status.get("open",false)):
+		offer.status = "invalid"
+		offer.reason_codes = ["transfer_window_closed"]
 		return offer.status
 	var market := TransferMarketClass.new()
 	var market_value := market.player_value(player, int(world.get("season_year", 2026)))
 	var depth := NegotiationDepthClass.new()
 	var structured := _normalized_clauses(int(offer.get("fee", 0)), offer.get("clauses", {}))
 	structured["fee"] = int(offer.get("fee", structured.get("fee", 0)))
-	# Keep the canonical market value in sync with the market engine used elsewhere.
 	var valuation_player := player.duplicate(true)
 	valuation_player["market_value"] = market_value
 	var competing := _competing_live_offers(world, String(player.id), String(offer.id))
-	var deadline := _deadline_day(world)
+	var deadline := bool(window_status.get("deadline_day",false))
 	var evaluation := depth.evaluate_structured(world, valuation_player, seller, structured, competing, seed, deadline)
 	var happiness := float(player.get("happiness", player.get("morale", 70)))
 	if happiness < 45.0:
@@ -80,48 +88,30 @@ func player_interest(player: Dictionary, buyer: Dictionary, agent: Dictionary = 
 
 func _normalized_clauses(fee: int, clauses: Dictionary) -> Dictionary:
 	var sell_on_raw := float(clauses.get("sell_on_pct", clauses.get("sell_on", clauses.get("sell_on_percentage", 0.0))))
-	if sell_on_raw > 1.0:
-		sell_on_raw /= 100.0
+	if sell_on_raw > 1.0: sell_on_raw /= 100.0
 	var sell_on_fraction := clampf(sell_on_raw, 0.0, 0.30)
-	var normalized := {
-		"fee":maxi(0, fee),
-		"instalments":clampi(int(clauses.get("instalments", 1)), 1, 5),
-		"sell_on_pct":sell_on_fraction,
-		"sell_on_percentage":int(round(sell_on_fraction * 100.0)),
-		"signing_bonus":maxi(0, int(clauses.get("signing_bonus", 0))),
-		"wages":maxi(0, int(clauses.get("wages", 0))),
-		"loan_fee":maxi(0, int(clauses.get("loan_fee", 0))),
-		"wage_contribution_pct":clampf(float(clauses.get("wage_contribution_pct", 0.0)), 0.0, 1.0),
-		"buy_option":maxi(0, int(clauses.get("buy_option", 0))),
-		"buy_obligation":bool(clauses.get("buy_obligation", false)),
-		"appearance_bonus":maxi(0, int(clauses.get("appearance_bonus", 0))),
-		"goal_bonus":maxi(0, int(clauses.get("goal_bonus", 0))),
-		"clean_sheet_bonus":maxi(0, int(clauses.get("clean_sheet_bonus", 0))),
-		"release_clause":maxi(0, int(clauses.get("release_clause", 0))),
-		"optional_extension_years":clampi(int(clauses.get("optional_extension_years", 0)), 0, 2),
+	return {
+		"fee":maxi(0, fee),"instalments":clampi(int(clauses.get("instalments", 1)), 1, 5),"sell_on_pct":sell_on_fraction,
+		"sell_on_percentage":int(round(sell_on_fraction * 100.0)),"signing_bonus":maxi(0, int(clauses.get("signing_bonus", 0))),
+		"wages":maxi(0, int(clauses.get("wages", 0))),"loan_fee":maxi(0, int(clauses.get("loan_fee", 0))),
+		"wage_contribution_pct":clampf(float(clauses.get("wage_contribution_pct", 0.0)), 0.0, 1.0),"buy_option":maxi(0, int(clauses.get("buy_option", 0))),
+		"buy_obligation":bool(clauses.get("buy_obligation", false)),"appearance_bonus":maxi(0, int(clauses.get("appearance_bonus", 0))),
+		"goal_bonus":maxi(0, int(clauses.get("goal_bonus", 0))),"clean_sheet_bonus":maxi(0, int(clauses.get("clean_sheet_bonus", 0))),
+		"release_clause":maxi(0, int(clauses.get("release_clause", 0))),"optional_extension_years":clampi(int(clauses.get("optional_extension_years", 0)), 0, 2),
 		"promotion_wage_rise_pct":clampf(float(clauses.get("promotion_wage_rise_pct", 0.0)), 0.0, 1.0),
-		"relegation_wage_drop_pct":clampf(float(clauses.get("relegation_wage_drop_pct", 0.0)), 0.0, 0.75),
-		"squad_status":String(clauses.get("squad_status", "rotation"))
+		"relegation_wage_drop_pct":clampf(float(clauses.get("relegation_wage_drop_pct", 0.0)), 0.0, 0.75),"squad_status":String(clauses.get("squad_status", "rotation"))
 	}
-	return normalized
 
 func _competing_live_offers(world: Dictionary, player_id: String, offer_id: String) -> int:
 	var count := 0
 	for other in world.get("transfer_offers", []):
 		if String(other.get("id", "")) == offer_id: continue
-		if String(other.get("player_id", "")) == player_id and String(other.get("status", "")) in ["submitted", "accepted"]:
-			count += 1
+		if String(other.get("player_id", "")) == player_id and String(other.get("status", "")) in ["submitted", "accepted"]: count += 1
 	return count
 
-func _deadline_day(world: Dictionary) -> bool:
-	var date_string := String(world.get("current_date", ""))
-	var parts := date_string.split("-")
-	if parts.size() != 3: return false
-	var mmdd := int(parts[1]) * 100 + int(parts[2])
-	for window in world.get("transfer_windows", []):
-		if mmdd == int(window.get("end_month", 0)) * 100 + int(window.get("end_day", 0)):
-			return true
-	return false
+func _deadline_day(world: Dictionary, country_id: String = "") -> bool:
+	var date_string := String(world.get("date",world.get("current_date", "")))
+	return bool(TransferWindowServiceClass.new().window_status(world,date_string,country_id).get("deadline_day",false))
 
 func _reason_codes(structured: Dictionary, evaluation: Dictionary, competing: int, deadline: bool, seller: Dictionary, happiness: float) -> Array:
 	var reasons: Array = []
@@ -149,6 +139,5 @@ func _find_club(clubs: Array, club_id: String) -> Dictionary:
 
 func _stable_key(text: String) -> int:
 	var value := 43
-	for character in text.to_utf8_buffer():
-		value = posmod(value * 149 + int(character), 2_147_483_647)
+	for character in text.to_utf8_buffer(): value = posmod(value * 149 + int(character), 2_147_483_647)
 	return value

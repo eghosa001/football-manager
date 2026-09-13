@@ -11,7 +11,9 @@ const ClubEconomyClass = preload("res://simulation/finance/club_economy.gd")
 const StaffContractsClass = preload("res://simulation/staff/staff_contracts.gd")
 const InternationalFootballClass = preload("res://simulation/competitions/international_football.gd")
 const KnockoutSeasonClass = preload("res://application/season/knockout_season.gd")
+const ContinentalCompetitionsClass = preload("res://application/season/continental_competitions.gd")
 const RegistrationServiceClass = preload("res://simulation/competitions/registration_service.gd")
+const ModernRulesCatalogClass = preload("res://simulation/competitions/modern_rules_catalog.gd")
 const ModIntegrationClass = preload("res://application/career/mod_integration.gd")
 const NamePoolServiceClass = preload("res://application/career/name_pool_service.gd")
 
@@ -30,16 +32,12 @@ func new_career(manager_name: String, club_id: String = "", world_seed: int = 12
 		if not bool(applied.ok): return {"error":ERR_INVALID_DATA,"message":String(applied.error)}
 		NamePoolServiceClass.new().apply_mod_names(candidate, mods)
 		ModIntegrationClass.new().finalize(candidate)
-	save_path = ""
-	seed = world_seed
-	world = candidate
+	save_path = ""; seed = world_seed; world = candidate
 	_initialize_world(true)
 	if world.get("clubs", []).is_empty(): return {}
 	managed_club_id = club_id if club_id != "" and _club_exists(club_id) else String(world.clubs[0].id)
 	manager = {"id":"human-manager","name":manager_name.strip_edges() if manager_name.strip_edges() != "" else "Manager","club_id":managed_club_id,"reputation":35,"created_year":int(world.get("season_year",2026)),"career_history":[]}
-	world["human_manager"] = manager.duplicate(true)
-	world["day_index"] = int(world.get("day_index",0))
-	history = []
+	world["human_manager"] = manager.duplicate(true); world["day_index"] = int(world.get("day_index",0)); history = []
 	return snapshot()
 
 func load_career(path: String) -> Error:
@@ -87,24 +85,24 @@ func _initialize_world(is_new: bool) -> void:
 	var lifecycle = PlayerLifecycleClass.new()
 	var attributes = preload("res://simulation/players/player_attributes.gd").new()
 	for player in world.get("players", []):
-		lifecycle.ensure_player_state(player, seed)
-		attributes.ensure(player, seed)
+		lifecycle.ensure_player_state(player, seed); attributes.ensure(player, seed)
 	TacticsManagerClass.new().ensure_world(world, seed)
 	ClubEconomyClass.new().ensure_world(world)
 	StaffContractsClass.new().ensure_world(world)
 	InternationalFootballClass.new().ensure_world(world)
 	_ensure_match_factor_fields()
+	ModernRulesCatalogClass.new().apply_to_world(world)
 	var season_year := int(world.get("season_year", 2026))
+	var continental = ContinentalCompetitionsClass.new()
+	continental.prepare(world)
+	ModernRulesCatalogClass.new().apply_to_world(world)
+	continental.initialize_formats(world, season_year, is_new)
 	if is_new:
-		preload("res://application/season/continental_competitions.gd").new().prepare(world)
 		KnockoutSeasonClass.new().initialize_all(world, season_year)
 	else:
 		for competition in world.get("competitions", []):
 			if String(competition.get("competition_type", "league")) == "knockout" and not competition.has("knockout_bracket"):
 				KnockoutSeasonClass.new().initialize_competition(world, competition, season_year)
-		# Refresh continental tiers + Club World Cup entrants on load so old
-		# saves gain the three-tier structure without a new career.
-		preload("res://application/season/continental_competitions.gd").new().prepare(world)
 	var registration = RegistrationServiceClass.new()
 	registration.ensure_world(world)
 	if is_new or world.get("registrations", {}).is_empty(): registration.auto_register_world(world, season_year)
@@ -113,21 +111,14 @@ func _initialize_world(is_new: bool) -> void:
 func _ensure_match_factor_fields() -> void:
 	var manager_ability := {}
 	for staff_member in world.get("staff", []):
-		if String(staff_member.get("role", "")) == "manager":
-			manager_ability[String(staff_member.get("club_id", ""))] = int(staff_member.get("ability", 50))
+		if String(staff_member.get("role", "")) == "manager": manager_ability[String(staff_member.get("club_id", ""))] = int(staff_member.get("ability", 50))
 	for club in world.get("clubs", []):
-		if not club.has("recent_results") or not club.get("recent_results") is Array:
-			club["recent_results"] = []
-		if not club.has("form_points"):
-			club["form_points"] = 7.5
-		if not club.has("manager_ability"):
-			club["manager_ability"] = int(manager_ability.get(String(club.get("id", "")), 50))
-		if not club.has("injured_count"):
-			club["injured_count"] = 0
-	if not world.has("default_country_id") or String(world.get("default_country_id", "")) == "":
-		world["default_country_id"] = "eng"
-	if not world.has("featured_country_ids") or not world.get("featured_country_ids") is Array:
-		world["featured_country_ids"] = ["eng", "esp"]
+		if not club.has("recent_results") or not club.get("recent_results") is Array: club["recent_results"] = []
+		if not club.has("form_points"): club["form_points"] = 7.5
+		if not club.has("manager_ability"): club["manager_ability"] = int(manager_ability.get(String(club.get("id", "")), 50))
+		if not club.has("injured_count"): club["injured_count"] = 0
+	if not world.has("default_country_id") or String(world.get("default_country_id", "")) == "": world["default_country_id"] = "eng"
+	if not world.has("featured_country_ids") or not world.get("featured_country_ids") is Array: world["featured_country_ids"] = ["eng", "esp"]
 
 func _club_exists(club_id: String) -> bool:
 	for club in world.get("clubs", []):
