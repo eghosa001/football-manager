@@ -82,9 +82,8 @@ func _prepare_europe(world: Dictionary, ranked_all: Array) -> void:
 	world["competitions"]=keep
 
 func _prepare_regional_competitions(world: Dictionary, region: String, ranked_all: Array) -> void:
-	# Tier-one formats are modeled on the current confederation structure where
-	# the loaded database has enough clubs. Lower tiers remain compact fictional
-	# continental cups so every region still provides secondary pathways.
+	# Tier-one formats are modeled on current confederation structures where the
+	# loaded database has enough clubs. Lower tiers stay compact fictional cups.
 	if region == "south_america" and ranked_all.size() >= 32:
 		_upsert_regional(world,region,"champions","Champions Cup",1,ranked_all.slice(0,32),"group_knockout",{
 			"teams":32,"groups":8,"group_size":4,"group_matches_per_club":6,"qualifiers_per_group":2,"first_knockout":"round_of_16",
@@ -95,6 +94,12 @@ func _prepare_regional_competitions(world: Dictionary, region: String, ranked_al
 			"teams":16,"groups":4,"group_size":4,"group_matches_per_club":6,"qualifiers_per_group":2,"first_knockout":"quarterfinal",
 			"two_leg_stages":["quarterfinal","semifinal","final"],"final_two_leg":true
 		},"16-club group stage: four groups of four, home and away; top two advance to two-legged quarter-finals, semi-finals and final.")
+	elif region == "asia" and ranked_all.size() >= 32:
+		_upsert_regional(world,region,"champions","Champions Cup",1,ranked_all.slice(0,32),"afc_elite_32",{
+			"teams":32,"regional_leagues":2,"teams_per_region":16,"league_matches_per_club":8,"home_matches":4,"away_matches":4,
+			"qualifiers_per_region":8,"first_knockout":"round_of_16","two_leg_stages":["round_of_16"],"final_two_leg":false,
+			"centralised_finals_from":"quarterfinal"
+		},"32-club league stage split into two 16-club regional leagues. Each club plays eight different opponents, four home and four away; the top eight per region reach a two-legged Round of 16, followed by centralised single-leg finals.")
 	elif region == "north_america" and ranked_all.size() >= 27:
 		_upsert_regional(world,region,"champions","Champions Cup",1,ranked_all.slice(0,27),"concacaf_27",{
 			"teams":27,"round_one_clubs":22,"round_of_16_byes":5,"two_leg_stages":["round_one","round_of_16","quarterfinal","semifinal"],"final_two_leg":false
