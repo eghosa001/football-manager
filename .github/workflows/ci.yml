@@ -47,6 +47,12 @@ jobs:
       - name: Staff UI action regression
         run: bash tools/test-headless.sh tests/staff_ui_action_test.gd 600
 
+      - name: Settings UI round-trip regression
+        run: bash tools/test-headless.sh tests/settings_ui_roundtrip_test.gd 600
+
+      - name: Database editor UI regression
+        run: bash tools/test-headless.sh tests/database_editor_ui_test.gd 600
+
       - name: Legacy core regression
         run: bash tools/test-headless.sh tests/test_runner.gd 240
 
