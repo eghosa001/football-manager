@@ -10,6 +10,7 @@ const PlayerPromisesClass = preload("res://simulation/players/player_promises.gd
 const PlayerHappinessClass = preload("res://simulation/players/player_happiness.gd")
 const DomainEventBusClass = preload("res://core/events/domain_event_bus.gd")
 const EventNewsServiceClass = preload("res://application/career/event_news_service.gd")
+const PlayerValuationClass = preload("res://simulation/transfers/player_valuation_service.gd")
 
 var _events = DomainEventBusClass.new()
 var _news = EventNewsServiceClass.new()
@@ -19,9 +20,6 @@ func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 	world["day_index"] = int(world.get("day_index", 0)) + 1
 	var day_index: int = int(world.day_index)
 
-	# Build the small indexes once per Continue. Several daily systems used to
-	# linearly search the full staff/player arrays again for every assignment or
-	# promise outcome, which becomes very visible on mobile-sized CPUs.
 	var staff_by_id: Dictionary = {}
 	var physios_by_club: Dictionary = {}
 	for member in world.get("staff", []):
@@ -34,6 +32,7 @@ func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 	var medical := _advance_medical(world, managed_club_id, physios_by_club)
 	var training := []
 	var happiness := {}
+	var valuations := {}
 	if day_index % 7 == 0:
 		training = _run_training_week(world, managed_club_id, seed + day_index * 101)
 	var scouting := _advance_scouting(world, managed_club_id, seed + day_index * 211, staff_by_id)
@@ -52,18 +51,17 @@ func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 				InboxServiceClass.new().add_message(world, "dressing_room", "Promise %s" % ("kept" if bool(outcome.fulfilled) else "broken"), "%s's promise has been %s." % [_player_name(player), "fulfilled" if bool(outcome.fulfilled) else "broken"])
 
 	if day_index % 7 == 0:
-		# One player grouping pass for the entire world instead of rebuilding each
-		# club room with a fresh full-world player scan.
 		DressingRoomClass.new().rebuild_all(world)
 		happiness = PlayerHappinessClass.new().update_week(world)
+		valuations = PlayerValuationClass.new().refresh_world(world)
 		var managed_concerns := 0
 		for player in world.get("players", []):
 			if String(player.get("club_id", "")) == managed_club_id and float(player.get("happiness", 65.0)) < 40.0:
 				managed_concerns += 1
 		if managed_concerns > 0:
-			InboxServiceClass.new().add_message(world, "dressing_room", "Player happiness concerns", "%d first-team players have significant happiness concerns. Review Dynamics for the causes." % managed_concerns)
+			InboxServiceClass.new().add_message(world, "dressing_room", "Player happiness concerns", "%d first-team players have significant happiness concerns. Review the squad and staff responsibilities for the causes." % managed_concerns)
 	var news_result := _news.consume(world)
-	return {"day_index":day_index,"medical":medical,"training":training,"scouting":scouting,"promises":promises,"happiness":happiness,"news":news_result}
+	return {"day_index":day_index,"medical":medical,"training":training,"scouting":scouting,"promises":promises,"happiness":happiness,"valuations":valuations,"news":news_result}
 
 func _advance_medical(world: Dictionary, managed_club_id: String, physios: Dictionary) -> Array:
 	var medical_system = MedicalSystemClass.new()
