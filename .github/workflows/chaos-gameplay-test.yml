@@ -93,6 +93,19 @@ jobs:
           godot --headless --path . --export-debug "Android" build/android/FootballDynasty-chaos.apk
           test -s build/android/FootballDynasty-chaos.apk
 
+      - name: Enable KVM acceleration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -e /dev/kvm ]; then
+            echo 'GitHub runner does not expose /dev/kvm; refusing the unusably slow software-emulator path.'
+            exit 1
+          fi
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
+          ls -l /dev/kvm
+
       - name: Run destructive gameplay assault
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
@@ -105,6 +118,8 @@ jobs:
           heap-size: 512M
           disk-size: 6G
           disable-animations: true
+          disable-linux-hw-accel: false
+          emulator-boot-timeout: 600
           emulator-options: -no-snapshot -no-window -gpu swiftshader -noaudio -no-boot-anim -camera-back none -no-metrics
           script: python tools/chaos_gameplay_tester.py --apk build/android/FootballDynasty-chaos.apk --package ${PACKAGE_NAME} --out build/chaos-gameplay --steps ${{ github.event.inputs.steps || '750' }} --seed ${{ github.event.inputs.seed || '20260913' }} --checkpoint-every 25
 
