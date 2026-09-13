@@ -2,6 +2,7 @@ extends Node
 
 const TrainingDepth = preload("res://simulation/players/training_depth.gd")
 const TacticsManager = preload("res://simulation/tactics/tactics_manager.gd")
+const CareerCommandService = preload("res://application/career/career_command_service.gd")
 
 var _next_scan := 0
 
@@ -26,7 +27,7 @@ func _scan_node(node: Node) -> void:
 		_scan_node(child)
 
 func _wire(tabs: TabContainer) -> void:
-	if tabs.has_meta("individual_training_added"):
+	if tabs.has_meta("training_controls_added"):
 		return
 	var training := _named_tab(tabs, "Training")
 	if training == null:
@@ -37,10 +38,12 @@ func _wire(tabs: TabContainer) -> void:
 	var box := _first_vbox(training)
 	if box == null:
 		return
-	tabs.set_meta("individual_training_added", true)
+	tabs.set_meta("training_controls_added", true)
 	_add_controls(box, session)
 
 func _add_controls(box: VBoxContainer, session) -> void:
+	_add_team_intensity_controls(box, session)
+
 	var depth = TrainingDepth.new()
 	var squad: Array = []
 	for player in session.world.get("players", []):
@@ -49,6 +52,7 @@ func _add_controls(box: VBoxContainer, session) -> void:
 			squad.append(player)
 	if squad.is_empty():
 		return
+
 	var heading := Label.new()
 	heading.text = tr("Individual training")
 	heading.add_theme_font_size_override("font_size", 20)
@@ -128,6 +132,63 @@ func _add_controls(box: VBoxContainer, session) -> void:
 	)
 	box.add_child(apply)
 
+func _add_team_intensity_controls(box: VBoxContainer, session) -> void:
+	var club := _club(session.world.get("clubs", []), String(session.managed_club_id))
+	if club.is_empty():
+		return
+	var heading := Label.new()
+	heading.text = tr("Team training intensity")
+	heading.add_theme_font_size_override("font_size", 20)
+	box.add_child(heading)
+	var help := Label.new()
+	help.text = tr("Adjust first-team workload. Higher intensity can accelerate development but increases fatigue and injury risk.")
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(help)
+
+	var slider := HSlider.new()
+	slider.name = "TeamTrainingIntensity"
+	slider.min_value = 0.15
+	slider.max_value = 1.0
+	slider.step = 0.05
+	slider.value = float(club.get("training_intensity", 0.65))
+	box.add_child(_labeled(tr("Team intensity"), slider))
+	var status := Label.new()
+	status.name = "TeamTrainingIntensityStatus"
+	status.text = tr("Current team intensity: %.0f%%") % (slider.value * 100.0)
+	box.add_child(status)
+	slider.value_changed.connect(func(value: float):
+		status.text = tr("Selected team intensity: %.0f%%") % (value * 100.0)
+	)
+	var apply := Button.new()
+	apply.name = "ApplyTeamTrainingIntensity"
+	apply.text = tr("Apply team intensity")
+	apply.pressed.connect(func():
+		var old_text := "%.0f%%" % (float(club.get("training_intensity", 0.65)) * 100.0)
+		var sessions: Array = club.get("training_schedule", ["recovery","technical","tactical","physical","set_piece","match_preparation","rest"]).duplicate()
+		var err: Error = CareerCommandService.new().set_training(session.world, String(session.managed_club_id), sessions, float(slider.value))
+		if err == OK:
+			status.text = tr("Team intensity applied: %.0f%%") % (slider.value * 100.0)
+			_update_exact_label(box, old_text, "%.0f%%" % (slider.value * 100.0))
+		else:
+			status.text = tr("Unable to apply team intensity (%d)") % int(err)
+	)
+	box.add_child(apply)
+
+func _update_exact_label(node: Node, old_text: String, new_text: String) -> bool:
+	if node is Label and String((node as Label).text) == old_text:
+		(node as Label).text = new_text
+		return true
+	for child in node.get_children():
+		if _update_exact_label(child, old_text, new_text):
+			return true
+	return false
+
+func _club(clubs: Array, club_id: String) -> Dictionary:
+	for club in clubs:
+		if String(club.get("id", "")) == club_id:
+			return club
+	return {}
+
 func _named_tab(tabs: TabContainer, name: String) -> Control:
 	for child in tabs.get_children():
 		if String(child.name) == name:
@@ -162,8 +223,7 @@ func _name(player: Dictionary) -> String:
 func _career_session(node: Node):
 	var current: Node = node
 	while current != null:
-		var script = current.get_script()
-		if script != null and String(script.resource_path).ends_with("game/career/career_app.gd"):
+		if current.has_method("_show_career") and current.has_method("_advance_day"):
 			return current.get("session")
 		current = current.get_parent()
 	return null
