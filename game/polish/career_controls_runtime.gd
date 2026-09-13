@@ -82,8 +82,14 @@ func _add_promise_controls(box: VBoxContainer, session) -> void:
 	for player in session.world.get("players",[]):
 		if String(player.get("club_id",""))==session.managed_club_id and not bool(player.get("retired",false)): squad.append(player)
 	if squad.is_empty(): return
-	var player_choice:=OptionButton.new(); for p in squad: player_choice.add_item(_name(p)); box.add_child(player_choice)
-	var type_choice:=OptionButton.new(); for value in ["playing_time","morale","training"]: type_choice.add_item(String(value).replace("_"," ").capitalize()); box.add_child(type_choice)
+	var player_choice:=OptionButton.new()
+	for p in squad:
+		player_choice.add_item(_name(p))
+	box.add_child(player_choice)
+	var type_choice:=OptionButton.new()
+	for value in ["playing_time","morale","training"]:
+		type_choice.add_item(String(value).replace("_"," ").capitalize())
+	box.add_child(type_choice)
 	var target:=SpinBox.new(); target.min_value=1; target.max_value=100; target.value=10; box.add_child(_labeled("Target",target))
 	var days:=SpinBox.new(); days.min_value=7; days.max_value=180; days.value=30; box.add_child(_labeled("Deadline days",days))
 	var button:=Button.new(); button.text=tr("Make promise")
@@ -115,6 +121,6 @@ func _career_session(node:Node):
 	var current:Node=node
 	while current!=null:
 		var script=current.get_script()
-		if script!=null and String(script.resource_path).ends_with("game/career/career_app.gd"): return current.get("session")
+		if current.has_method("_show_career") and current.has_method("_advance_day"): return current.get("session")
 		current=current.get_parent()
 	return null
