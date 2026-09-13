@@ -25,7 +25,6 @@ func generated_name(data: Dictionary, country_id: String, seed: int, key: int, u
 	var last_names: Array = pool.get("last_names", FALLBACK_LAST)
 	if first_names.is_empty(): first_names = FALLBACK_FIRST
 	if last_names.is_empty(): last_names = FALLBACK_LAST
-
 	for attempt in range(16):
 		var first: String = String(first_names[_range(seed, key + attempt * 3, 0, first_names.size() - 1)])
 		var last: String = String(last_names[_range(seed, key + attempt * 3 + 1, 0, last_names.size() - 1)])
@@ -33,7 +32,6 @@ func generated_name(data: Dictionary, country_id: String, seed: int, key: int, u
 		if not used.has(full):
 			used[full] = true
 			return {"first_name":first,"last_name":last,"full_name":full}
-
 	for attempt in range(last_names.size() * 2):
 		var first: String = String(first_names[_range(seed, key + 100 + attempt * 3, 0, first_names.size() - 1)])
 		var left: String = String(last_names[_range(seed, key + 101 + attempt * 3, 0, last_names.size() - 1)])
@@ -45,7 +43,6 @@ func generated_name(data: Dictionary, country_id: String, seed: int, key: int, u
 		if not used.has(full):
 			used[full] = true
 			return {"first_name":first,"last_name":last,"full_name":full}
-
 	var first: String = String(first_names[_range(seed, key, 0, first_names.size() - 1)])
 	var base_last: String = String(last_names[_range(seed, key + 1, 0, last_names.size() - 1)])
 	var start_token: int = posmod(_key(unique_key), 26 * 26 * 26)
@@ -57,8 +54,6 @@ func generated_name(data: Dictionary, country_id: String, seed: int, key: int, u
 		if not used.has(full):
 			used[full] = true
 			return {"first_name":first,"last_name":last,"full_name":full}
-	# A practical launch database cannot exhaust this path, but keep a readable
-	# final fallback for extreme mod databases.
 	var last: String = "%s-X" % base_last
 	var full: String = "%s %s" % [first, last]
 	return {"first_name":first,"last_name":last,"full_name":full}
@@ -74,10 +69,32 @@ func nationality(home_country: String, loaded_country_ids: Array, club_reputatio
 	return String(options[_range(seed, key + 1, 0, options.size() - 1)])
 
 func ability_band(club_reputation: int) -> Vector2i:
-	return Vector2i(clampi(club_reputation - 24, 28, 78), clampi(club_reputation - 5, 45, 93))
+	# Reputation is on a 1-100 scale. Elite clubs need genuine world-class
+	# ceilings while lower divisions still retain overlap for good/bad squads.
+	var low := clampi(club_reputation - 27, 24, 76)
+	var high := clampi(club_reputation + 5, 48, 96)
+	return Vector2i(low, maxi(low + 8, high))
+
+func squad_ability(club_reputation: int, slot: int, squad_size: int, seed: int, key: int) -> int:
+	var band := ability_band(club_reputation)
+	var midpoint := int(round(lerpf(float(band.x), float(band.y), 0.55)))
+	var core_size := mini(15, maxi(11, squad_size))
+	var value: int
+	if slot < core_size:
+		# First-team group: mostly starters with a small chance of genuine stars.
+		var roll := float(_range(seed, key + 71, 0, 1000)) / 1000.0
+		var shaped := pow(roll, 0.72)
+		value = int(round(lerpf(float(midpoint), float(band.y), shaped)))
+		if slot < 3:
+			value = maxi(value, band.y - _range(seed, key + 72, 0, 4))
+	else:
+		# Depth/prospects: overlap the starters but sit lower on average.
+		var roll := float(_range(seed, key + 73, 0, 1000)) / 1000.0
+		value = int(round(lerpf(float(band.x), float(midpoint + 3), pow(roll, 0.95))))
+	return clampi(value + _range(seed, key + 74, -2, 2), 20, 98)
 
 func staff_ability_band(club_reputation: int) -> Vector2i:
-	return Vector2i(clampi(club_reputation - 24, 28, 72), clampi(club_reputation - 4, 45, 94))
+	return Vector2i(clampi(club_reputation - 25, 26, 75), clampi(club_reputation + 3, 46, 96))
 
 func role_profile(position: String, key: int) -> String:
 	var profiles := {
@@ -90,9 +107,18 @@ func role_profile(position: String, key: int) -> String:
 	return String(values[posmod(key, values.size())])
 
 func wage_band(club_reputation: int) -> Vector2i:
-	var low := maxi(350, int(pow(float(maxi(30, club_reputation - 20)), 2.05) * 1.3))
-	var high := maxi(low + 500, int(pow(float(maxi(35, club_reputation)), 2.12) * 2.1))
-	return Vector2i(low, high)
+	var rep := clampf(float(club_reputation) / 100.0, 0.20, 1.0)
+	var high := int(4000.0 + pow(rep, 4.0) * 360000.0)
+	var low := maxi(350, int(float(high) * (0.16 if club_reputation >= 75 else 0.10)))
+	return Vector2i(low, maxi(low + 500, high))
+
+func player_wage(club_reputation: int, ability: int, seed: int, key: int) -> int:
+	var band := wage_band(club_reputation)
+	var ability_factor := clampf((float(ability) - 30.0) / 65.0, 0.04, 1.0)
+	var shaped := pow(ability_factor, 2.15)
+	var target := lerpf(float(band.x), float(band.y), shaped)
+	var variance := float(_range(seed, key + 81, 88, 112)) / 100.0
+	return maxi(350, int(round(target * variance / 50.0)) * 50)
 
 func range_value(seed: int, key: int, lo: int, hi: int) -> int:
 	return _range(seed, key, lo, hi)
