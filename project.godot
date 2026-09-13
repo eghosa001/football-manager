@@ -41,6 +41,7 @@ BackgroundSaveRuntime="*res://game/polish/background_save_runtime.gd"
 AudioSettingsRuntime="*res://game/polish/audio_settings_runtime.gd"
 PlaytestDepthRuntime="*res://game/polish/playtest_depth_runtime.gd"
 PlaytestUIFixesRuntime="*res://game/polish/playtest_ui_fixes_runtime.gd"
+DynamicsResponsivenessRuntime="*res://game/polish/dynamics_responsiveness_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
