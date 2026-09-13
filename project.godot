@@ -36,6 +36,7 @@ UI2IntegrationRuntime="*res://game/polish/ui2_integration_runtime_compat.gd"
 UI2RemainingRuntime="*res://game/polish/ui2_remaining_runtime_compat.gd"
 UI2LayoutFixRuntime="*res://game/polish/ui2_layout_fix_runtime.gd"
 UI2MenuRuntime="*res://game/polish/ui2_menu_runtime.gd"
+PlaytestControlsRuntime="*res://game/polish/playtest_controls_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
