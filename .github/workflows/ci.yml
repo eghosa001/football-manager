@@ -35,6 +35,9 @@ jobs:
       - name: Import project
         run: bash tools/test-headless.sh import 600
 
+      - name: Managed matchday compile regression
+        run: bash tools/test-headless.sh tests/managed_matchday_compile_test.gd 120
+
       - name: Architecture regression
         run: bash tools/test-headless.sh tests/architecture_convergence_test.gd 600
 
