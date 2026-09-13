@@ -37,6 +37,8 @@ UI2RemainingRuntime="*res://game/polish/ui2_remaining_runtime_compat.gd"
 UI2LayoutFixRuntime="*res://game/polish/ui2_layout_fix_runtime.gd"
 UI2MenuRuntime="*res://game/polish/ui2_menu_runtime.gd"
 PlaytestControlsRuntime="*res://game/polish/playtest_controls_runtime.gd"
+BackgroundSaveRuntime="*res://game/polish/background_save_runtime.gd"
+AudioSettingsRuntime="*res://game/polish/audio_settings_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
