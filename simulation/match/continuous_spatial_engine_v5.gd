@@ -4,11 +4,11 @@ extends "res://simulation/match/continuous_spatial_engine_v4.gd"
 const MotionClass = preload("res://simulation/match/player_motion.gd")
 const SpatialHashClass = preload("res://simulation/match/spatial_hash.gd")
 
-# Physics remains bounded for mobile. The engine advances authoritative motion at
-# 20 Hz; expensive perception/tactical work is decimated below that frequency.
-const AUTHORITATIVE_HZ := 20.0
-const PERCEPTION_REFRESH_TICKS := 4 # 5 Hz
-const STATE_REFRESH_TICKS := 5 # 4 Hz
+# Keep the established 10 Hz authoritative loop for mobile safety while adding
+# richer motion. Expensive perception/context work runs slower; once profiling
+# is green this layer can be raised independently without changing its API.
+const PERCEPTION_REFRESH_TICKS := 2 # 5 Hz at the current authoritative loop
+const STATE_REFRESH_TICKS := 3 # ~3.3 Hz
 const PERCEPTION_RANGE := 32.0
 
 var _motion_states: Dictionary = {}
@@ -23,15 +23,14 @@ func reset_runtime_state() -> void:
 	_grid.clear()
 
 func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionary, profile: Dictionary, loads: Dictionary, marking: Dictionary, in_possession: bool, dt: float, tick: int) -> void:
-	# Let v4 compute tactical intent/spacing, but treat that result as a steering
-	# target rather than teleporting directly to it. This gives acceleration,
-	# braking and turn-rate limits without rewriting tactical decisions.
 	var before: Dictionary = {}
 	for player in lineup:
 		var id := String(player.get("id", ""))
 		if id != "" and own.has(id):
 			before[id] = (own[id] as Dictionary).duplicate(true)
 
+	# v4 computes tactical intent. Its proposed coordinate becomes a steering
+	# target rather than the final coordinate.
 	super._move_side(lineup, own, opp, ball, profile, loads, marking, in_possession, dt, tick)
 	_grid.clear()
 	for id in own.keys(): _grid.insert(String(id), own[id], "own")
@@ -53,20 +52,20 @@ func _move_side(lineup: Array, own: Dictionary, opp: Dictionary, ball: Dictionar
 			state["position"] = Vector2(float(previous.get("x",0.0)),float(previous.get("y",0.0)))
 
 		if tick % PERCEPTION_REFRESH_TICKS == 0 or not _perception_cache.has(id):
-			_perception_cache[id] = MotionClass.can_perceive(state, ball_v, PERCEPTION_RANGE, lerpf(105.0,155.0,_quality(player,["vision","anticipation","concentration"])))
+			var fov := lerpf(105.0,155.0,_quality(player,["vision","anticipation","concentration"]))
+			_perception_cache[id] = MotionClass.can_perceive(state, ball_v, PERCEPTION_RANGE, fov)
 		var sees_ball := bool(_perception_cache.get(id, true))
 		var target := Vector2(float(proposed.get("x",0.0)),float(proposed.get("y",0.0)))
-		if not in_possession and not sees_ball and Vector2(float(previous.x),float(previous.y)).distance_to(ball_v) > 12.0:
-			# A player who cannot currently perceive the ball keeps tactical shape
-			# instead of reacting omnisciently to every movement behind them.
+		var previous_v := Vector2(float(previous.get("x",0.0)),float(previous.get("y",0.0)))
+		if not in_possession and not sees_ball and previous_v.distance_to(ball_v) > 12.0:
 			var anchor: Dictionary = _role_anchor(player, i, profile)
 			target = target.lerp(Vector2(float(anchor.x),float(anchor.y)),0.48)
 
 		var athleticism := _quality(player,["pace","acceleration","agility"])
 		var max_speed := lerpf(5.8,9.1,athleticism)
-		var accel := lerpf(3.8,7.2,_quality(player,["acceleration","agility","balance"]-[]))
-		var decel := lerpf(5.0,8.6,_quality(player,["agility","balance","strength"]-[]))
-		var turn_rate := lerpf(3.1,6.4,_quality(player,["agility","balance","technique"]-[]))
+		var accel := lerpf(3.8,7.2,_quality(player,["acceleration","agility","balance"]))
+		var decel := lerpf(5.0,8.6,_quality(player,["agility","balance","strength"]))
+		var turn_rate := lerpf(3.1,6.4,_quality(player,["agility","balance","technique"]))
 		MotionClass.step(state,target,dt,max_speed,accel,decel,turn_rate)
 		var p: Vector2 = state.position
 		own[id] = SpatialStateClass.clamp_position({"x":p.x,"y":p.y})
