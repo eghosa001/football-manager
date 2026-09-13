@@ -43,6 +43,7 @@ PlaytestDepthRuntime="*res://game/polish/playtest_depth_runtime.gd"
 PlaytestUIFixesRuntime="*res://game/polish/playtest_ui_fixes_runtime.gd"
 DynamicsResponsivenessRuntime="*res://game/polish/dynamics_responsiveness_runtime.gd"
 CoreManagementRuntime="*res://game/polish/core_management_runtime.gd"
+CoreStaffRecruitmentRuntime="*res://game/polish/core_staff_recruitment_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
