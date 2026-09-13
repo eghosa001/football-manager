@@ -16,6 +16,7 @@ func create(session, manager_name: String, club_id: String, selected_country_ids
 		return {"error": ERR_DOES_NOT_EXIST, "message": "Selected club is not in the active leagues."}
 	session.set("save_path", "")
 	session.set("seed", seed)
+	world["detailed_match_model"] = "persistent_action_v2"
 	session.set("world", world)
 	session.call("_initialize_world", true)
 	session.set("managed_club_id", club_id)
