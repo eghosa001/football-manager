@@ -42,6 +42,9 @@ func _focus_new_career(app: Node) -> void:
 	var preview = app.get("_wizard_preview")
 	if typeof(preview) != TYPE_DICTIONARY or preview.is_empty():
 		return
+	for check in _checkboxes(app):
+		if "Expanded world" in check.text:
+			check.visible = false
 	var create_button := _button_by_text(app, "Create Career")
 	if create_button == null:
 		return
@@ -139,6 +142,133 @@ func _focus_career_tabs(app: Node) -> void:
 			var title: String = tabs.get_tab_title(i)
 			tabs.set_tab_hidden(i, title not in keep)
 		_add_staff_responsibilities(tabs, session)
+		_add_match_substitution_plan(tabs, session)
+
+func _add_match_substitution_plan(tabs: TabContainer, session) -> void:
+	var index := _tab_index(tabs, "Tactics")
+	if index < 0:
+		return
+	var page := tabs.get_tab_control(index)
+	if page == null or page.has_meta("core_match_substitution_plan"):
+		return
+	var box := _first_vbox(page)
+	if box == null:
+		return
+	var club := _club(session.world, String(session.managed_club_id))
+	if club.is_empty():
+		return
+	var squad: Array = []
+	for player in session.world.get("players", []):
+		if String(player.get("club_id", "")) == String(session.managed_club_id) and not bool(player.get("retired", false)) and int(player.get("injured_days", 0)) <= 0:
+			squad.append(player)
+	var tactic: Dictionary = club.get("tactic", TacticsManager.new().create_tactic("4-3-3"))
+	var starters: Array = TacticsManager.new().select_lineup(squad, String(session.managed_club_id), tactic)
+	if starters.size() < 11:
+		return
+	var starter_ids := {}
+	for player in starters:
+		starter_ids[String(player.get("id", ""))] = true
+	var bench: Array = []
+	for player in squad:
+		if not starter_ids.has(String(player.get("id", ""))):
+			bench.append(player)
+	bench.sort_custom(func(a: Dictionary, b: Dictionary): return int(a.get("current_ability", 0)) > int(b.get("current_ability", 0)))
+	if bench.is_empty():
+		return
+	page.set_meta("core_match_substitution_plan", true)
+	var divider := HSeparator.new()
+	box.add_child(divider)
+	var heading := Label.new()
+	heading.text = "Matchday substitutions"
+	heading.add_theme_font_size_override("font_size", 18)
+	box.add_child(heading)
+	var help := Label.new()
+	help.text = "Plan up to five changes for the next match. Each enabled change is executed at its selected minute, replacing the player in the active XI so the substitute affects the rest of the simulation."
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(help)
+	var existing: Array = club.get("match_substitutions", [])
+	var enabled_controls: Array = []
+	var minute_controls: Array = []
+	var off_controls: Array = []
+	var on_controls: Array = []
+	for row_index in range(5):
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		box.add_child(row)
+		var enabled := CheckBox.new()
+		enabled.text = "Sub %d" % (row_index + 1)
+		enabled.custom_minimum_size.x = 80
+		row.add_child(enabled)
+		var minute := SpinBox.new()
+		minute.min_value = 1
+		minute.max_value = 89
+		minute.step = 1
+		minute.value = [55,62,70,78,84][row_index]
+		minute.custom_minimum_size.x = 90
+		row.add_child(minute)
+		var off := OptionButton.new()
+		off.custom_minimum_size.x = 210
+		for player in starters:
+			off.add_item("%s — %s" % [_player_name(player), String(player.get("position", ""))])
+			off.set_item_metadata(off.item_count - 1, String(player.get("id", "")))
+		row.add_child(off)
+		var arrow := Label.new()
+		arrow.text = "→"
+		row.add_child(arrow)
+		var on := OptionButton.new()
+		on.custom_minimum_size.x = 210
+		for player in bench:
+			on.add_item("%s — %s" % [_player_name(player), String(player.get("position", ""))])
+			on.set_item_metadata(on.item_count - 1, String(player.get("id", "")))
+		row.add_child(on)
+		if row_index < existing.size() and existing[row_index] is Dictionary:
+			var saved: Dictionary = existing[row_index]
+			enabled.button_pressed = true
+			minute.value = clampi(int(saved.get("minute", minute.value)), 1, 89)
+			_select_metadata(off, String(saved.get("player_out", "")))
+			_select_metadata(on, String(saved.get("player_in", "")))
+		enabled_controls.append(enabled)
+		minute_controls.append(minute)
+		off_controls.append(off)
+		on_controls.append(on)
+	var save_plan := func():
+		var plan: Array = []
+		for i in range(5):
+			var enabled: CheckBox = enabled_controls[i]
+			if not enabled.button_pressed:
+				continue
+			var off: OptionButton = off_controls[i]
+			var on: OptionButton = on_controls[i]
+			if off.item_count == 0 or on.item_count == 0:
+				continue
+			plan.append({
+				"minute": int((minute_controls[i] as SpinBox).value),
+				"player_out": String(off.get_item_metadata(off.selected)),
+				"player_in": String(on.get_item_metadata(on.selected)),
+			})
+		club["match_substitutions"] = plan
+	for control in enabled_controls:
+		(control as CheckBox).toggled.connect(func(_value): save_plan.call())
+	for control in minute_controls:
+		(control as SpinBox).value_changed.connect(func(_value): save_plan.call())
+	for control in off_controls:
+		(control as OptionButton).item_selected.connect(func(_value): save_plan.call())
+	for control in on_controls:
+		(control as OptionButton).item_selected.connect(func(_value): save_plan.call())
+	var clear := Button.new()
+	clear.text = "Clear match plan"
+	clear.pressed.connect(func():
+		club["match_substitutions"] = []
+		for control in enabled_controls:
+			(control as CheckBox).button_pressed = false
+	)
+	box.add_child(clear)
+
+func _select_metadata(option: OptionButton, wanted: String) -> void:
+	for i in range(option.item_count):
+		if String(option.get_item_metadata(i)) == wanted:
+			option.select(i)
+			return
 
 func _add_staff_responsibilities(tabs: TabContainer, session) -> void:
 	var index := _tab_index(tabs, "Staff")
@@ -230,6 +360,11 @@ func _buttons(root: Node) -> Array:
 	_collect_type(root, Button, result)
 	return result
 
+func _checkboxes(root: Node) -> Array:
+	var result: Array = []
+	_collect_type(root, CheckBox, result)
+	return result
+
 func _tab_containers(root: Node) -> Array:
 	var result: Array = []
 	_collect_type(root, TabContainer, result)
@@ -260,6 +395,12 @@ func _club(world: Dictionary, club_id: String) -> Dictionary:
 	for club in world.get("clubs", []):
 		if String(club.get("id", "")) == club_id: return club
 	return {}
+
+func _player_name(player: Dictionary) -> String:
+	var name := String(player.get("name", "")).strip_edges()
+	if name != "":
+		return name
+	return (String(player.get("first_name", "")) + " " + String(player.get("last_name", ""))).strip_edges()
 
 func _career_app(node: Node) -> Node:
 	var current: Node = node
