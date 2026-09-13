@@ -193,7 +193,10 @@ def app_runtime_lines(text, package):
 
     UiAutomator, launcher, Google apps and other emulator processes can emit fatal
     exceptions during a long run. Treating every FATAL EXCEPTION in global logcat
-    as a game crash produced false critical failures.
+    as a game crash produced false critical failures. Normal ActivityManager
+    "process has died" lines are also excluded because Back can legitimately exit
+    the root activity; unexpected process exits are detected live around each
+    non-Back action instead.
     """
     lines = text.splitlines()
     hits = []
@@ -201,7 +204,7 @@ def app_runtime_lines(text, package):
         low = line.lower()
         if f"anr in {package}".lower() in low:
             hits.append(line)
-        if package in line and ("fatal signal" in low or "has died" in low and "signal" not in low):
+        if package in line and "fatal signal" in low:
             hits.append(line)
         if "godot" in low and "script error" in low:
             hits.append(line)
