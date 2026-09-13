@@ -9,7 +9,6 @@ func _run() -> void:
 	await process_frame
 	scene.session.new_career("UI2 Test", "", 12345, 1)
 	scene._show_career()
-	# Allow the autoload integration bridge to discover the newly rebuilt tree.
 	for _i in range(8):
 		await process_frame
 		await create_timer(0.05).timeout
@@ -19,6 +18,7 @@ func _run() -> void:
 	assert(tabs.tabs_visible == false)
 	assert(bool(tabs.get_meta("career_navigation_shell", false)))
 	assert(bool(tabs.get_meta("ui2_active", false)))
+	assert(UI2Runtime.call("_career_app", tabs) == scene)
 
 	var dashboard := _page(tabs, "Dashboard")
 	var squad := _page(tabs, "Squad")
@@ -36,6 +36,48 @@ func _run() -> void:
 	if not bool(tabs.get_meta("career_navigation_mobile", false)):
 		assert(shell.find_child("CareerSidebar", true, false) != null)
 		assert(shell.get_node_or_null("CareerSidebarScroll") != null)
+
+	var managed_fixtures: Array = []
+	for fixture in scene.session.world.get("fixtures", []):
+		if String(fixture.get("home_club_id", "")) == String(scene.session.managed_club_id) or String(fixture.get("away_club_id", "")) == String(scene.session.managed_club_id):
+			managed_fixtures.append(fixture)
+	var current_date := String(scene.session.world.get("current_date", scene.session.world.get("date", "")))
+	var window: Array = UI2ExtendedRuntime.call("_schedule_window", managed_fixtures, current_date)
+	assert(not window.is_empty())
+	var next_date := _next_fixture_date(managed_fixtures, current_date)
+	assert(next_date != "")
+	var contains_next := false
+	for fixture in window:
+		if String(fixture.get("date", "")) == next_date:
+			contains_next = true
+			break
+	assert(contains_next)
+
+	var inbox := _page(tabs, "Inbox")
+	assert(inbox != null)
+	var unread_before := _unread_count(scene.session.world.get("inbox", []))
+	if unread_before > 0:
+		var mark_read := _find_button(inbox, "MARK READ")
+		assert(mark_read != null)
+		mark_read.pressed.emit()
+		for _i in range(6):
+			await process_frame
+			await create_timer(0.03).timeout
+		assert(_unread_count(scene.session.world.get("inbox", [])) == unread_before - 1)
+
+	tabs = _career_tabs(scene)
+	assert(tabs != null)
+	dashboard = _page(tabs, "Dashboard")
+	var continue_button := _find_button_prefix(dashboard, "CONTINUE")
+	assert(continue_button != null)
+	var day_before := int(scene.session.world.get("day_index", 0))
+	continue_button.pressed.emit()
+	for _i in range(120):
+		await process_frame
+		if int(scene.session.world.get("day_index", 0)) > day_before:
+			break
+		await create_timer(0.05).timeout
+	assert(int(scene.session.world.get("day_index", 0)) == day_before + 1)
 
 	scene.queue_free()
 	await process_frame
@@ -63,3 +105,38 @@ func _index(tabs: TabContainer, name: String) -> int:
 		if String(page.name) == name or tabs.get_tab_title(i) == name:
 			return i
 	return -1
+
+func _find_button(node: Node, text: String) -> Button:
+	if node is Button and String((node as Button).text) == text:
+		return node as Button
+	for child in node.get_children():
+		var found := _find_button(child, text)
+		if found != null:
+			return found
+	return null
+
+func _find_button_prefix(node: Node, prefix: String) -> Button:
+	if node is Button and String((node as Button).text).begins_with(prefix):
+		return node as Button
+	for child in node.get_children():
+		var found := _find_button_prefix(child, prefix)
+		if found != null:
+			return found
+	return null
+
+func _unread_count(messages: Array) -> int:
+	var count := 0
+	for message in messages:
+		if not bool(message.get("read", false)):
+			count += 1
+	return count
+
+func _next_fixture_date(fixtures: Array, current_date: String) -> String:
+	var next := ""
+	for fixture in fixtures:
+		var date := String(fixture.get("date", ""))
+		if date < current_date:
+			continue
+		if next == "" or date < next:
+			next = date
+	return next
