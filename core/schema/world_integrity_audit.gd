@@ -143,14 +143,22 @@ func _validate_registrations(world: Dictionary, indexes: Dictionary, errors: Arr
 		if not clubs.has(club_id): errors.append({"code":"registration_missing_club","key":key})
 		if not competitions.has(competition_id): errors.append({"code":"registration_missing_competition","key":key})
 		var competition: Dictionary = competitions.get(competition_id,{})
-		var max_squad: int = int(competition.get("registration_rules",{}).get("max_squad",999))
-		if row.get("player_ids",[]).size() > max_squad: errors.append({"code":"registration_squad_limit","key":key,"count":row.get("player_ids",[]).size(),"max":max_squad})
+		var rules: Dictionary = competition.get("registration_rules",{})
+		var max_squad: int = int(rules.get("max_squad",999))
+		var counted_players := 0
 		for player_id_value in row.get("player_ids",[]):
 			var player_id: String = String(player_id_value)
 			if seen.has(player_id): errors.append({"code":"registration_duplicate_player","key":key,"player_id":player_id})
 			seen[player_id] = true
-			if not players.has(player_id): errors.append({"code":"registration_missing_player","key":key,"player_id":player_id})
-			elif String(players[player_id].get("club_id","")) != club_id: errors.append({"code":"registration_wrong_club","key":key,"player_id":player_id})
+			if not players.has(player_id):
+				errors.append({"code":"registration_missing_player","key":key,"player_id":player_id})
+				continue
+			var player: Dictionary = players[player_id]
+			if String(player.get("club_id","")) != club_id: errors.append({"code":"registration_wrong_club","key":key,"player_id":player_id})
+			var age := int(player.get("age",99))
+			var exempt := (bool(rules.get("u21_exempt",false)) and age <= 21) or (bool(rules.get("u19_exempt",false)) and age <= 19)
+			if not exempt: counted_players += 1
+		if counted_players > max_squad: errors.append({"code":"registration_squad_limit","key":key,"count":counted_players,"max":max_squad})
 		if row.has("valid") and not bool(row.valid): warnings.append({"code":"registration_marked_invalid","key":key})
 
 func _validate_discipline(world: Dictionary, indexes: Dictionary, errors: Array, _warnings: Array) -> void:
