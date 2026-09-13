@@ -6,6 +6,8 @@ const ClubEconomyServiceClass = preload("res://simulation/finance/club_economy_s
 const LeagueSystemClass = preload("res://application/season/league_system.gd")
 const MedicalSystemClass = preload("res://simulation/players/medical_system.gd")
 const WorldIntegrityAuditClass = preload("res://core/schema/world_integrity_audit.gd")
+const WorldGeneratorClass = preload("res://simulation/world/world_generator.gd")
+const InternationalSeasonClass = preload("res://application/season/international_season.gd")
 
 var failures := 0
 var checks := 0
@@ -17,8 +19,10 @@ func _init() -> void:
 	_test_transfer_completion_rechecks_window()
 	_test_finance_defaults()
 	_test_odd_sized_league_byes()
+	_test_odd_sized_raw_world_generation()
 	_test_partial_medical_state_normalizes()
 	_test_integrity_audit_respects_age_exemptions()
+	_test_depleted_national_team_uses_emergency_callups()
 	if failures == 0:
 		print("[TEST] CODEBASE ROBUSTNESS REGRESSION PASS: %d checks" % checks)
 		quit(0)
@@ -89,6 +93,13 @@ func _test_odd_sized_league_byes() -> void:
 	for club_id in clubs:
 		_require(int(counts.get(club_id,0)) == 8, "%s must play every opponent home and away" % club_id)
 
+func _test_odd_sized_raw_world_generation() -> void:
+	var world: Dictionary = WorldGeneratorClass.new().create_world(73,1,5,11)
+	_require(world.clubs.size() == 5, "raw generator must allow an odd five-club league")
+	_require(world.fixtures.size() == 20, "raw five-club world must generate 20 double-round-robin fixtures")
+	for fixture in world.fixtures:
+		_require(String(fixture.home_club_id) != "" and String(fixture.away_club_id) != "", "raw generator must not persist bye placeholders as fixtures")
+
 func _test_partial_medical_state_normalizes() -> void:
 	var player := {"id":"med","injured_days":-4,"medical":{"current":"invalid","history":"invalid","rehab_progress":2.0,"match_fitness":140.0}}
 	MedicalSystemClass.new().ensure_player(player)
@@ -118,6 +129,21 @@ func _test_integrity_audit_respects_age_exemptions() -> void:
 	for error in errors:
 		if String(error.get("code","")) == "registration_squad_limit": squad_limit_error = true
 	_require(not squad_limit_error, "integrity audit must count only non-exempt players against max_squad")
+
+func _test_depleted_national_team_uses_emergency_callups() -> void:
+	var world := {
+		"countries":[{"id":"a","name":"A","youth_rating":55},{"id":"b","name":"B","youth_rating":60}],
+		"players":[
+			{"id":"a1","country_id":"a","club_id":"ca","age":23,"position":"GK","current_ability":50,"potential":55,"fitness":100,"fatigue":5,"morale":70,"injured_days":0,"retired":false},
+			{"id":"b1","country_id":"b","club_id":"cb","age":24,"position":"GK","current_ability":52,"potential":57,"fitness":100,"fatigue":5,"morale":70,"injured_days":0,"retired":false},
+		],
+		"national_teams":{},"international_competitions":[]
+	}
+	var result: Dictionary = InternationalSeasonClass.new()._simulate_national_match(world,"a","b",907)
+	_require(result.has("events") and result.has("stats"), "depleted national teams must still be simulated by the match engine")
+	_require(int(result.get("emergency_callups",{}).get("home",0)) == 10, "home nation with one eligible player must receive ten temporary call-ups")
+	_require(int(result.get("emergency_callups",{}).get("away",0)) == 10, "away nation with one eligible player must receive ten temporary call-ups")
+	_require(not (int(result.get("home_goals",0)) == 0 and int(result.get("away_goals",0)) == 0 and result.get("events",[]).is_empty()), "depleted international match must not use the old forced empty 0-0 fallback")
 
 func _transfer_world(date_string: String) -> Dictionary:
 	return {
