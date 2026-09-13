@@ -84,6 +84,8 @@ static func step(state: Dictionary, dt: float, pitch_length: float = 105.0, pitc
 		pos.y = clampf(pos.y,0.0,pitch_width)
 		vel.y = -vel.y*0.42
 
+	# Preserve the physical invariant even after long floating-point integration.
+	pos.z = maxf(BALL_RADIUS, pos.z)
 	state["position"] = pos
 	state["velocity"] = vel
 	state["spin"] = spin
