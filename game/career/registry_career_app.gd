@@ -71,6 +71,38 @@ func _show_new_career() -> void:
 	_add_button(buttons, tr("Create Career"), _create_career_from_wizard)
 	_add_button(buttons, tr("Back"), _show_main_menu)
 
+func _show_settings() -> void:
+	var root := _clear()
+	_add_heading(root, tr("Settings"), 28)
+	var language := OptionButton.new()
+	for code in LocalizationServiceClass.SUPPORTED: language.add_item(String(code).to_upper())
+	language.select(maxi(0, LocalizationServiceClass.SUPPORTED.find(String(settings.get("language", "en")))))
+	root.add_child(_labeled("Language", language))
+	var ui_scale := HSlider.new(); ui_scale.name = "UIScaleSetting"; ui_scale.min_value = 0.85; ui_scale.max_value = 2.0; ui_scale.step = 0.05; ui_scale.value = float(settings.get("ui_scale",1.0)); root.add_child(_labeled("UI scale", ui_scale))
+	var font_scale := HSlider.new(); font_scale.name = "FontScaleSetting"; font_scale.min_value = 0.9; font_scale.max_value = 2.0; font_scale.step = 0.05; font_scale.value = float(settings.get("font_scale",1.0)); root.add_child(_labeled("Font scale", font_scale))
+	var contrast := CheckBox.new(); contrast.name = "HighContrastSetting"; contrast.text = tr("High contrast"); contrast.button_pressed = bool(settings.get("high_contrast",false)); root.add_child(contrast)
+	var motion := CheckBox.new(); motion.name = "ReduceMotionSetting"; motion.text = tr("Reduce motion"); motion.button_pressed = bool(settings.get("reduce_motion",false)); root.add_child(motion)
+	var reader := CheckBox.new(); reader.name = "ScreenReaderSetting"; reader.text = tr("Screen-reader labels"); reader.button_pressed = bool(settings.get("screen_reader_labels",true)); root.add_child(reader)
+	var autosave := CheckBox.new(); autosave.name = "AutosaveSetting"; autosave.text = tr("Autosave"); autosave.button_pressed = bool(settings.get("autosave",true)); root.add_child(autosave)
+	var interval := SpinBox.new(); interval.name = "AutosaveIntervalSetting"; interval.min_value = 1; interval.max_value = 30; interval.value = int(settings.get("autosave_interval_days",7)); root.add_child(_labeled("Autosave interval (days)", interval))
+	var row := HBoxContainer.new(); root.add_child(row)
+	_add_button(row, tr("Apply"), func():
+		settings.language = LocalizationServiceClass.SUPPORTED[language.selected]
+		settings.ui_scale = ui_scale.value
+		settings.font_scale = font_scale.value
+		settings.high_contrast = contrast.button_pressed
+		settings.reduce_motion = motion.button_pressed
+		settings.screen_reader_labels = reader.button_pressed
+		settings.autosave = autosave.button_pressed
+		settings.autosave_interval_days = int(interval.value)
+		settings = settings_store.sanitize(settings)
+		settings_store.save(SETTINGS_PATH, settings)
+		_apply_runtime_settings()
+		_show_main_menu()
+	)
+	_add_button(row, tr("Reset"), func(): settings = settings_store.defaults(); settings_store.save(SETTINGS_PATH, settings); _apply_runtime_settings(); _show_settings())
+	_add_button(row, tr("Back"), _show_main_menu)
+
 func _show_career() -> void:
 	var root := _clear()
 	var snap: Dictionary = session.snapshot()
