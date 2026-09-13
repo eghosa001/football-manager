@@ -5,7 +5,7 @@ const ScoutingServiceClass = preload("res://simulation/scouting/scouting_service
 const InboxServiceClass = preload("res://application/career/inbox_service.gd")
 const CompetitiveBiddingClass = preload("res://simulation/transfers/competitive_bidding_service.gd")
 
-func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
+func run(world: Dictionary, managed_club_id: String, seed: int) -> Array:
 	var service = ScoutingServiceClass.new()
 	service.ensure_world(world)
 	var updates: Array = []
@@ -19,8 +19,8 @@ func run(world: Dictionary, managed_club_id: String, seed: int) -> Dictionary:
 		updates.append({"focus_id":String(focus.id),"progress":float(focus.progress),"new_players":after_count-before_count})
 		if String(focus.get("club_id", "")) == managed_club_id and after_count > before_count:
 			InboxServiceClass.new().add_message(world, "scouting", "Recruitment focus update", "%d new player%s discovered in %s." % [after_count-before_count,"" if after_count-before_count == 1 else "s",String(focus.get("country_id", "the target nation"))])
-	var bidding := CompetitiveBiddingClass.new().run(world, managed_club_id, seed + 77_771)
-	return {"scouting":updates,"competitive_bidding":bidding}
+	world["last_competitive_bidding"] = CompetitiveBiddingClass.new().run(world, managed_club_id, seed + 77_771)
+	return updates
 
 func _staff(world: Dictionary, staff_id: String) -> Dictionary:
 	for member in world.get("staff", []):
