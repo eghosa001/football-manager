@@ -5,6 +5,7 @@ const CareerCommandServiceClass = preload("res://application/career/career_comma
 const ClubEconomyServiceClass = preload("res://simulation/finance/club_economy_service.gd")
 const LeagueSystemClass = preload("res://application/season/league_system.gd")
 const MedicalSystemClass = preload("res://simulation/players/medical_system.gd")
+const WorldIntegrityAuditClass = preload("res://core/schema/world_integrity_audit.gd")
 
 var failures := 0
 var checks := 0
@@ -17,6 +18,7 @@ func _init() -> void:
 	_test_finance_defaults()
 	_test_odd_sized_league_byes()
 	_test_partial_medical_state_normalizes()
+	_test_integrity_audit_respects_age_exemptions()
 	if failures == 0:
 		print("[TEST] CODEBASE ROBUSTNESS REGRESSION PASS: %d checks" % checks)
 		quit(0)
@@ -95,6 +97,27 @@ func _test_partial_medical_state_normalizes() -> void:
 	_require(is_equal_approx(float(player.medical.rehab_progress),1.0), "rehab progress must be clamped during migration normalization")
 	_require(is_equal_approx(float(player.medical.match_fitness),100.0), "match fitness must be clamped during migration normalization")
 	_require(int(player.injured_days) == 0, "negative legacy injury days must normalize to zero")
+
+func _test_integrity_audit_respects_age_exemptions() -> void:
+	var world := {
+		"clubs":[{"id":"club"}],
+		"players":[
+			{"id":"p1","club_id":"club","age":25,"current_ability":50,"potential":60,"fitness":100,"morale":70,"injured_days":0},
+			{"id":"p2","club_id":"club","age":20,"current_ability":45,"potential":65,"fitness":100,"morale":70,"injured_days":0},
+		],
+		"staff":[],"contracts":[],"fixtures":[],
+		"competitions":[{"id":"comp","club_ids":["club"],"registration_rules":{"max_squad":1,"u21_exempt":true}}],
+		"registrations":{"club:comp:2026":{"club_id":"club","competition_id":"comp","season_year":2026,"player_ids":["p1","p2"],"valid":true}},
+	}
+	var audit = WorldIntegrityAuditClass.new()
+	var errors: Array = []
+	var warnings: Array = []
+	var indexes: Dictionary = audit._indexes(world, errors)
+	audit._validate_registrations(world, indexes, errors, warnings)
+	var squad_limit_error := false
+	for error in errors:
+		if String(error.get("code","")) == "registration_squad_limit": squad_limit_error = true
+	_require(not squad_limit_error, "integrity audit must count only non-exempt players against max_squad")
 
 func _transfer_world(date_string: String) -> Dictionary:
 	return {
