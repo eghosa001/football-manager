@@ -13,12 +13,17 @@ func _run() -> void:
 		await process_frame
 		await create_timer(0.05).timeout
 
+	var ui2_runtime := root.get_node_or_null("UI2Runtime")
+	var ui2_extended := root.get_node_or_null("UI2ExtendedRuntime")
+	assert(ui2_runtime != null)
+	assert(ui2_extended != null)
+
 	var tabs := _career_tabs(scene)
 	assert(tabs != null)
 	assert(tabs.tabs_visible == false)
 	assert(bool(tabs.get_meta("career_navigation_shell", false)))
 	assert(bool(tabs.get_meta("ui2_active", false)))
-	assert(UI2Runtime.call("_career_app", tabs) == scene)
+	assert(ui2_runtime.call("_career_app", tabs) == scene)
 
 	var dashboard := _page(tabs, "Dashboard")
 	var squad := _page(tabs, "Squad")
@@ -42,7 +47,7 @@ func _run() -> void:
 		if String(fixture.get("home_club_id", "")) == String(scene.session.managed_club_id) or String(fixture.get("away_club_id", "")) == String(scene.session.managed_club_id):
 			managed_fixtures.append(fixture)
 	var current_date := String(scene.session.world.get("current_date", scene.session.world.get("date", "")))
-	var window: Array = UI2ExtendedRuntime.call("_schedule_window", managed_fixtures, current_date)
+	var window: Array = ui2_extended.call("_schedule_window", managed_fixtures, current_date)
 	assert(not window.is_empty())
 	var next_date := _next_fixture_date(managed_fixtures, current_date)
 	assert(next_date != "")
