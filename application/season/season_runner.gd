@@ -10,6 +10,7 @@ const CalendarClass = preload("res://core/calendar/calendar_service.gd")
 const LeagueSystemClass = preload("res://application/season/league_system.gd")
 const KnockoutSeasonClass = preload("res://application/season/knockout_season.gd")
 const ContinentalLeaguePhaseClass = preload("res://application/season/continental_league_phase.gd")
+const RegionalContinentalEngineClass = preload("res://application/season/regional_continental_engine.gd")
 const ContinentalCompetitionsClass = preload("res://application/season/continental_competitions.gd")
 const ClubWorldCupClass = preload("res://application/season/club_world_cup.gd")
 
@@ -18,6 +19,7 @@ var _tactical_match_engine = TacticalMatchEngineClass.new()
 var _league_system = LeagueSystemClass.new()
 var _knockout = KnockoutSeasonClass.new()
 var _continental_phase = ContinentalLeaguePhaseClass.new()
+var _regional_continental = RegionalContinentalEngineClass.new()
 var _club_world_cup = ClubWorldCupClass.new()
 var _discipline = DisciplineServiceClass.new()
 var _modern_rules = ModernRulesClass.new()
@@ -95,6 +97,7 @@ func build_season_record(world: Dictionary, competition_id: String) -> Dictionar
 	var competition_type := String(competition.get("competition_type", "league"))
 	if competition_type == "knockout": return _knockout.record(world, competition)
 	if competition_type == "continental_league_phase": return _continental_phase.record(world,competition)
+	if competition_type == "regional_continental": return _regional_continental.record(world,competition)
 	if competition_type == "club_world_cup": return _club_world_cup.record(world,competition)
 	var fixtures: Array = []
 	for fixture in world.fixtures:
@@ -119,7 +122,7 @@ func _play_fixture(world: Dictionary, fixture: Dictionary, season_seed: int, pla
 	if _count_club_players(match_players,String(home_club.id)) < 11 or _count_club_players(match_players,String(away_club.id)) < 11:
 		fixture["emergency_selection"] = true
 		match_players = _emergency_match_players(world,String(home_club.id),String(away_club.id),player_index)
-	var context := {"importance":_importance(competition,fixture),"stage":String(fixture.get("stage","")),"knockout":bool(fixture.get("knockout",false)) or bool(fixture.get("continental_knockout",false))}
+	var context := {"importance":_importance(competition,fixture),"stage":String(fixture.get("stage","")),"knockout":bool(fixture.get("knockout",false)) or bool(fixture.get("continental_knockout",false)) or bool(fixture.get("regional_knockout",false))}
 	var result: Dictionary = engine.simulate_match(home_club, away_club, match_players, match_seed, context)
 	engine.apply_to_fixture(fixture, result)
 	fixture["match_seed"] = match_seed
@@ -134,6 +137,7 @@ func _advance_competition(world: Dictionary, competition_id: String, date_string
 	match String(competition.get("competition_type","league")):
 		"knockout": _knockout.advance_ready(world,competition_id,date_string)
 		"continental_league_phase": _continental_phase.advance_ready(world,competition_id,date_string)
+		"regional_continental": _regional_continental.advance_ready(world,competition_id,date_string)
 		"club_world_cup": _club_world_cup.advance_ready(world,competition_id,date_string)
 
 func _eligible_match_players(world: Dictionary, competition_id: String, home_id: String, away_id: String, player_index: Dictionary) -> Array:
