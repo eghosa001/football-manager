@@ -8,15 +8,16 @@ var match_result: Dictionary = {}
 var frame_index := 0
 var playing := false
 var playback_speed := 1.0
-var frame_interval := 0.8
+var frame_interval := 0.42
 var _elapsed := 0.0
-var show_player_labels := false
+var show_player_labels := true
 var show_pressing_overlay := false
 var show_marking_overlay := false
 var show_condition_indicators := true
 var interpolated_position := 0.0
 var ball_trail: Array = []
-const MAX_TRAIL := 12
+const MAX_TRAIL := 18
+const MAX_FRAME_ADVANCE_PER_TICK := 12
 var commentary_lines: Array = []
 var highlight_mode := "Full"
 var goal_flash := 0.0
@@ -24,12 +25,16 @@ var last_goal_frame := -1
 
 func _ready() -> void:
 	set_process(true)
+	mouse_filter = Control.MOUSE_FILTER_PASS
 
 func set_match(result: Dictionary) -> void:
 	match_result = result.duplicate(true)
 	frame_index = 0
 	playing = false
 	_elapsed = 0.0
+	interpolated_position = 0.0
+	ball_trail.clear()
+	_push_trail()
 	queue_redraw()
 	_emit_frame()
 
@@ -124,20 +129,25 @@ func _process(delta: float) -> void:
 		playing = false
 		return
 	_elapsed += delta * playback_speed
-	# Smooth interpolation within frame interval for continuous ball animation.
-	interpolated_position = clampf(_elapsed / maxf(frame_interval, 0.001), 0.0, 1.0)
+	var interval := maxf(frame_interval, 0.001)
+	var advances := 0
+	while _elapsed >= interval and advances < MAX_FRAME_ADVANCE_PER_TICK:
+		_elapsed -= interval
+		if frame_index >= frames.size() - 1:
+			playing = false
+			interpolated_position = 0.0
+			playback_finished.emit()
+			queue_redraw()
+			return
+		frame_index += 1
+		advances += 1
+		_push_trail()
+		_emit_frame()
+	interpolated_position = _smoothstep(clampf(_elapsed / interval, 0.0, 1.0))
 	queue_redraw()
-	if _elapsed < frame_interval: return
-	_elapsed = 0.0
-	interpolated_position = 0.0
-	if frame_index >= frames.size() - 1:
-		playing = false
-		playback_finished.emit()
-		return
-	frame_index += 1
-	_push_trail()
-	queue_redraw()
-	_emit_frame()
+
+func _smoothstep(t: float) -> float:
+	return t * t * (3.0 - 2.0 * t)
 
 func _push_trail() -> void:
 	var frames := _frames()
@@ -150,19 +160,14 @@ func _push_trail() -> void:
 			ball_trail.pop_front()
 
 func _draw() -> void:
-	var pitch := Rect2(Vector2(8, 8), Vector2(maxf(1.0, size.x - 16.0), maxf(1.0, size.y - 16.0)))
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.035, 0.075, 0.055), true)
-	draw_rect(pitch, Color(0.08, 0.32, 0.14), true)
-	draw_rect(pitch, Color.WHITE, false, 2.0)
-	var middle_x := pitch.position.x + pitch.size.x / 2.0
-	draw_line(Vector2(middle_x, pitch.position.y), Vector2(middle_x, pitch.end.y), Color.WHITE, 2.0)
-	draw_circle(Vector2(middle_x, pitch.position.y + pitch.size.y / 2.0), minf(pitch.size.x, pitch.size.y) * 0.10, Color.WHITE, false, 2.0)
-	_draw_penalty_boxes(pitch)
+	var pitch := Rect2(Vector2(10, 10), Vector2(maxf(1.0, size.x - 20.0), maxf(1.0, size.y - 20.0)))
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.018, 0.035, 0.03), true)
+	_draw_pitch(pitch)
 	var frames: Array = _frames()
 	if frames.is_empty(): return
 	var frame: Dictionary = _display_frame(frames)
-	_draw_team(frame.get("home", {}), Color(0.3, 0.6, 1.0), pitch, frame.get("home_loads", {}))
-	_draw_team(frame.get("away", {}), Color(1.0, 0.35, 0.35), pitch, frame.get("away_loads", {}))
+	_draw_team(frame.get("home", {}), Color(0.23, 0.62, 1.0), pitch, frame.get("home_loads", {}), "home")
+	_draw_team(frame.get("away", {}), Color(1.0, 0.28, 0.30), pitch, frame.get("away_loads", {}), "away")
 	if show_pressing_overlay:
 		_draw_pressing(frame, pitch)
 	if show_marking_overlay:
@@ -170,43 +175,109 @@ func _draw() -> void:
 	_draw_ball_trail(pitch)
 	if frame.has("ball"):
 		var ball_point := _to_screen(frame.ball, pitch)
-		draw_circle(ball_point, 4.0, Color.WHITE)
-		draw_circle(ball_point, 4.0, Color.BLACK, false, 1.0)
+		draw_circle(ball_point + Vector2(1.5, 2.0), 5.2, Color(0.0, 0.0, 0.0, 0.35))
+		draw_circle(ball_point, 4.6, Color(0.98, 0.99, 1.0))
+		draw_circle(ball_point, 4.6, Color(0.08, 0.08, 0.08), false, 1.2)
 	if goal_flash > 0.0:
 		var alpha := clampf(goal_flash, 0.0, 1.0)
-		draw_rect(Rect2(Vector2.ZERO, size), Color(1.0, 0.85, 0.2, alpha * 0.28), true)
-		draw_string(ThemeDB.fallback_font, Vector2(16, 28), "GOAL!", HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color(1.0, 0.9, 0.3, alpha))
+		draw_rect(Rect2(Vector2.ZERO, size), Color(1.0, 0.85, 0.2, alpha * 0.22), true)
+		draw_string(ThemeDB.fallback_font, Vector2(18, 32), "GOAL!", HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color(1.0, 0.9, 0.3, alpha))
 	if not commentary_lines.is_empty():
 		var line := commentary_at_frame(frame_index)
 		if line != "":
-			draw_string(ThemeDB.fallback_font, Vector2(16, size.y - 14), line.left(90), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.9))
+			draw_rect(Rect2(Vector2(10, size.y - 34), Vector2(size.x - 20, 24)), Color(0.01, 0.02, 0.02, 0.72), true)
+			draw_string(ThemeDB.fallback_font, Vector2(18, size.y - 17), line.left(110), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.94))
+
+func _draw_pitch(pitch: Rect2) -> void:
+	draw_rect(pitch, Color(0.055, 0.29, 0.125), true)
+	var stripe_width := pitch.size.x / 10.0
+	for i in range(10):
+		if i % 2 == 0:
+			draw_rect(Rect2(Vector2(pitch.position.x + i * stripe_width, pitch.position.y), Vector2(stripe_width, pitch.size.y)), Color(0.06, 0.34, 0.145), true)
+	draw_rect(pitch, Color(0.92, 0.96, 0.93), false, 2.0)
+	var middle_x := pitch.position.x + pitch.size.x / 2.0
+	draw_line(Vector2(middle_x, pitch.position.y), Vector2(middle_x, pitch.end.y), Color(0.92, 0.96, 0.93), 2.0)
+	draw_circle(Vector2(middle_x, pitch.position.y + pitch.size.y / 2.0), minf(pitch.size.x, pitch.size.y) * 0.10, Color(0.92, 0.96, 0.93), false, 2.0)
+	draw_circle(Vector2(middle_x, pitch.position.y + pitch.size.y / 2.0), 2.2, Color(0.92, 0.96, 0.93))
+	_draw_penalty_boxes(pitch)
 
 func _draw_penalty_boxes(pitch: Rect2) -> void:
 	var box_width := pitch.size.x * (16.5 / 105.0)
 	var box_height := pitch.size.y * (40.32 / 68.0)
 	var y := pitch.position.y + (pitch.size.y - box_height) / 2.0
-	draw_rect(Rect2(Vector2(pitch.position.x, y), Vector2(box_width, box_height)), Color.WHITE, false, 1.5)
-	draw_rect(Rect2(Vector2(pitch.end.x - box_width, y), Vector2(box_width, box_height)), Color.WHITE, false, 1.5)
+	var line_color := Color(0.92, 0.96, 0.93)
+	draw_rect(Rect2(Vector2(pitch.position.x, y), Vector2(box_width, box_height)), line_color, false, 1.5)
+	draw_rect(Rect2(Vector2(pitch.end.x - box_width, y), Vector2(box_width, box_height)), line_color, false, 1.5)
+	var six_width := pitch.size.x * (5.5 / 105.0)
+	var six_height := pitch.size.y * (18.32 / 68.0)
+	var sy := pitch.position.y + (pitch.size.y - six_height) / 2.0
+	draw_rect(Rect2(Vector2(pitch.position.x, sy), Vector2(six_width, six_height)), line_color, false, 1.1)
+	draw_rect(Rect2(Vector2(pitch.end.x - six_width, sy), Vector2(six_width, six_height)), line_color, false, 1.1)
 
-func _draw_team(positions: Dictionary, color: Color, pitch: Rect2, loads: Dictionary = {}) -> void:
+func _draw_team(positions: Dictionary, color: Color, pitch: Rect2, loads: Dictionary = {}, side: String = "home") -> void:
+	var occupied: Array[Rect2] = []
 	for id in positions.keys():
 		var point := _to_screen(positions[id], pitch)
-		draw_circle(point, 6.0, color)
-		draw_circle(point, 6.0, Color.WHITE, false, 1.0)
+		draw_circle(point + Vector2(1.4, 2.0), 7.6, Color(0.0, 0.0, 0.0, 0.30))
+		draw_circle(point, 7.0, color)
+		draw_circle(point, 7.0, Color(0.96, 0.98, 1.0), false, 1.3)
 		if show_condition_indicators and loads.has(id):
 			var energy := clampf(float((loads[id] as Dictionary).get("energy", 1.0)), 0.0, 1.0)
 			var ring := Color(0.3, 1.0, 0.3) if energy > 0.7 else (Color(1.0, 0.85, 0.2) if energy > 0.5 else Color(1.0, 0.3, 0.2))
-			draw_arc(point, 8.5, -PI / 2.0, -PI / 2.0 + TAU * energy, 12, ring, 2.0)
+			draw_arc(point, 9.5, -PI / 2.0, -PI / 2.0 + TAU * energy, 16, ring, 2.0)
 		if show_player_labels:
-			draw_string(ThemeDB.fallback_font, point + Vector2(8, 4), String(id).right(6), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
+			_draw_player_label(point, String(id), color, occupied, side)
+
+func _draw_player_label(point: Vector2, player_id: String, color: Color, occupied: Array[Rect2], side: String) -> void:
+	var text := _player_label(player_id)
+	var font := ThemeDB.fallback_font
+	var font_size := 11
+	var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+	var base_x := point.x - text_size.x * 0.5
+	var base_y := point.y - 14.0
+	var rect := Rect2(Vector2(base_x - 4.0, base_y - text_size.y), Vector2(text_size.x + 8.0, text_size.y + 4.0))
+	var attempts := 0
+	while _overlaps_any(rect, occupied) and attempts < 5:
+		rect.position.y -= text_size.y + 3.0
+		attempts += 1
+	if rect.position.y < 4.0:
+		rect.position.y = point.y + 12.0
+	occupied.append(rect)
+	draw_rect(rect, Color(0.015, 0.025, 0.03, 0.78), true)
+	draw_rect(rect, Color(color.r, color.g, color.b, 0.72), false, 1.0)
+	draw_string(font, Vector2(rect.position.x + 4.0, rect.position.y + text_size.y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.97, 0.98, 1.0))
+
+func _overlaps_any(rect: Rect2, occupied: Array[Rect2]) -> bool:
+	for other in occupied:
+		if rect.intersects(other.grow(2.0)):
+			return true
+	return false
+
+func _player_label(player_id: String) -> String:
+	var names: Dictionary = match_result.get("player_names", {})
+	if names.has(player_id):
+		var full := String(names[player_id]).strip_edges()
+		if full != "":
+			var parts := full.split(" ", false)
+			if parts.size() >= 2:
+				return "%s. %s" % [String(parts[0]).left(1), String(parts[parts.size() - 1])]
+			return full.left(16)
+	var compact := player_id.replace("player-", "").replace("player_", "")
+	return compact.right(8)
 
 func _display_frame(frames: Array) -> Dictionary:
 	var current: Dictionary = frames[frame_index]
-	if interpolated_position <= 0.01 or frame_index + 1 >= frames.size():
+	if interpolated_position <= 0.001 or frame_index + 1 >= frames.size():
 		return current
 	var nxt: Dictionary = frames[frame_index + 1]
-	var merged := {"ball": _lerp_pos(current.get("ball", {}), nxt.get("ball", {}), interpolated_position), "home": _lerp_team(current.get("home", {}), nxt.get("home", {}), interpolated_position), "away": _lerp_team(current.get("away", {}), nxt.get("away", {}), interpolated_position)}
-	return merged
+	return {
+		"ball": _lerp_pos(current.get("ball", {}), nxt.get("ball", {}), interpolated_position),
+		"home": _lerp_team(current.get("home", {}), nxt.get("home", {}), interpolated_position),
+		"away": _lerp_team(current.get("away", {}), nxt.get("away", {}), interpolated_position),
+		"home_loads": current.get("home_loads", {}),
+		"away_loads": current.get("away_loads", {}),
+		"possession": current.get("possession", "home")
+	}
 
 func _lerp_pos(a: Dictionary, b: Dictionary, t: float) -> Dictionary:
 	return {"x": lerpf(float(a.get("x", 0.0)), float(b.get("x", 0.0)), t), "y": lerpf(float(a.get("y", 0.0)), float(b.get("y", 0.0)), t)}
@@ -215,18 +286,26 @@ func _lerp_team(a: Dictionary, b: Dictionary, t: float) -> Dictionary:
 	var result := {}
 	for id in a.keys():
 		result[id] = _lerp_pos(a[id], b.get(id, a[id]), t)
+	for id in b.keys():
+		if not result.has(id):
+			result[id] = b[id]
 	return result
 
 func _draw_ball_trail(pitch: Rect2) -> void:
-	for i in range(ball_trail.size()):
+	if ball_trail.size() < 2:
+		return
+	for i in range(1, ball_trail.size()):
 		var alpha := float(i + 1) / float(maxi(1, ball_trail.size()))
-		draw_circle(_to_screen(ball_trail[i], pitch), 2.0 + alpha * 2.0, Color(1, 1, 1, 0.15 + alpha * 0.35))
+		var a := _to_screen(ball_trail[i - 1], pitch)
+		var b := _to_screen(ball_trail[i], pitch)
+		draw_line(a, b, Color(1, 1, 1, 0.08 + alpha * 0.24), 1.0 + alpha * 1.4)
 
 func _draw_pressing(frame: Dictionary, pitch: Rect2) -> void:
 	if not frame.has("ball"):
 		return
 	var ball_point := _to_screen(frame.ball, pitch)
-	draw_arc(ball_point, 26.0, 0.0, TAU, 24, Color(1.0, 0.9, 0.2, 0.7), 1.5)
+	draw_circle(ball_point, 26.0, Color(1.0, 0.9, 0.2, 0.08), true)
+	draw_arc(ball_point, 26.0, 0.0, TAU, 24, Color(1.0, 0.9, 0.2, 0.72), 1.5)
 
 func _draw_marking(frame: Dictionary, pitch: Rect2) -> void:
 	var home: Dictionary = frame.get("home", {})
@@ -240,7 +319,7 @@ func _draw_marking(frame: Dictionary, pitch: Rect2) -> void:
 				best_d = d
 				best = aid
 		if best != "" and best_d < 60.0:
-			draw_line(_to_screen(home[hid], pitch), _to_screen(away[best], pitch), Color(1, 1, 1, 0.25), 1.0)
+			draw_line(_to_screen(home[hid], pitch), _to_screen(away[best], pitch), Color(1, 1, 1, 0.22), 1.0)
 
 func _screen_dist(a: Vector2, b: Vector2) -> float:
 	return (a - b).length()
@@ -251,7 +330,6 @@ func _to_screen(position: Dictionary, pitch: Rect2) -> Vector2:
 	var spatial: Dictionary = match_result.get("spatial", {})
 	var length := float(spatial.get("pitch_length", 1.0))
 	var width := float(spatial.get("pitch_width", 1.0))
-	# Phase 8 legacy frames are normalized; Match Engine v2 frames use metres.
 	if length <= 1.01 and width <= 1.01:
 		return Vector2(pitch.position.x + clampf(x, 0.0, 1.0) * pitch.size.x, pitch.position.y + clampf(y, 0.0, 1.0) * pitch.size.y)
 	return Vector2(pitch.position.x + clampf(x / maxf(length, 1.0), 0.0, 1.0) * pitch.size.x, pitch.position.y + clampf(y / maxf(width, 1.0), 0.0, 1.0) * pitch.size.y)
