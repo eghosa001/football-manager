@@ -52,6 +52,9 @@ jobs:
       - name: Transfer-window country contract
         run: bash tools/test-headless.sh tests/transfer_window_country_test.gd 300
 
+      - name: Codebase robustness regressions
+        run: bash tools/test-headless.sh tests/codebase_robustness_regression_test.gd 300
+
       - name: World integrity contract
         run: bash tools/test-headless.sh tests/world_integrity_audit_test.gd 600
 
