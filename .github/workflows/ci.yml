@@ -44,9 +44,6 @@ jobs:
       - name: App speed breakdown
         run: bash tools/test-headless.sh tests/app_speed_breakdown_test.gd 120
 
-      - name: Performance baseline
-        run: bash tools/test-headless.sh tests/performance_baseline_test.gd 240
-
       - name: Spatial engine robustness regression
         run: bash tools/test-headless.sh tests/spatial_engine_robustness_test.gd 600
 
@@ -85,6 +82,11 @@ jobs:
 
       - name: Production readiness contract
         run: bash tools/test-headless.sh tests/production_readiness_contract_test.gd 600
+
+      # Keep performance mandatory, but run it after correctness gates so a
+      # slow benchmark cannot hide unrelated UI/save/training regressions.
+      - name: Performance baseline
+        run: bash tools/test-headless.sh tests/performance_baseline_test.gd 240
 
       - name: Verify source remained clean
         run: git diff --exit-code -- .
