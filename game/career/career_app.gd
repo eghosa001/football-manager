@@ -141,7 +141,9 @@ func _show_new_career() -> void:
 	var loading := Label.new(); loading.text = tr("Loading database…"); root.add_child(loading)
 	await get_tree().process_frame
 	var preview: Dictionary = LaunchCatalogClass.new().build(0, expanded_world)
-	loading.queue_free()
+	if is_instance_valid(loading): loading.queue_free()
+	if not is_instance_valid(root) or root != content:
+		return
 	if preview.get("clubs", []).is_empty():
 		var empty := Label.new(); empty.text = tr("No clubs available. The launch database failed to load."); empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; root.add_child(empty)
 		_add_button(root, tr("Back"), _show_main_menu)
