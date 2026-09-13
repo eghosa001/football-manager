@@ -9,7 +9,7 @@ func _init() -> void:
 	var players := _players()
 	var match = Session.new()
 	var start: Dictionary = match.start_match(home,away,players,99117,{})
-	assert(int(start.get("error",FAILED)) == OK)
+	assert(not start.has("error"))
 	assert(int(start.get("minute",0)) == 0)
 	var half: Dictionary = match.advance_to_minute(45)
 	assert(int(half.get("minute",0)) >= 45)
