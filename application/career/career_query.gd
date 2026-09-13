@@ -11,6 +11,20 @@ func dashboard(world: Dictionary, club_id: String) -> Dictionary:
 	for message in world.get("inbox", []):
 		if not bool(message.get("read", false)):
 			unread += 1
+	var last_match_summary := {}
+	var last_match: Dictionary = world.get("last_managed_match", {})
+	if not last_match.is_empty():
+		var result: Dictionary = last_match.get("result", {})
+		var fixture: Dictionary = last_match.get("fixture", {})
+		last_match_summary = {
+			"date": String(last_match.get("date", fixture.get("date", ""))),
+			"fixture_id": String(fixture.get("id", "")),
+			"home_club_id": String(fixture.get("home_club_id", "")),
+			"away_club_id": String(fixture.get("away_club_id", "")),
+			"home_goals": int(result.get("home_goals", fixture.get("home_goals", 0))),
+			"away_goals": int(result.get("away_goals", fixture.get("away_goals", 0))),
+			"model": String(last_match.get("model", result.get("model", ""))),
+		}
 	return {
 		"club": club.duplicate(true),
 		"date": String(world.get("date", "")),
@@ -21,7 +35,10 @@ func dashboard(world: Dictionary, club_id: String) -> Dictionary:
 		"wage_budget": int(club.get("wage_budget", 0)),
 		"unread_messages": unread,
 		"next_fixture": _next_fixture(world, club_id),
-		"last_managed_match": world.get("last_managed_match", {}).duplicate(true),
+		# The dashboard only needs summary data. Deep-copying last_managed_match
+		# copied thousands of replay frames on every career refresh after the first
+		# fixture, creating multi-megabyte temporary payloads and UI stalls.
+		"last_managed_match": last_match_summary,
 	}
 
 func squad(world: Dictionary, club_id: String) -> Array:
