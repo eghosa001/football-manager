@@ -71,10 +71,10 @@ func _movement_for_pair(world: Dictionary, country_id: String, upper: Dictionary
 		if upper_index < 0 or lower_index >= lower_table.size(): continue
 		var incumbent := String(upper_table[upper_index].club_id)
 		var challenger := String(lower_table[lower_index].club_id)
-		var match: Dictionary = _playoff_fixture(world, incumbent, challenger, String(upper.id), 10_000 + playoff_index)
-		playoff_matches.append(match)
-		var winner := String(match.get("winner", ""))
-		var row := {"incumbent":incumbent,"challenger":challenger,"winner":winner,"promoted":false,"match":match}
+		var playoff_match: Dictionary = _playoff_fixture(world, incumbent, challenger, String(upper.id), 10_000 + playoff_index)
+		playoff_matches.append(playoff_match)
+		var winner := String(playoff_match.get("winner", ""))
+		var row := {"incumbent":incumbent,"challenger":challenger,"winner":winner,"promoted":false,"match":playoff_match}
 		if winner == challenger:
 			promoted.append(challenger)
 			relegated.append(incumbent)
@@ -125,10 +125,10 @@ func _domestic_playoff(world: Dictionary, pool: Array, competition_id: String, s
 		while left < right:
 			var home := String(entrants[left])
 			var away := String(entrants[right])
-			var match := _playoff_fixture(world, home, away, competition_id, salt * 100 + round_index * 10 + left)
-			match["round"] = round_index + 1
-			matches.append(match)
-			next_round.append(String(match.winner))
+			var playoff_match := _playoff_fixture(world, home, away, competition_id, salt * 100 + round_index * 10 + left)
+			playoff_match["round"] = round_index + 1
+			matches.append(playoff_match)
+			next_round.append(String(playoff_match.winner))
 			left += 1
 			right -= 1
 		if left == right:
