@@ -45,6 +45,7 @@ DynamicsResponsivenessRuntime="*res://game/polish/dynamics_responsiveness_runtim
 CoreManagementRuntime="*res://game/polish/core_management_runtime.gd"
 CoreStaffRecruitmentRuntime="*res://game/polish/core_staff_recruitment_runtime.gd"
 CoreYouthRuntime="*res://game/polish/core_youth_runtime.gd"
+LiveMatchRuntime="*res://game/polish/live_match_runtime.gd"
 
 [display]
 window/size/viewport_width=1280
