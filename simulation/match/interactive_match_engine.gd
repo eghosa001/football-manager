@@ -4,7 +4,20 @@ var _user_substitutions: Array = []
 
 func simulate_match(home_club: Dictionary, away_club: Dictionary, players: Array, seed: int, context: Dictionary = {}) -> Dictionary:
 	_user_substitutions = context.get("user_substitutions", []).duplicate(true)
+	if _user_substitutions.is_empty():
+		_user_substitutions.append_array(_club_plan(home_club, "home"))
+		_user_substitutions.append_array(_club_plan(away_club, "away"))
 	return super.simulate_match(home_club, away_club, players, seed, context)
+
+func _club_plan(club: Dictionary, side: String) -> Array:
+	var result: Array = []
+	for row in club.get("match_substitutions", []):
+		if not row is Dictionary:
+			continue
+		var copy: Dictionary = row.duplicate(true)
+		copy["side"] = side
+		result.append(copy)
+	return result
 
 func _planned_substitutions(players: Array, home_id: String, away_id: String, home: Array, away: Array) -> Array:
 	var planned: Array = super._planned_substitutions(players, home_id, away_id, home, away)
