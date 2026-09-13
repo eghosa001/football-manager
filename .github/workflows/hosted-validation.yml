@@ -52,6 +52,9 @@ jobs:
       - name: World integrity contract
         run: bash tools/test-headless.sh tests/world_integrity_audit_test.gd 600
 
+      - name: Persistent record-book contract
+        run: bash tools/test-headless.sh tests/record_book_depth_test.gd 300
+
       - name: Player special ability contract
         run: bash tools/test-headless.sh tests/special_ability_test.gd 300
 
