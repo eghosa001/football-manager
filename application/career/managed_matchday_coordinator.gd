@@ -1,4 +1,3 @@
-class_name ManagedMatchdayCoordinator
 extends RefCounted
 
 const CALENDAR_PATH := "res://core/calendar/calendar_service.gd"
