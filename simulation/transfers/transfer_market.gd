@@ -14,51 +14,81 @@ func player_value(player: Dictionary, season_year: int) -> int:
 func estimated_value(player: Dictionary, seller: Dictionary = {}, buyer: Dictionary = {}, season_year: int = 0) -> int:
 	if bool(player.get("retired", false)):
 		return 0
-	var ca: int = int(player.get("current_ability", 50))
-	var upside: int = maxi(0, int(player.get("potential", ca)) - ca)
+	var ca: int = clampi(int(player.get("current_ability", 50)), 1, 100)
+	var pa: int = clampi(int(player.get("potential", ca)), ca, 100)
+	var upside: int = maxi(0, pa - ca)
 	var age: int = int(player.get("age", 24))
-	var peak_factor: float = 1.0 if age <= 28 else maxf(0.35, 1.0 - float(age - 28) * 0.08)
-	if age <= 20:
-		peak_factor *= 1.18
-	elif age <= 23:
-		peak_factor *= 1.08
-	var base := float(ca * ca * 700 + upside * 45_000) * peak_factor
-	# Position scarcity: strikers and creative attackers cost more.
+	# Modern market values are strongly nonlinear: elite players are scarce and
+	# worth dramatically more than average professionals. The curve still keeps
+	# lower-league players affordable while allowing genuine stars to reach
+	# nine-figure valuations.
+	var ability_ratio := clampf(float(ca) / 100.0, 0.01, 1.0)
+	var base := pow(ability_ratio, 4.0) * 160_000_000.0
+	base += float(upside) * (250_000.0 + float(ca) * 2_500.0)
+	if ca < 45:
+		base *= lerpf(0.28, 0.68, clampf(float(ca - 20) / 25.0, 0.0, 1.0))
+	var peak_factor := 1.0
+	if age <= 18:
+		peak_factor = 1.05 + clampf(float(upside) / 45.0, 0.0, 0.45)
+	elif age <= 21:
+		peak_factor = 1.12 + clampf(float(upside) / 60.0, 0.0, 0.30)
+	elif age <= 24:
+		peak_factor = 1.10
+	elif age <= 28:
+		peak_factor = 1.0
+	elif age <= 30:
+		peak_factor = 0.88
+	elif age <= 32:
+		peak_factor = 0.70
+	elif age <= 34:
+		peak_factor = 0.52
+	else:
+		peak_factor = 0.35
+	base *= peak_factor
+	# Position scarcity: goals and creation command a premium, while keepers
+	# generally peak later and transact for lower fees at equivalent ability.
 	var scarcity := 1.0
 	match String(player.get("position", "MC")):
 		"ST":
-			scarcity = 1.22
+			scarcity = 1.18
 		"AMC", "AMR", "AML":
-			scarcity = 1.12
+			scarcity = 1.10
 		"GK":
-			scarcity = 0.88
+			scarcity = 0.82
 		"DC", "DM":
-			scarcity = 0.96
-	# Form / morale: in-form players carry a premium.
-	var form := clampf(float(player.get("form", 50)) / 50.0, 0.82, 1.25)
-	var morale := lerpf(0.94, 1.06, clampf(float(player.get("morale", 50)) / 100.0, 0.0, 1.0))
-	# Contract length: short contracts discount heavily.
+			scarcity = 0.94
+	# Form and morale matter, but should not make a player's value swing wildly.
+	var form_score := float(player.get("form", 50))
+	var form := lerpf(0.90, 1.12, clampf(form_score / 100.0, 0.0, 1.0))
+	var morale := lerpf(0.96, 1.04, clampf(float(player.get("morale", 50)) / 100.0, 0.0, 1.0))
+	# Contract length: expiring contracts create the same discount seen in real
+	# transfer markets. A long deal protects value.
 	var contract_factor := 1.0
 	if not seller.is_empty():
 		var years_left := _contract_years_left(player, season_year)
 		if years_left <= 0:
-			contract_factor = 0.45
+			contract_factor = 0.34
 		elif years_left == 1:
-			contract_factor = 0.68
+			contract_factor = 0.62
 		elif years_left == 2:
-			contract_factor = 0.86
-	# Reputation and club/league context.
-	var rep_factor := lerpf(0.85, 1.30, clampf(float(player.get("reputation", ca)) / 100.0, 0.0, 1.0))
+			contract_factor = 0.84
+		elif years_left >= 4:
+			contract_factor = 1.08
+	# Reputation and club context distinguish a similarly talented prospect at a
+	# small club from an established international star without overriding CA/PA.
+	var reputation := float(player.get("reputation", ca))
+	var rep_factor := lerpf(0.82, 1.28, clampf(reputation / 100.0, 0.0, 1.0))
 	var seller_factor := 1.0
 	if not seller.is_empty():
-		seller_factor = lerpf(0.92, 1.18, clampf(float(seller.get("reputation", 50)) / 100.0, 0.0, 1.0))
+		seller_factor = lerpf(0.90, 1.16, clampf(float(seller.get("reputation", 50)) / 100.0, 0.0, 1.0))
 		if String(seller.get("financial_status", "secure")) == "insecure":
-			seller_factor *= 0.88
+			seller_factor *= 0.86
 	var buyer_factor := 1.0
 	if not buyer.is_empty():
-		buyer_factor = lerpf(0.97, 1.12, clampf(float(buyer.get("reputation", 50)) / 100.0, 0.0, 1.0))
-	var trait_premium := 1.0 + float(player.get("traits", []).size()) * 0.02
-	return maxi(5_000, int(base * scarcity * form * morale * contract_factor * rep_factor * seller_factor * buyer_factor * trait_premium))
+		buyer_factor = lerpf(0.98, 1.08, clampf(float(buyer.get("reputation", 50)) / 100.0, 0.0, 1.0))
+	var trait_premium := 1.0 + minf(0.12, float(player.get("traits", []).size()) * 0.02)
+	var value := base * scarcity * form * morale * contract_factor * rep_factor * seller_factor * buyer_factor * trait_premium
+	return maxi(10_000, int(round(value / 5_000.0)) * 5_000)
 
 func asking_price(player: Dictionary, seller: Dictionary, buyer: Dictionary, season_year: int, deadline_proximity: float = 0.0) -> int:
 	var estimate := float(estimated_value(player, seller, buyer, season_year))
@@ -71,7 +101,7 @@ func asking_price(player: Dictionary, seller: Dictionary, buyer: Dictionary, sea
 	if not seller.is_empty() and not buyer.is_empty() and _are_rivals(seller, buyer):
 		rivalry = 1.28
 	var deadline := 1.0 + clampf(deadline_proximity, 0.0, 1.0) * 0.22
-	return maxi(5_000, int(estimate * seller_need * rivalry * deadline))
+	return maxi(10_000, int(estimate * seller_need * rivalry * deadline))
 
 func _contract_years_left(player: Dictionary, season_year: int) -> int:
 	var contracts: Array = player.get("contracts", [])
@@ -88,7 +118,17 @@ func _are_rivals(seller: Dictionary, buyer: Dictionary) -> bool:
 	return String(seller.get("rival_club_id", "")) == b or String(buyer.get("rival_club_id", "")) == a
 
 func recommended_wage(player: Dictionary) -> int:
-	return clampi(int(player.current_ability) * int(player.current_ability) * 5, 500, 60_000)
+	var ca := clampi(int(player.get("current_ability", 50)), 1, 100)
+	var ratio := float(ca) / 100.0
+	var wage := pow(ratio, 4.15) * 450_000.0
+	var age := int(player.get("age", 24))
+	if age <= 20:
+		wage *= 0.70
+	elif age >= 33:
+		wage *= 0.82
+	var reputation := clampf(float(player.get("reputation", ca)) / 100.0, 0.0, 1.0)
+	wage *= lerpf(0.82, 1.12, reputation)
+	return clampi(int(round(wage / 100.0)) * 100, 300, 450_000)
 
 func process_contracts(world: Dictionary, season_year: int, seed: int) -> Dictionary:
 	_ledger.ensure(world)
@@ -145,9 +185,6 @@ func execute_transfer(world: Dictionary, player_id: String, buyer_id: String, fe
 		_ledger.post(world, seller_id, upfront, "transfer_fee", reference, season_year)
 	if instalments > 1 and seller_id != "":
 		_ledger.schedule_payable(world, buyer_id, seller_id, fee - upfront, instalments - 1, "transfer_instalment", reference, season_year + 1)
-	# Agent fee + signing bonus move real money through the ledger, but only
-	# when the deal terms explicitly include them. Plain fee-only transfers
-	# (including legacy tests) keep exact fee accounting.
 	var agent_fee := maxi(0, int(terms.get("agent_fee", 0)))
 	if agent_fee == 0 and bool(terms.get("pay_agent_fee", false)):
 		agent_fee = _agent_fee_for(player, buyer, fee, seed)
@@ -173,7 +210,6 @@ func _pay_sell_on_chain(world: Dictionary, player: Dictionary, seller_id: String
 		return
 	var due := int(round(float(fee) * pct))
 	var reference := "sellon-%s-%d" % [String(player.get("id", "")), season_year]
-	# Beneficiary is paid from the seller's proceeds; seller keeps the rest.
 	_ledger.post(world, seller_id, -due, "sell_on_fee", reference, season_year)
 	_ledger.post(world, beneficiary, due, "sell_on_fee", reference, season_year)
 	_events.emit(world, "SELL_ON_PAID", {"player_id": String(player.get("id", "")), "beneficiary_id": beneficiary, "seller_id": seller_id, "fee": fee, "due": due, "season_year": season_year}, "transfer_market")
@@ -181,7 +217,6 @@ func _pay_sell_on_chain(world: Dictionary, player: Dictionary, seller_id: String
 func _agent_fee_for(player: Dictionary, buyer: Dictionary, fee: int, seed: int) -> int:
 	var greed := float(player.get("hidden_attributes", {}).get("greed", player.get("hidden_attributes", {}).get("ambition", 50)))
 	var base := float(fee) * (0.03 + greed / 2500.0)
-	# Agent who dislikes the buyer charges more; good relationship discounts.
 	var agent: Dictionary = player.get("agent", {})
 	var rel := float(agent.get("club_relationships", {}).get(String(buyer.get("id", "")), 0))
 	base *= clampf(1.0 - rel / 400.0, 0.85, 1.25)
