@@ -44,6 +44,9 @@ jobs:
       - name: UI2 interaction regression
         run: bash tools/test-headless.sh tests/ui2_runtime_integration_test.gd 600
 
+      - name: Staff UI action regression
+        run: bash tools/test-headless.sh tests/staff_ui_action_test.gd 600
+
       - name: Legacy core regression
         run: bash tools/test-headless.sh tests/test_runner.gd 240
 
