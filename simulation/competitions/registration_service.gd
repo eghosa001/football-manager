@@ -1,6 +1,8 @@
 class_name RegistrationService
 extends RefCounted
 
+const HOMEGROWN_YEARS := 3.0
+
 var _cached_player_index: Dictionary = {}
 var _cached_player_signature := ""
 
@@ -12,7 +14,7 @@ func eligibility(player: Dictionary, competition: Dictionary, season_year: int) 
 	var age := int(player.get("age", 0))
 	var nationality := String(player.get("country_id", ""))
 	var home_country := String(competition.get("country_id", ""))
-	var homegrown := bool(player.get("homegrown", false)) or nationality == home_country
+	var homegrown := _association_homegrown(player, home_country)
 	var reasons: Array[String] = []
 	if bool(player.get("retired", false)):
 		reasons.append("retired")
@@ -32,6 +34,30 @@ func eligibility(player: Dictionary, competition: Dictionary, season_year: int) 
 	# borrowed players ineligible for their temporary club.
 	var squad_exempt := (bool(rules.get("u21_exempt", false)) and age <= 21) or (bool(rules.get("u19_exempt", false)) and age <= 19)
 	return {"eligible": reasons.is_empty(), "reasons": reasons, "homegrown": homegrown, "foreign": home_country != "" and nationality != "" and nationality != home_country, "u21": age <= 21, "squad_exempt": squad_exempt}
+
+func _association_homegrown(player: Dictionary, country_id: String) -> bool:
+	if country_id == "":
+		return false
+	var years_by_country: Variant = player.get("training_years_15_21_by_country", {})
+	if years_by_country is Dictionary:
+		var training: Dictionary = years_by_country
+		if float(training.get(country_id, 0.0)) >= HOMEGROWN_YEARS:
+			return true
+		# Once a modern training ledger exists, it is authoritative. Nationality
+		# alone never confers homegrown status.
+		if not training.is_empty() or player.has("training_history_version"):
+			return false
+	# Compatibility for pre-ledger saves that explicitly persisted a homegrown
+	# qualification. This is deliberately not inferred from nationality.
+	return bool(player.get("homegrown", false))
+
+func club_trained(player: Dictionary, club_id: String) -> bool:
+	if club_id == "":
+		return false
+	var years_by_club: Variant = player.get("training_years_15_21_by_club", {})
+	if years_by_club is Dictionary:
+		return float((years_by_club as Dictionary).get(club_id, 0.0)) >= HOMEGROWN_YEARS
+	return bool(player.get("club_trained", false))
 
 func register_squad(world: Dictionary, club_id: String, competition: Dictionary, player_ids: Array, season_year: int, player_index: Dictionary = {}) -> Dictionary:
 	ensure_world(world)
