@@ -12,7 +12,11 @@ func window_status(world: Dictionary, date_string: String, country_id: String = 
 	if parts.size() != 3: return {"open":false,"reason":"invalid_date","country_id":country_id,"window":{}}
 	var month := int(parts[1]); var day := int(parts[2])
 	if month < 1 or month > 12 or day < 1 or day > 31: return {"open":false,"reason":"invalid_date","country_id":country_id,"window":{}}
-	var resolved_country := country_id if country_id != "" else String(world.get("default_country_id",""))
+	var resolved_country := country_id
+	if resolved_country == "":
+		resolved_country = managed_club_country(world)
+	if resolved_country == "":
+		resolved_country = String(world.get("default_country_id",""))
 	var windows := windows_for_country(world,resolved_country)
 	if windows.is_empty(): return {"open":false,"reason":"no_registered_window","country_id":resolved_country,"window":{}}
 	var mmdd := month*100+day
@@ -32,6 +36,14 @@ func is_open_for_club(world: Dictionary, club_id: String, date_string: String = 
 	var country_id := club_country(world,club_id)
 	var date := date_string if date_string != "" else String(world.get("date",world.get("current_date","")))
 	return is_open(world,date,country_id)
+
+func managed_club_country(world: Dictionary) -> String:
+	var manager: Variant = world.get("human_manager",{})
+	if manager is Dictionary:
+		var managed_club_id := String((manager as Dictionary).get("club_id",""))
+		if managed_club_id != "":
+			return club_country(world,managed_club_id)
+	return ""
 
 func club_country(world: Dictionary, club_id: String) -> String:
 	for club in world.get("clubs",[]):
