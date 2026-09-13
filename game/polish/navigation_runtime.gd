@@ -74,11 +74,19 @@ func wire_tabs(tabs: TabContainer, mobile_override: Variant = null) -> void:
 		shell = HBoxContainer.new()
 		shell.name = "CareerNavigationShell"
 		(shell as HBoxContainer).add_theme_constant_override("separation", 18)
+		var sidebar_scroll := ScrollContainer.new()
+		sidebar_scroll.name = "CareerSidebarScroll"
+		sidebar_scroll.custom_minimum_size.x = 208
+		sidebar_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		sidebar_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		sidebar_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		shell.add_child(sidebar_scroll)
 		var sidebar := VBoxContainer.new()
 		sidebar.name = "CareerSidebar"
-		sidebar.custom_minimum_size.x = 208
+		sidebar.custom_minimum_size.x = 196
+		sidebar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		sidebar.add_theme_constant_override("separation", 4)
-		shell.add_child(sidebar)
+		sidebar_scroll.add_child(sidebar)
 
 	shell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	shell.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -142,7 +150,7 @@ func _refresh_sidebar(tabs: TabContainer) -> void:
 	var shell := tabs.get_parent()
 	if shell == null:
 		return
-	var sidebar := shell.get_node_or_null("CareerSidebar") as VBoxContainer
+	var sidebar := shell.find_child("CareerSidebar", true, false) as VBoxContainer
 	if sidebar == null:
 		return
 	var signature := _navigation_signature(tabs)
@@ -240,7 +248,7 @@ func _sync_active(index: int, tabs: TabContainer) -> void:
 				selector.select(i)
 				return
 		return
-	var sidebar := shell.get_node_or_null("CareerSidebar")
+	var sidebar := shell.find_child("CareerSidebar", true, false)
 	if sidebar == null:
 		return
 	for child in sidebar.get_children():
@@ -266,7 +274,7 @@ func _career_session(node: Node):
 	var current: Node = node
 	while current != null:
 		var script = current.get_script()
-		if script != null and String(script.resource_path).ends_with("game/career/career_app.gd"):
+		if current.has_method("_show_career") and current.has_method("_advance_day"):
 			return current.get("session")
 		current = current.get_parent()
 	return null
