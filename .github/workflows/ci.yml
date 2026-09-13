@@ -47,6 +47,12 @@ jobs:
       - name: Spatial engine robustness regression
         run: bash tools/test-headless.sh tests/spatial_engine_robustness_test.gd 600
 
+      - name: Market realism regression
+        run: bash tools/test-headless.sh tests/market_realism_regression_test.gd 120
+
+      - name: Interactive substitution regression
+        run: bash tools/test-headless.sh tests/interactive_substitution_regression_test.gd 240
+
       - name: UI2 interaction regression
         run: bash tools/test-headless.sh tests/ui2_runtime_integration_test.gd 600
 
