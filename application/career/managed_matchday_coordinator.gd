@@ -11,7 +11,7 @@ var target_date = ""
 var managed_club_id = ""
 var season_seed = 1
 var fixture_seed = 1
-var match = null
+var match_session = null
 var home = {}
 var away = {}
 
@@ -55,43 +55,43 @@ func start(world, club_id, seed):
 	var players = service.call("_eligible_match_players", world, String(home.get("id", "")), String(away.get("id", "")), String(fixture.get("competition_id", "")))
 	var context = service.call("_match_context", world, fixture, home, away)
 	fixture_seed = int(service.call("_fixture_seed", season_seed, String(fixture.get("id", ""))))
-	match = _instance(MATCH_SESSION_PATH)
-	if match == null:
+	match_session = _instance(MATCH_SESSION_PATH)
+	if match_session == null:
 		return {"error": ERR_CANT_CREATE}
-	var started = match.call("start_match", home, away, players, fixture_seed, context)
+	var started = match_session.call("start_match", home, away, players, fixture_seed, context)
 	if not started is Dictionary:
 		return {"error": ERR_INVALID_DATA}
 	_enrich(started)
 	return started
 
 func advance(target_minute):
-	if match == null:
+	if match_session == null:
 		return {"error": ERR_UNCONFIGURED}
-	return match.call("advance_to_minute", int(target_minute))
+	return match_session.call("advance_to_minute", int(target_minute))
 
 func substitute(player_out, player_in):
-	if match == null:
+	if match_session == null:
 		return ERR_UNCONFIGURED
-	return int(match.call("make_substitution", _managed_side(), String(player_out), String(player_in)))
+	return int(match_session.call("make_substitution", _managed_side(), String(player_out), String(player_in)))
 
 func change_tactic(tactic):
-	if match == null:
+	if match_session == null:
 		return ERR_UNCONFIGURED
-	return int(match.call("change_tactic", _managed_side(), tactic))
+	return int(match_session.call("change_tactic", _managed_side(), tactic))
 
 func snapshot():
-	if match == null:
+	if match_session == null:
 		return {"error": ERR_UNCONFIGURED}
-	var data = match.call("snapshot")
+	var data = match_session.call("snapshot")
 	if not data is Dictionary:
 		return {"error": ERR_INVALID_DATA}
 	_enrich(data)
 	return data
 
 func commit(world):
-	if match == null or fixture.is_empty():
+	if match_session == null or fixture.is_empty():
 		return {"error": ERR_UNCONFIGURED}
-	var result = match.call("finish_match")
+	var result = match_session.call("finish_match")
 	if not result is Dictionary:
 		return {"error": ERR_INVALID_DATA}
 	if result.has("error"):
