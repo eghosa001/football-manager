@@ -14,6 +14,7 @@ func initialize(world: Dictionary, competition: Dictionary, season_year: int) ->
 	match String(competition.get("format_kind","")):
 		"group_knockout": _initialize_groups(world,competition,season_year)
 		"concacaf_27": _initialize_concacaf(world,competition,season_year)
+		"afc_elite_32": _initialize_afc_elite(world,competition,season_year)
 		_: competition["stage"] = "inactive"
 
 func advance_ready(world: Dictionary, competition_id: String, current_date: String) -> Dictionary:
@@ -26,6 +27,7 @@ func advance_ready(world: Dictionary, competition_id: String, current_date: Stri
 	for fixture in fixtures:
 		if not bool(fixture.get("played",false)): return competition
 	if stage == "group_stage": _finish_groups(world,competition,current_date)
+	elif stage == "league_stage" and String(competition.get("format_kind","")) == "afc_elite_32": _finish_afc_league_stage(world,competition,current_date)
 	else: _finish_knockout(world,competition,stage,current_date)
 	return competition
 
@@ -43,7 +45,6 @@ func _initialize_groups(world: Dictionary, competition: Dictionary, season_year:
 	clubs=clubs.slice(0,required)
 	var groups: Array=[]
 	for i in range(group_count): groups.append([])
-	# Snake seeding spreads the strongest qualification slots across groups.
 	for i in range(clubs.size()):
 		var pot := i/group_count; var slot := i%group_count; var group_index := slot if pot%2==0 else group_count-1-slot
 		groups[group_index].append(String(clubs[i]))
@@ -74,7 +75,6 @@ func _finish_groups(world: Dictionary, competition: Dictionary, current_date: St
 		for q in range(mini(qualifiers_per_group,table.size())): qualifiers.append({"club_id":String(table[q].club_id),"group":gi,"position":q+1})
 	competition["group_tables"]=tables; competition.stage_history.append({"stage":"group_stage","tables":tables.duplicate(true)})
 	var next_stage:=String(competition.get("format",{}).get("first_knockout","round_of_16")); var pairings:Array=[]
-	# Winner/runner-up cross-pairing mirrors common continental brackets while avoiding same-group rematches.
 	if qualifiers_per_group==2 and groups.size()>=2:
 		for gi in range(0,groups.size(),2):
 			var a1:=_qualifier(qualifiers,gi,1); var a2:=_qualifier(qualifiers,gi,2); var b1:=_qualifier(qualifiers,gi+1,1); var b2:=_qualifier(qualifiers,gi+1,2)
@@ -87,6 +87,83 @@ func _finish_groups(world: Dictionary, competition: Dictionary, current_date: St
 			if i+1<ids.size(): pairings.append([ids[i],ids[i+1]])
 	competition["stage"]=next_stage
 	_append_knockout_stage(world,competition,next_stage,pairings,_add_days(current_date,21),_stage_two_leg(competition,next_stage))
+
+func _initialize_afc_elite(world: Dictionary, competition: Dictionary, season_year: int) -> void:
+	var clubs: Array = competition.get("club_ids",[]).duplicate()
+	if clubs.size() < 32:
+		competition["stage"] = "inactive"
+		return
+	clubs = clubs.slice(0,32)
+	var west: Array = []
+	var east: Array = []
+	# The launch database does not yet encode the complete AFC association map,
+	# so qualification ranking is split deterministically into two balanced
+	# 16-club regional leagues while preserving the 2026/27 competition shape.
+	for i in range(clubs.size()):
+		if i % 2 == 0: west.append(String(clubs[i]))
+		else: east.append(String(clubs[i]))
+	competition["regional_leagues"] = [west,east]
+	competition["regional_tables"] = []
+	competition["stage"] = "league_stage"
+	_append_afc_league_fixtures(world,competition,west,0,season_year)
+	_append_afc_league_fixtures(world,competition,east,1,season_year)
+
+func _append_afc_league_fixtures(world: Dictionary, competition: Dictionary, teams: Array, region_index: int, season_year: int) -> void:
+	if teams.size() != 16: return
+	var dates: Array = [
+		"%04d-09-14" % season_year,
+		"%04d-10-12" % season_year,
+		"%04d-10-26" % season_year,
+		"%04d-11-02" % season_year,
+		"%04d-11-23" % season_year,
+		"%04d-12-07" % season_year,
+		"%04d-02-08" % (season_year+1),
+		"%04d-02-15" % (season_year+1)
+	]
+	# Offsets 1..4 form four even cycle systems. Splitting each cycle's edges
+	# by alternating parity yields eight perfect matchdays. Orienting every edge
+	# from i to i+offset gives every club exactly four home and four away games.
+	for offset in range(1,5):
+		var visited: Dictionary = {}
+		for start in range(16):
+			if visited.has(start): continue
+			var cycle: Array = []
+			var current: int = start
+			while not visited.has(current):
+				visited[current] = true
+				cycle.append(current)
+				current = (current + offset) % 16
+			for step in range(cycle.size()):
+				var home_index: int = int(cycle[step])
+				var away_index: int = (home_index + offset) % 16
+				var round_no: int = (offset-1)*2 + (step % 2) + 1
+				var home: String = String(teams[home_index])
+				var away: String = String(teams[away_index])
+				var requested: String = String(dates[round_no-1])
+				var date: String = _conflict_free_date(world,home,away,requested)
+				world.fixtures.append({"id":"afc-%s-z%d-r%d-%d-%d"%[String(competition.id),region_index+1,round_no,home_index,away_index],"competition_id":String(competition.id),"stage":"league_stage","afc_region":region_index,"round":round_no,"home_club_id":home,"away_club_id":away,"date":date,"season_year":season_year,"played":false,"home_goals":0,"away_goals":0})
+
+func _finish_afc_league_stage(world: Dictionary, competition: Dictionary, current_date: String) -> void:
+	var leagues: Array = competition.get("regional_leagues",[])
+	if leagues.size() != 2: return
+	var tables: Array = []
+	var pairings: Array = []
+	var tie_breakers: Array = ["points","goal_difference","goals_scored","wins"]
+	for region_index in range(2):
+		var fixtures: Array = []
+		for fixture in _stage_fixtures(world,String(competition.id),"league_stage"):
+			if int(fixture.get("afc_region",-1)) == region_index: fixtures.append(fixture)
+		var table: Array = LeagueTableClass.build(leagues[region_index],fixtures,3,1,tie_breakers)
+		tables.append(table)
+		if table.size() < 8: return
+		for seed in range(4):
+			var high: String = String(table[seed].club_id)
+			var low: String = String(table[7-seed].club_id)
+			pairings.append([low,high])
+	competition["regional_tables"] = tables
+	competition.stage_history.append({"stage":"league_stage","regional_tables":tables.duplicate(true)})
+	competition["stage"] = "round_of_16"
+	_append_knockout_stage(world,competition,"round_of_16",pairings,_add_days(current_date,14),true)
 
 func _initialize_concacaf(world: Dictionary, competition: Dictionary, season_year: int) -> void:
 	var clubs:Array=competition.get("club_ids",[]).duplicate(); clubs.sort()
@@ -108,8 +185,11 @@ func _finish_knockout(world: Dictionary, competition: Dictionary, stage: String,
 	var entrants:Array=winners.duplicate()
 	if stage=="round_one" and String(competition.get("format_kind",""))=="concacaf_27": entrants.append_array(competition.get("direct_round_of_16",[]))
 	var pairings:Array=[]
-	for i in range(0,entrants.size(),2):
-		if i+1<entrants.size(): pairings.append([String(entrants[i]),String(entrants[i+1])])
+	if stage=="round_of_16" and String(competition.get("format_kind",""))=="afc_elite_32" and entrants.size()==8:
+		for i in range(4): pairings.append([String(entrants[i]),String(entrants[4+((i+1)%4)])])
+	else:
+		for i in range(0,entrants.size(),2):
+			if i+1<entrants.size(): pairings.append([String(entrants[i]),String(entrants[i+1])])
 	competition["stage"]=next_stage
 	_append_knockout_stage(world,competition,next_stage,pairings,_add_days(current_date,21),_stage_two_leg(competition,next_stage))
 
@@ -154,7 +234,8 @@ func _append_knockout_stage(world: Dictionary, competition: Dictionary, stage: S
 			var d:=_conflict_free_date(world,a,b,requested); world.fixtures.append(_knockout_fixture(tie_id,competition,stage,i+1,a,b,d,season_year,tie_id,1,true))
 
 func _knockout_fixture(id:String,competition:Dictionary,stage:String,round_no:int,home:String,away:String,date:String,season_year:int,tie_id:String,leg:int,decisive:bool)->Dictionary:
-	return {"id":id,"competition_id":String(competition.id),"stage":stage,"round":round_no,"home_club_id":home,"away_club_id":away,"date":date,"season_year":season_year,"played":false,"home_goals":0,"away_goals":0,"regional_knockout":true,"tie_id":tie_id,"leg":leg,"extra_time":decisive,"penalties":decisive,"away_goals_rule":false,"neutral_venue":stage=="final" and not _stage_two_leg(competition,stage)}
+	var centralised_afc: bool = String(competition.get("format_kind",""))=="afc_elite_32" and stage in ["quarterfinal","semifinal","final"]
+	return {"id":id,"competition_id":String(competition.id),"stage":stage,"round":round_no,"home_club_id":home,"away_club_id":away,"date":date,"season_year":season_year,"played":false,"home_goals":0,"away_goals":0,"regional_knockout":true,"tie_id":tie_id,"leg":leg,"extra_time":decisive,"penalties":decisive,"away_goals_rule":false,"neutral_venue":centralised_afc or (stage=="final" and not _stage_two_leg(competition,stage))}
 
 func _stage_two_leg(competition: Dictionary, stage: String) -> bool:
 	if stage=="final": return bool(competition.get("format",{}).get("final_two_leg",false))
