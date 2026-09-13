@@ -44,6 +44,12 @@ jobs:
       - name: App speed breakdown
         run: bash tools/test-headless.sh tests/app_speed_breakdown_test.gd 120
 
+      - name: Performance baseline
+        run: bash tools/test-headless.sh tests/performance_baseline_test.gd 240
+
+      - name: Spatial engine robustness regression
+        run: bash tools/test-headless.sh tests/spatial_engine_robustness_test.gd 600
+
       - name: UI2 interaction regression
         run: bash tools/test-headless.sh tests/ui2_runtime_integration_test.gd 600
 
@@ -56,17 +62,11 @@ jobs:
       - name: Database editor UI regression
         run: bash tools/test-headless.sh tests/database_editor_ui_test.gd 600
 
-      - name: Spatial engine robustness regression
-        run: bash tools/test-headless.sh tests/spatial_engine_robustness_test.gd 600
-
       - name: Legacy core regression
         run: bash tools/test-headless.sh tests/test_runner.gd 240
 
       - name: Career session regression
         run: bash tools/test-headless.sh tests/career_session_test.gd 240
-
-      - name: Performance baseline
-        run: bash tools/test-headless.sh tests/performance_baseline_test.gd 240
 
       - name: Save and backup safety
         run: bash tools/test-headless.sh tests/save_safety_test.gd 600
