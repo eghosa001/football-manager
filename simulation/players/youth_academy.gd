@@ -37,6 +37,10 @@ func materialize_intake(world: Dictionary, club_id: String, seed: int, count: in
 		var player_id := "academy-%s-%d-%d" % [club_id, season, i]
 		var player: Dictionary = factory.create(world, club, seed, player_id, i)
 		player["squad_status"] = "academy"
+		player["academy_join_ca"] = int(player.get("current_ability", 0))
+		player["academy_join_season"] = season
+		player["last_development_gain"] = 0
+		player["development_history"] = []
 		world["players"] = world.get("players", [])
 		world.players.append(player)
 		add_prospect(club, String(player.id))
@@ -75,11 +79,16 @@ func develop_academy(world: Dictionary, club_id: String, seed: int = 12345) -> D
 	if club.is_empty(): return {"error":ERR_DOES_NOT_EXIST}
 	ensure_club(club)
 	var improved := 0
+	var total_gain := 0
 	var factory = NewgenFactoryClass.new()
+	var season := int(world.get("season_year", 2026))
 	for player_id in club.academy.prospects:
 		var player := _player(world, String(player_id))
 		if player.is_empty(): continue
-		var room := maxi(0, int(player.get("development_ceiling",player.get("potential",50))) - int(player.get("current_ability",50)))
+		if not player.has("academy_join_ca"): player["academy_join_ca"] = int(player.get("current_ability", 0))
+		if not player.has("academy_join_season"): player["academy_join_season"] = season
+		var before := int(player.get("current_ability", 50))
+		var room := maxi(0, int(player.get("development_ceiling",player.get("potential",50))) - before)
 		var hidden: Dictionary = player.get("hidden_attributes", {})
 		var professionalism := float(hidden.get("professionalism", player.get("personality",{}).get("professionalism",50)))
 		var ambition := float(hidden.get("ambition", player.get("personality",{}).get("ambition",50)))
@@ -90,10 +99,16 @@ func develop_academy(world: Dictionary, club_id: String, seed: int = 12345) -> D
 		var trajectory_factor := 1.15 if trajectory == "early" else (0.82 if trajectory == "late" else (1.05 if trajectory == "volatile" else 1.0))
 		var gain := mini(room, maxi(0, int(round((0.5 + environment*2.1) * trajectory_factor))))
 		if gain > 0:
-			player.current_ability = mini(int(player.get("development_ceiling",player.potential)), int(player.current_ability)+gain)
+			player.current_ability = mini(int(player.get("development_ceiling",player.potential)), before+gain)
 			improved += 1
+			total_gain += gain
+		player["last_development_gain"] = gain
+		player["development_history"] = player.get("development_history", [])
+		player.development_history.append({"season_year":season,"before":before,"after":int(player.get("current_ability",before)),"gain":gain})
+		if player.development_history.size() > 8:
+			player.development_history = player.development_history.slice(player.development_history.size()-8)
 		factory.mature_physical(player, seed)
-	return {"improved":improved,"prospects":club.academy.prospects.size()}
+	return {"improved":improved,"total_gain":total_gain,"prospects":club.academy.prospects.size()}
 
 func _club(world: Dictionary, club_id: String) -> Dictionary:
 	for club in world.get("clubs", []):
