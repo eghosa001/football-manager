@@ -48,8 +48,9 @@ func _association_homegrown(player: Dictionary, country_id: String) -> bool:
 		if not training.is_empty() or player.has("training_history_version"):
 			return false
 	# Compatibility for pre-ledger saves that explicitly persisted a homegrown
-	# qualification. This is deliberately not inferred from nationality.
-	return bool(player.get("homegrown", false))
+	# qualification. A player younger than 18 cannot yet have accumulated the
+	# required three full seasons, so do not preserve an impossible legacy flag.
+	return bool(player.get("homegrown", false)) and int(player.get("age", 0)) >= 18
 
 func club_trained(player: Dictionary, club_id: String) -> bool:
 	if club_id == "":
@@ -57,7 +58,7 @@ func club_trained(player: Dictionary, club_id: String) -> bool:
 	var years_by_club: Variant = player.get("training_years_15_21_by_club", {})
 	if years_by_club is Dictionary:
 		return float((years_by_club as Dictionary).get(club_id, 0.0)) >= HOMEGROWN_YEARS
-	return bool(player.get("club_trained", false))
+	return bool(player.get("club_trained", false)) and int(player.get("age", 0)) >= 18
 
 func register_squad(world: Dictionary, club_id: String, competition: Dictionary, player_ids: Array, season_year: int, player_index: Dictionary = {}) -> Dictionary:
 	ensure_world(world)
