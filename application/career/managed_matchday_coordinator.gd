@@ -34,7 +34,7 @@ func next_managed_fixture(world: Dictionary, club_id: String) -> Dictionary:
 	var season_runner = _instance(SEASON_RUNNER_PATH)
 	if season_runner == null:
 		return {}
-	season_runner.assign_fixture_dates(world)
+	season_runner.call("assign_fixture_dates", world)
 	var date := _next_date(String(world.get("date", "2026-07-01")))
 	if date == "":
 		return {}
@@ -86,13 +86,13 @@ func substitute(player_out: String, player_in: String) -> Error:
 	if match == null:
 		return ERR_UNCONFIGURED
 	var side := "home" if String(home.get("id", "")) == managed_club_id else "away"
-	return int(match.call("make_substitution", side, player_out, player_in)) as Error
+	return int(match.call("make_substitution", side, player_out, player_in))
 
 func change_tactic(tactic: Dictionary) -> Error:
 	if match == null:
 		return ERR_UNCONFIGURED
 	var side := "home" if String(home.get("id", "")) == managed_club_id else "away"
-	return int(match.call("change_tactic", side, tactic)) as Error
+	return int(match.call("change_tactic", side, tactic))
 
 func snapshot() -> Dictionary:
 	if match == null:
