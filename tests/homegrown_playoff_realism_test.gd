@@ -50,6 +50,10 @@ func _test_homegrown_accrues_across_seasons() -> void:
 	service.accrue_season(world)
 	_require(service.association_homegrown(player, "eng"), "homegrown qualification must persist after a transfer abroad")
 	_require(not service.association_homegrown(player, "esp"), "one season after transfer must not create a new association-homegrown qualification")
+	player.age = 22
+	var before_esp := float(player.training_years_15_21_by_country.get("esp",0.0))
+	service.accrue_season(world)
+	_require(is_equal_approx(float(player.training_years_15_21_by_country.get("esp",0.0)),before_esp), "training after age 21 must not count toward homegrown qualification")
 
 func _test_playoff_is_resolved_by_match() -> void:
 	var clubs: Array = []
