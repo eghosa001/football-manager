@@ -4,6 +4,7 @@ const RegistrationServiceClass = preload("res://simulation/competitions/registra
 const CareerCommandServiceClass = preload("res://application/career/career_command_service.gd")
 const ClubEconomyServiceClass = preload("res://simulation/finance/club_economy_service.gd")
 const LeagueSystemClass = preload("res://application/season/league_system.gd")
+const MedicalSystemClass = preload("res://simulation/players/medical_system.gd")
 
 var failures := 0
 var checks := 0
@@ -15,6 +16,7 @@ func _init() -> void:
 	_test_transfer_completion_rechecks_window()
 	_test_finance_defaults()
 	_test_odd_sized_league_byes()
+	_test_partial_medical_state_normalizes()
 	if failures == 0:
 		print("[TEST] CODEBASE ROBUSTNESS REGRESSION PASS: %d checks" % checks)
 		quit(0)
@@ -84,6 +86,15 @@ func _test_odd_sized_league_byes() -> void:
 		counts[away] = int(counts.get(away,0)) + 1
 	for club_id in clubs:
 		_require(int(counts.get(club_id,0)) == 8, "%s must play every opponent home and away" % club_id)
+
+func _test_partial_medical_state_normalizes() -> void:
+	var player := {"id":"med","injured_days":-4,"medical":{"current":"invalid","history":"invalid","rehab_progress":2.0,"match_fitness":140.0}}
+	MedicalSystemClass.new().ensure_player(player)
+	_require(player.medical.current is Dictionary and player.medical.current.is_empty(), "partial medical current state must normalize to dictionary")
+	_require(player.medical.history is Array and player.medical.history.is_empty(), "partial medical history must normalize to array")
+	_require(is_equal_approx(float(player.medical.rehab_progress),1.0), "rehab progress must be clamped during migration normalization")
+	_require(is_equal_approx(float(player.medical.match_fitness),100.0), "match fitness must be clamped during migration normalization")
+	_require(int(player.injured_days) == 0, "negative legacy injury days must normalize to zero")
 
 func _transfer_world(date_string: String) -> Dictionary:
 	return {
