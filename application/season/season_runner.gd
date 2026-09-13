@@ -87,6 +87,7 @@ func complete_world_season(world: Dictionary, season_seed: int) -> Array:
 	return records
 
 func complete_and_rollover(world: Dictionary, history: Array, season_seed: int, promotion_places: int = 3) -> Dictionary:
+	_ensure_current_season_competitions(world)
 	var records: Array = complete_world_season(world, season_seed)
 	for record in records: history.append(record.duplicate(true))
 	var movements: Array = _league_system.apply_promotion_relegation(world, records, promotion_places)
@@ -99,6 +100,21 @@ func complete_and_rollover(world: Dictionary, history: Array, season_seed: int, 
 	continental.initialize_formats(world,next_year,true)
 	_knockout.initialize_all(world, next_year)
 	return {"records":records,"movements":movements,"next_season_year":next_year}
+
+func _ensure_current_season_competitions(world: Dictionary) -> void:
+	# Raw/generated worlds can enter the season runner without CareerSession's
+	# normal initialization path. Add all current-season continental definitions
+	# before recording the season so the record set and competition catalog stay
+	# one-to-one across long saves.
+	var season_year: int = int(world.get("season_year", _year_from_date(String(world.get("date", "2026-07-01")))))
+	var continental = ContinentalCompetitionsClass.new()
+	continental.prepare(world, [])
+	_modern_rules.apply_to_world(world)
+	continental.initialize_formats(world, season_year, false)
+	for competition in world.get("competitions", []):
+		if String(competition.get("competition_type", "league")) != "knockout": continue
+		if not competition.has("knockout_bracket"):
+			_knockout.initialize_competition(world, competition, season_year)
 
 func build_season_record(world: Dictionary, competition_id: String) -> Dictionary:
 	var competition: Dictionary = _find_competition(world.competitions, competition_id)
