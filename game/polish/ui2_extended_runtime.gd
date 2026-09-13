@@ -376,6 +376,26 @@ func _build_competitions(page: Control, tabs: TabContainer, session) -> void:
 			if goals_for > goals_against:
 				wins += 1
 		UI.metric(card, "Record", "%d played" % played, "%d wins" % wins, UI.GREEN)
+		if String(competition.get("competition_type", "league")) == "league":
+			var table_rows: Array = _query.competition_table(session.world, String(competition.get("id", "")))
+			if not table_rows.is_empty():
+				var table_title := Label.new()
+				table_title.text = "TABLE"
+				table_title.add_theme_font_size_override("font_size", 13)
+				card.add_child(table_title)
+				var mini_table := GridContainer.new()
+				mini_table.columns = 4
+				mini_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				card.add_child(mini_table)
+				UI.table_header(mini_table, ["#", "CLUB", "P", "PTS"])
+				for idx in range(mini(8, table_rows.size())):
+					var row: Dictionary = table_rows[idx]
+					var club_id := String(row.get("club_id", ""))
+					var accent := UI.CYAN if club_id == String(session.managed_club_id) else UI.MUTED
+					UI.cell(mini_table, str(idx + 1), 34, accent)
+					UI.cell(mini_table, _club_name(session.world, club_id).left(18), 145, accent)
+					UI.cell(mini_table, str(row.get("played", 0)), 38, accent)
+					UI.cell(mini_table, str(row.get("points", 0)), 44, accent)
 
 func _build_schedule(page: Control, tabs: TabContainer, session) -> void:
 	if page == null or page.has_meta("ui2_extended"):
@@ -400,8 +420,14 @@ func _build_schedule(page: Control, tabs: TabContainer, session) -> void:
 	fixtures.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return String(a.get("date", "")) < String(b.get("date", ""))
 	)
-	var start: int = maxi(0, fixtures.size() - 8)
-	var end: int = mini(fixtures.size(), start + 20)
+	var current_date := String(session.world.get("date", ""))
+	var next_index := fixtures.size()
+	for i in range(fixtures.size()):
+		if String(fixtures[i].get("date", "")) >= current_date:
+			next_index = i
+			break
+	var start: int = maxi(0, next_index - 4) if next_index < fixtures.size() else maxi(0, fixtures.size() - 12)
+	var end: int = mini(fixtures.size(), start + 16)
 	for fixture in fixtures.slice(start, end):
 		var home: bool = String(fixture.get("home_club_id", "")) == String(session.managed_club_id)
 		var opponent_id: String = String(fixture.get("away_club_id", "")) if home else String(fixture.get("home_club_id", ""))
