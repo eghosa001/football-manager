@@ -1,18 +1,17 @@
 class_name AiTransferDirector
 extends RefCounted
 
-# Seasonal AI transfer market: needs-based, budget-guarded, fully deterministic.
-# Each AI club may complete at most one paid signing per season plus free-agent
-# top-ups handled by TransferMarket.rebalance_ai_squads. All fees flow through
-# TransferMarket.execute_transfer so league cash is conserved (buyer -fee,
-# seller +fee). Wage demands must fit inside the buyer's wage budget.
+# Seasonal AI transfer market: needs-based, budget-guarded, deterministic and
+# deliberately bounded. AI clubs can make up to two paid signings per season,
+# but only when coverage or positional quality is meaningfully below their own
+# squad standard. Free-agent top-ups remain handled by TransferMarket.
 
 const MarketClass = preload("res://simulation/transfers/transfer_market.gd")
 const NegotiationClass = preload("res://simulation/transfers/transfer_negotiation.gd")
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
 
 const POSITION_NEEDS := ["GK", "DC", "DR", "DL", "DM", "MC", "AMR", "AML", "AMC", "ST"]
-const MAX_PAID_SIGNINGS_PER_CLUB := 1
+const MAX_PAID_SIGNINGS_PER_CLUB := 2
 
 func run_season_market(world: Dictionary, season_year: int, seed: int) -> Dictionary:
 	NegotiationClass.new().ensure_world(world)
@@ -23,24 +22,33 @@ func run_season_market(world: Dictionary, season_year: int, seed: int) -> Dictio
 	var skipped_budget := 0
 	var clubs: Array = _ordered_clubs(world)
 	for club in clubs:
-		if String(club.get("id", "")) == String(world.get("human_manager", {}).get("club_id", "")):
+		var club_id := String(club.get("id", ""))
+		if club_id == String(world.get("human_manager", {}).get("club_id", "")):
 			continue
-		if int(_paid_signings(completed, String(club.get("id", "")))) >= MAX_PAID_SIGNINGS_PER_CLUB:
-			continue
-		var need := _weakest_need(world, club)
-		if need == "":
-			continue
-		var target := _find_target(world, club, need, market, season_year)
-		if target.is_empty():
-			continue
-		bids += 1
-		var result := _attempt_signing(world, club, target, market, season_year, seed + _stable_key(String(club.get("id", "")) + String(target.get("id", ""))))
-		if String(result.get("status", "")) == "completed":
-			completed.append(result)
-		elif String(result.get("status", "")) == "skipped_budget":
-			skipped_budget += 1
-		else:
+		var attempts := 0
+		while attempts < MAX_PAID_SIGNINGS_PER_CLUB:
+			var need := _weakest_need(world, club)
+			if need == "":
+				break
+			var target := _find_target(world, club, need, market, season_year)
+			if target.is_empty():
+				break
+			bids += 1
+			var attempt_seed := seed + _stable_key(club_id + String(target.get("id", ""))) + attempts * 997
+			var result := _attempt_signing(world, club, target, market, season_year, attempt_seed)
+			attempts += 1
+			if String(result.get("status", "")) == "completed":
+				completed.append(result)
+				# Budgets and squad membership changed; loop once more and recompute the
+				# weakest position rather than blindly signing the same profile twice.
+				continue
+			if String(result.get("status", "")) == "skipped_budget":
+				skipped_budget += 1
+				break
 			rejected += 1
+			# One rejected approach is enough for this club in the seasonal batch.
+			# Rival bidding during daily recruitment still makes the market active.
+			break
 	return {"bids": bids, "completed": completed, "completed_count": completed.size(), "rejected": rejected, "skipped_budget": skipped_budget, "season_year": season_year}
 
 func _attempt_signing(world: Dictionary, buyer: Dictionary, player: Dictionary, market: RefCounted, season_year: int, seed: int) -> Dictionary:
@@ -56,7 +64,6 @@ func _attempt_signing(world: Dictionary, buyer: Dictionary, player: Dictionary, 
 	var wage := int(market.recommended_wage(player))
 	wage = int(round(float(wage) * float(agent_block.get("wage_multiplier", 1.0))))
 	if not market.negotiate_contract(player, buyer, wage, 3, seed):
-		# Try one step down: younger/cheaper wage still respects the structure.
 		wage = int(wage * 0.9)
 		if not market.negotiate_contract(player, buyer, wage, 3, seed + 5):
 			return {"status": "rejected_contract", "buyer_id": buyer_id, "player_id": String(player.get("id", "")), "fee": fee}
@@ -87,7 +94,6 @@ func _agent_block(world: Dictionary, player: Dictionary, buyer: Dictionary) -> D
 			return {"blocked": "agent_conflict", "fee_multiplier": 1.0, "wage_multiplier": 1.0}
 		if club_rel < -45.0:
 			return {"blocked": "agent_relationship", "fee_multiplier": 1.0, "wage_multiplier": 1.0}
-		# Preferred clubs get a small discount; hostile agents inflate.
 		for preferred in agent.get("preferred_clubs", []):
 			if String(preferred) == buyer_id:
 				fee_multiplier *= 0.94
@@ -116,30 +122,39 @@ func _affordable_fee(buyer: Dictionary, value: int, seed: int) -> int:
 	var budget := int(buyer.get("transfer_budget", 0))
 	if budget <= 0:
 		return 0
-	# Keep a 40% reserve so AI never bankrupts itself; add small seeded haggle.
 	var haggle := 0.82 + float(SeededRngClass.value_for(seed, 41000) % 17) / 100.0
-	var fee := int(minf(float(value) * haggle, float(budget) * 0.6))
+	# Leave meaningful headroom for wages and a second need-based move.
+	var fee := int(minf(float(value) * haggle, float(budget) * 0.55))
 	return fee if fee >= 5000 else 0
 
 func _weakest_need(world: Dictionary, club: Dictionary) -> String:
 	var club_id := String(club.get("id", ""))
-	var best_avg := 999.0
+	var squad: Array = []
+	for player in world.get("players", []):
+		if String(player.get("club_id", "")) == club_id and not bool(player.get("retired", false)) and int(player.get("injured_days", 0)) <= 180:
+			squad.append(player)
+	if squad.is_empty():
+		return ""
+	var squad_strength := _top_average(squad, mini(11, squad.size()))
+	var weakest_score := 999.0
 	var need := ""
 	for position in POSITION_NEEDS:
-		var players := _squad_at_position(world.get("players", []), club_id, position)
-		if players.size() >= 2:
-			continue
-		var avg := 0.0
+		var players := _squad_at_position(squad, club_id, position)
+		var score: float
 		if players.is_empty():
-			avg = 20.0
+			score = 10.0
+		elif players.size() == 1:
+			score = float(players[0].get("current_ability", 40)) - 9.0
 		else:
-			for player in players:
-				avg += float(player.get("current_ability", 40))
-			avg /= float(players.size())
-		# Prefer genuine gaps, then weakest covered slot.
-		var score := avg - (10.0 if players.is_empty() else 0.0)
-		if score < best_avg:
-			best_avg = score
+			score = _top_average(players, mini(2, players.size()))
+		# A covered position is only a transfer need when it is meaningfully below
+		# the club's first-team standard. This stops wealthy clubs churning players.
+		var quality_gap := squad_strength - score
+		var lacks_depth := players.size() < 2
+		if not lacks_depth and quality_gap < 6.0:
+			continue
+		if score < weakest_score:
+			weakest_score = score
 			need = position
 	return need
 
@@ -147,6 +162,8 @@ func _find_target(world: Dictionary, buyer: Dictionary, position: String, market
 	var buyer_id := String(buyer.get("id", ""))
 	var buyer_rep := int(buyer.get("reputation", 50))
 	var budget := int(buyer.get("transfer_budget", 0))
+	var current_position := _squad_at_position(world.get("players", []), buyer_id, position)
+	var current_level := _top_average(current_position, mini(2, current_position.size())) if not current_position.is_empty() else 20.0
 	var best := {}
 	var best_score := -999999.0
 	for player in world.get("players", []):
@@ -156,10 +173,13 @@ func _find_target(world: Dictionary, buyer: Dictionary, position: String, market
 			continue
 		if String(player.get("position", "")) != position:
 			continue
+		var ability := float(player.get("current_ability", 40))
+		# Recruitment must improve the position, not merely add another body.
+		if ability < current_level + 2.0 and not current_position.is_empty():
+			continue
 		var seller := _club(world.get("clubs", []), String(player.get("club_id", "")))
 		if seller.is_empty():
 			continue
-		# Sellers must be weaker-or-equal, have depth, or the player must be unhappy.
 		var seller_squad := _squad_at_position(world.get("players", []), String(seller.get("id", "")), position)
 		var unhappy := float(player.get("happiness", player.get("morale", 70))) < 55.0
 		if int(seller.get("reputation", 50)) > buyer_rep + 6 and not unhappy:
@@ -167,14 +187,27 @@ func _find_target(world: Dictionary, buyer: Dictionary, position: String, market
 		if seller_squad.size() <= 1 and not unhappy:
 			continue
 		var value := int(market.player_value(player, season_year))
-		if value > int(float(budget) * 0.6) + 1:
+		if value > int(float(budget) * 0.55) + 1:
 			continue
-		var score := float(player.get("current_ability", 40)) + float(maxi(0, int(player.get("potential", 50)) - int(player.get("current_ability", 40)))) * 0.4 - maxf(0.0, float(int(player.get("age", 26)) - 27)) * 2.5
+		var score := ability + float(maxi(0, int(player.get("potential", 50)) - int(player.get("current_ability", 40)))) * 0.4 - maxf(0.0, float(int(player.get("age", 26)) - 27)) * 2.5
 		score += 5.0 if unhappy else 0.0
 		if score > best_score or (is_equal_approx(score, best_score) and String(player.get("id", "")) < String(best.get("id", ""))):
 			best = player
 			best_score = score
 	return best
+
+func _top_average(players: Array, count: int) -> float:
+	if players.is_empty() or count <= 0:
+		return 0.0
+	var values: Array[int] = []
+	for player in players:
+		values.append(int(player.get("current_ability", 40)))
+	values.sort()
+	values.reverse()
+	var total := 0.0
+	for i in range(mini(count, values.size())):
+		total += float(values[i])
+	return total / float(mini(count, values.size()))
 
 func _squad_at_position(players: Array, club_id: String, position: String) -> Array:
 	var result: Array = []
