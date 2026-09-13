@@ -1,7 +1,7 @@
 extends "res://game/career/career_app.gd"
 
 const RegistryClass = preload("res://game/career/career_screen_registry.gd")
-const RegistryCareerViewsClass = preload("res://game/career/career_views.gd")
+const RegistryCareerViewsClass = preload("res://game/career/registry_career_views.gd")
 
 var _screen_registry = RegistryClass.new()
 
