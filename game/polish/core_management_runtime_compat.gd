@@ -12,6 +12,30 @@ func _scan() -> void:
 	_focus_career_tabs(app)
 	_apply_staff_delegation(app)
 
+func _focus_career_tabs(app: Node) -> void:
+	var session = app.get("session")
+	if session == null or session.world.is_empty():
+		return
+	for tabs in _tab_containers(app):
+		if tabs.get_tab_count() < 4:
+			continue
+		var has_dashboard := false
+		var has_squad := false
+		for i in range(tabs.get_tab_count()):
+			var title: String = tabs.get_tab_title(i)
+			if title == "Dashboard" or title == "Home":
+				has_dashboard = true
+			if title == "Squad":
+				has_squad = true
+		if not has_dashboard or not has_squad:
+			continue
+		var keep := ["Dashboard", "Home", "Inbox", "Squad", "Tactics", "Training", "Medical", "Dynamics", "Staff", "Scouting", "Transfers", "Schedule", "Competitions", "Youth Academy", "Finances", "Club", "Search", "Match Analysis"]
+		for i in range(tabs.get_tab_count()):
+			var title: String = tabs.get_tab_title(i)
+			tabs.set_tab_hidden(i, title not in keep)
+		_add_staff_responsibilities(tabs, session)
+		_add_match_substitution_plan(tabs, session)
+
 func _find_career_app(node: Node) -> Node:
 	if node.has_method("_show_career") and node.has_method("_advance_day"):
 		return node
