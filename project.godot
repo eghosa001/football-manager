@@ -4,12 +4,15 @@ config_version=5
 
 [application]
 config/name="Football Dynasty"
-config/version="1.0.0"
+config/version="1.1.0"
 config/unique_name="com.footballdynasty.game"
 run/main_scene="res://game/scenes/career_app.tscn"
 config/features=PackedStringArray("4.7")
 
 [autoload]
+Monetization="*res://game/monetization/monetization_manager.gd"
+MonetizationUIRuntime="*res://game/monetization/monetization_ui_runtime.gd"
+AnalystRewardRuntime="*res://game/monetization/analyst_reward_runtime.gd"
 PolishRuntime="*res://game/polish/polish_runtime_compat.gd"
 CompletionRuntime="*res://game/polish/completion_runtime_compat.gd"
 TacticsRuntime="*res://game/polish/tactics_runtime.gd"
@@ -67,5 +70,6 @@ pointing/emulate_mouse_from_touch=true
 [rendering]
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
 
 environment/defaults/default_clear_color=Color(0.018, 0.030, 0.058, 1)

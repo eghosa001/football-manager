@@ -1,7 +1,7 @@
 extends Node
 
 const POLICY_TITLE := "Privacy Policy"
-const POLICY_TEXT := "Football Dynasty is designed to work offline. This release does not require an account, does not request Internet access, and does not send gameplay or personal information to the developer. Career saves, settings, and custom database data are stored locally on your device.\n\nIf a future version adds online services, analytics, advertising, cloud saves, purchases, or other data collection, this notice and the public privacy policy must be updated before release.\n\nFor the current Google Play release, uninstalling the app may remove locally stored game data because Android backup is disabled for this build."
+const POLICY_TEXT := "Football Dynasty keeps career saves, settings, and custom database data locally on your device. The core football-management simulation does not require an account and remains playable without purchasing Premium.\n\nThe Android Google Play build may use an Internet connection for Google Play Billing and optional rewarded advertising. Google Play may process purchase, device, diagnostic, and account-related information required to complete or restore purchases. If you voluntarily request a rewarded ad, the Google Mobile Ads SDK may process device identifiers, advertising/consent information, approximate location derived by the advertising platform, ad interaction data, and diagnostics according to Google policies and your consent choices.\n\nRewarded ads are optional and are never required to continue a career, play a match, use tactics, save, or advance time. Premium is a one-time entitlement. The game stores a local Premium entitlement flag after Google Play confirms ownership so the entitlement can continue to work offline.\n\nFootball Dynasty does not sell your career data. Uninstalling the app may remove locally stored game data because Android backup is disabled for this build. Advertising and billing disclosures in the public privacy policy and Google Play Data Safety form must match the SDK configuration used in the release."
 
 var _next_scan_ms := 0
 
@@ -54,8 +54,8 @@ func _show_policy(parent: Control) -> void:
 
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-380, -240)
-	panel.size = Vector2(760, 480)
+	panel.position = Vector2(-400, -255)
+	panel.size = Vector2(800, 510)
 	overlay.add_child(panel)
 
 	var margin := MarginContainer.new()
@@ -74,12 +74,16 @@ func _show_policy(parent: Control) -> void:
 	title.add_theme_font_size_override("font_size", 28)
 	column.add_child(title)
 
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(scroll)
+
 	var body := Label.new()
 	body.text = POLICY_TEXT
+	body.custom_minimum_size.x = 710
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_font_size_override("font_size", 15)
-	column.add_child(body)
+	scroll.add_child(body)
 
 	var close := Button.new()
 	close.text = "CLOSE"
