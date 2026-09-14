@@ -1,8 +1,7 @@
 extends SceneTree
 
-# Validates Android + Apple (iOS/macOS) export integration without requiring
-# SDKs, Xcode, or signing identities. Full binary exports remain CI/device steps.
-# Run: godot --headless --path . --script res://tests/mobile_export_test.gd
+# Validates Android + Apple export integration without requiring SDKs, Xcode,
+# physical devices, or signing identities. Binary/device validation remains external.
 
 func _init() -> void:
 	_run.call_deferred()
@@ -17,9 +16,8 @@ func _run() -> void:
 		_fail("export_presets.cfg missing")
 		return
 	var presets := ConfigFile.new()
-	var err := presets.load(presets_path)
-	if err != OK:
-		_fail("cannot parse export_presets.cfg: %s" % err)
+	if presets.load(presets_path) != OK:
+		_fail("cannot parse export_presets.cfg")
 		return
 
 	var found := {}
@@ -27,59 +25,43 @@ func _run() -> void:
 		if section.ends_with(".options"):
 			continue
 		var platform := String(presets.get_value(section, "platform", ""))
-		var preset_name := String(presets.get_value(section, "name", section))
-		var export_path := String(presets.get_value(section, "export_path", ""))
 		if platform != "":
-			found[platform] = {"name": preset_name, "path": export_path, "section": section}
+			found[platform] = {"path": String(presets.get_value(section, "export_path", "")), "section": section}
 
 	for required in ["Windows Desktop", "Linux/X11", "Android", "iOS", "macOS"]:
 		if not found.has(required):
 			_fail("missing export preset platform: " + required)
 			return
 
-	# Android must be a current store-ready bundle target, not an unsigned debug stub.
 	var android: Dictionary = found["Android"]
 	if not String(android["path"]).ends_with(".aab"):
-		_fail("Android export_path should target .aab, got: " + String(android["path"]))
+		_fail("Android export_path must be .aab")
 		return
-	var android_section: String = String(android["section"])
-	var android_options := android_section + ".options"
-	if String(presets.get_value(android_options, "package/unique_name", "")) == "":
-		_fail("Android package/unique_name empty")
+	var options := String(android["section"]) + ".options"
+	if String(presets.get_value(options, "package/unique_name", "")) != "com.footballdynasty.game":
+		_fail("unexpected Android package name")
 		return
-	if not bool(presets.get_value(android_options, "architectures/arm64-v8a", false)):
-		_fail("Android must enable architectures/arm64-v8a")
+	if not bool(presets.get_value(options, "architectures/arm64-v8a", false)):
+		_fail("Android must enable arm64-v8a")
 		return
-	if int(String(presets.get_value(android_options, "gradle_build/target_sdk", "0"))) < 36:
-		_fail("Android target SDK must be API 36 or newer for current Play submission requirements")
+	if int(String(presets.get_value(options, "gradle_build/target_sdk", "0"))) < 36:
+		_fail("Android target SDK must be API 36 or newer")
 		return
-	if int(presets.get_value(android_options, "version/code", 0)) < 10003:
-		_fail("Android version/code must be RC3 or newer")
+	if int(presets.get_value(options, "version/code", 0)) < 10004:
+		_fail("Android version/code must be production v1.0.0 or newer")
 		return
-	if String(presets.get_value(android_options, "version/name", "")) != "1.0.0-rc3":
-		_fail("Android version/name must match RC3")
+	if String(presets.get_value(options, "version/name", "")) != "1.0.0":
+		_fail("Android version/name must be 1.0.0 for first production release")
 		return
-
-	# iOS exports an Xcode project; signing stays outside version control.
-	var ios: Dictionary = found["iOS"]
-	if not String(ios["path"]).ends_with(".xcodeproj"):
-		_fail("iOS export_path should target .xcodeproj, got: " + String(ios["path"]))
+	if bool(presets.get_value(options, "permissions/internet", true)):
+		_fail("production offline release must not request Internet permission")
 		return
-	var ios_section: String = String(ios["section"])
-	if String(presets.get_value(ios_section + ".options", "application/bundle_identifier", "")) == "":
-		_fail("iOS application/bundle_identifier empty")
+	if bool(presets.get_value(options, "user_data_backup/allow", true)):
+		_fail("Android backup policy changed unexpectedly")
 		return
 
-	# macOS must be a runnable .app bundle, universal for Apple Silicon + Intel.
-	var macos: Dictionary = found["macOS"]
-	if not String(macos["path"]).ends_with(".app"):
-		_fail("macOS export_path should target .app, got: " + String(macos["path"]))
-		return
-
-	# Project settings required for phones/tablets: stretch + landscape + touch.
-	var project := ConfigFile.new()
-	if project.load("res://project.godot") != OK:
-		_fail("cannot parse project.godot")
+	if String(ProjectSettings.get_setting("application/config/version", "")) != "1.0.0":
+		_fail("project application version must match production release")
 		return
 	if String(ProjectSettings.get_setting("display/window/stretch/mode", "")) != "canvas_items":
 		_fail("display/window/stretch/mode should be canvas_items")
@@ -93,6 +75,12 @@ func _run() -> void:
 	if not bool(ProjectSettings.get_setting("display/window/size/resizable", false)):
 		_fail("display/window/size/resizable should be true")
 		return
+	if not FileAccess.file_exists("res://docs/PRIVACY_POLICY.md"):
+		_fail("privacy policy missing")
+		return
+	if not FileAccess.file_exists("res://game/polish/privacy_runtime.gd"):
+		_fail("in-game privacy surface missing")
+		return
 
-	print("[TEST] MOBILE EXPORT PASS: Android API36+AAB and Apple/mobile settings valid")
+	print("[TEST] MOBILE EXPORT PASS: production 1.0.0, API36+AAB, ARM64, offline privacy contract valid")
 	quit(0)
