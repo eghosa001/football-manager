@@ -9,12 +9,14 @@ func _fail(message: String) -> void:
 
 func _run() -> void:
 	var project_text := FileAccess.get_file_as_string("res://project.godot")
-	if not project_text.contains('Monetization="*res://game/monetization/monetization_manager.gd"'):
-		_fail("Monetization manager autoload missing")
-		return
-	if not project_text.contains('MonetizationUIRuntime="*res://game/monetization/monetization_ui_runtime.gd"'):
-		_fail("Monetization UI autoload missing")
-		return
+	for required in [
+		'Monetization="*res://game/monetization/monetization_manager.gd"',
+		'MonetizationUIRuntime="*res://game/monetization/monetization_ui_runtime.gd"',
+		'AnalystRewardRuntime="*res://game/monetization/analyst_reward_runtime.gd"',
+	]:
+		if not project_text.contains(required):
+			_fail("monetization autoload missing: " + required)
+			return
 
 	var manager_text := FileAccess.get_file_as_string("res://game/monetization/monetization_manager.gd")
 	for required in [
@@ -23,6 +25,9 @@ func _run() -> void:
 		'query_purchases',
 		'purchase_pending',
 		'rewarded_ad_user_earned_reward',
+		'MAX_ANALYST_CREDITS := 3',
+		'analyst_credits',
+		'consume_analyst_report',
 		'reward_granted.emit',
 	]:
 		if not manager_text.contains(required):
@@ -33,9 +38,19 @@ func _run() -> void:
 		return
 
 	var ui_text := FileAccess.get_file_as_string("res://game/monetization/monetization_ui_runtime.gd")
-	for required in ["BUY PREMIUM", "RESTORE PURCHASE", "WATCH REWARDED AD", "Ads are never forced"]:
+	for required in ["BUY PREMIUM", "RESTORE PURCHASE", "WATCH REWARDED AD", "analyst_credit", "Ads are never forced", "never changes attributes"]:
 		if not ui_text.contains(required):
 			_fail("store UI missing required user-facing contract: " + required)
+			return
+
+	var analyst_text := FileAccess.get_file_as_string("res://game/monetization/analyst_reward_runtime.gd")
+	for required in ["GENERATE INSTANT ANALYST DOSSIER", "ScoutingServiceClass.new().analyst_report", "consume_analyst_report", "does not change the player or any match outcome"]:
+		if not analyst_text.contains(required):
+			_fail("analyst reward integration missing: " + required)
+			return
+	for forbidden in ["current_ability =", "potential =", "cash =", "fitness =", "execute_transfer", "simulate_match"]:
+		if analyst_text.contains(forbidden):
+			_fail("analyst reward must not mutate competitive state: " + forbidden)
 			return
 
 	var presets := ConfigFile.new()
@@ -55,5 +70,5 @@ func _run() -> void:
 			_fail("privacy disclosure missing: " + required)
 			return
 
-	print("[TEST] MONETIZATION CONTRACT PASS: Premium + restore + rewarded-only model enforced")
+	print("[TEST] MONETIZATION CONTRACT PASS: Premium + restore + rewarded Analyst Reports + no pay-to-win enforced")
 	quit(0)
