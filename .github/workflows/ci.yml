@@ -101,6 +101,9 @@ jobs:
       - name: Career rollover and save-load regression
         run: bash tools/test-headless.sh tests/career_rollover_test.gd 600
 
+      - name: Monetization safety contract
+        run: bash tools/test-headless.sh tests/monetization_contract_test.gd 120
+
       - name: Production readiness contract
         run: bash tools/test-headless.sh tests/production_readiness_contract_test.gd 600
 
