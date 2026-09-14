@@ -68,6 +68,10 @@ func save_career(path: String = "") -> Error:
 func continue_season() -> Dictionary:
 	if world.is_empty(): return {}
 	var result: Dictionary = CareerCycleClass.new().complete_year(world, history, seed + int(world.get("season_year",2026)) * 97, 1)
+	# A completed season can create players, staff, contracts and next-season
+	# competition state. Apply the same idempotent normalization used after load
+	# so the live world and a freshly reloaded save remain identical.
+	_initialize_world(false)
 	manager = world.get("human_manager", manager)
 	return result
 
