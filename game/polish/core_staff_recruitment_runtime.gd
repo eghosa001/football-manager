@@ -75,7 +75,7 @@ func _upgrade(tabs: TabContainer) -> void:
 	years.custom_minimum_size.x = 70
 	controls.add_child(years)
 	var hire := Button.new()
-	hire.text = "Hire"
+	hire.text = "HIRE"
 	controls.add_child(hire)
 	var status := Label.new()
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -135,7 +135,7 @@ func _add_current_staff(box: VBoxContainer, session, status: Label) -> void:
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(label)
 		var fire := Button.new()
-		fire.text = "Release"
+		fire.text = "RELEASE"
 		fire.pressed.connect(func():
 			var err := StaffRecruitment.new().fire(session.world, String(session.managed_club_id), String(member.get("id", "")))
 			status.text = "%s released." % _staff_name(member) if err == OK else "Could not release staff member (%d)." % err
