@@ -102,7 +102,12 @@ func _build_inbox(page: Control, tabs: TabContainer, session: Object, app: Node)
 			button.custom_minimum_size.y = 54
 			button.pressed.connect(select_message.bind(i))
 			list.add_child(button)
-		select_message.call(0)
+		var initial_index := 0
+		for i in range(messages.size()):
+			if not bool(messages[i].get("read", false)):
+				initial_index = i
+				break
+		select_message.call(initial_index)
 
 func _build_staff(page: Control, tabs: TabContainer, session: Object) -> void:
 	if page == null or page.has_meta("ui2_remaining"):
