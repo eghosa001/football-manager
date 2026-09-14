@@ -34,6 +34,20 @@ func _run() -> void:
 	assert(completion_runtime.call("_career_session", tabs) == scene.session)
 	assert(management_runtime.call("_career_session", tabs) == scene.session)
 
+	# The production shell is a 17-screen management application. Guard the actual
+	# rendered tabs here (not just the registry descriptors) so a valid-looking
+	# registry cannot mask a missing builder, orphaned screen, or empty production tab.
+	var expected_tabs := [
+		"Dashboard", "Inbox", "Squad", "Tactics", "Training", "Medical",
+		"Dynamics", "Staff", "Scouting", "Transfers", "Youth Academy", "Schedule",
+		"Competitions", "Finances", "Club", "Search", "Match Analysis"
+	]
+	assert(tabs.get_tab_count() == expected_tabs.size())
+	for expected_name in expected_tabs:
+		var rendered_page := _page(tabs, String(expected_name))
+		assert(rendered_page != null)
+		assert(rendered_page.get_child_count() > 0)
+
 	var dashboard := _page(tabs, "Dashboard")
 	var squad := _page(tabs, "Squad")
 	var tactics := _page(tabs, "Tactics")
