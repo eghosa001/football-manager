@@ -2,6 +2,84 @@ extends "res://game/polish/ui2_remaining_runtime.gd"
 
 const StaffMarket = preload("res://simulation/staff/staff_market.gd")
 
+func _build_inbox(page: Control, tabs: TabContainer, session: Object, app: Node) -> void:
+	if page == null or page.has_meta("ui2_remaining"):
+		return
+	var root := _replace(page, "Inbox")
+	var world: Dictionary = session.get("world")
+	var messages: Array = world.get("inbox", [])
+	var unread := 0
+	for message in messages:
+		if not bool(message.get("read", false)):
+			unread += 1
+	_header(root, "INBOX", "%d messages • %d unread" % [messages.size(), unread], tabs, app)
+	var body := HBoxContainer.new()
+	body.add_theme_constant_override("separation", 12)
+	body.custom_minimum_size.y = 500
+	root.add_child(body)
+	var list := UI.panel(body, Vector2(330, 500), UI.CYAN)
+	(list.get_parent() as Control).size_flags_stretch_ratio = 0.78
+	UI.section(list, "MESSAGES")
+	var detail := UI.panel(body, Vector2(0, 500), UI.PURPLE)
+	(detail.get_parent() as Control).size_flags_stretch_ratio = 1.72
+	var detail_title := UI.title(detail, "SELECT A MESSAGE", "Choose an item from your inbox")
+	var detail_meta := UI.body(detail, "", true)
+	var detail_body := UI.body(detail, "No message selected.")
+	detail_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var mark_button := UI.action("MARK READ", UI.GREEN)
+	mark_button.visible = false
+	detail.add_child(mark_button)
+	var selected_index := -1
+	var select_message := func(index: int) -> void:
+		if index < 0 or index >= messages.size():
+			return
+		selected_index = index
+		var message: Dictionary = messages[index]
+		var subject := String(message.get("subject", message.get("title", "Club message")))
+		var sender := String(message.get("sender", message.get("category", "Club")))
+		var date := String(message.get("date", ""))
+		var text := String(message.get("body", message.get("text", message.get("message", ""))))
+		var heading := detail_title.get_child(0) as Label
+		heading.text = subject.to_upper()
+		detail_meta.text = "%s%s" % [sender, " • " + date if date != "" else ""]
+		detail_body.text = text if text != "" else "No additional message text."
+		mark_button.visible = not bool(message.get("read", false))
+	mark_button.pressed.connect(func() -> void:
+		var target_index := selected_index
+		if target_index < 0 or target_index >= messages.size() or bool(messages[target_index].get("read", false)):
+			target_index = -1
+			for i in range(messages.size()):
+				if not bool(messages[i].get("read", false)):
+					target_index = i
+					break
+		if target_index < 0:
+			return
+		var message: Dictionary = messages[target_index]
+		message["read"] = true
+		messages[target_index] = message
+		world["inbox"] = messages
+		app.call_deferred("_show_career")
+	)
+	if messages.is_empty():
+		UI.body(list, "Your inbox is clear.", true)
+	else:
+		for i in range(messages.size()):
+			var message: Dictionary = messages[i]
+			var subject := String(message.get("subject", message.get("title", "Club message")))
+			var date := String(message.get("date", ""))
+			var button := Button.new()
+			button.text = "%s%s\n%s" % ["●  " if not bool(message.get("read", false)) else "", subject, date]
+			button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			button.custom_minimum_size.y = 54
+			button.pressed.connect(select_message.bind(i))
+			list.add_child(button)
+		var initial_index := 0
+		for i in range(messages.size()):
+			if not bool(messages[i].get("read", false)):
+				initial_index = i
+				break
+		select_message.call(initial_index)
+
 func _build_staff(page: Control, tabs: TabContainer, session: Object) -> void:
 	super._build_staff(page, tabs, session)
 	if page == null:
