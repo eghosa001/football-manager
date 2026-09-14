@@ -1,7 +1,7 @@
 class_name PlayerAttributes
 extends RefCounted
 
-const SeededRngClass = preload("res://core/seeded_rng.gd")
+const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
 
 const TECHNICAL := ["corners","crossing","dribbling","finishing","first_touch","free_kicks","heading","long_shots","long_throws","marking","passing","penalty_taking","tackling","technique"]
 const MENTAL := ["aggression","anticipation","bravery","composure","concentration","decisions","determination","flair","leadership","off_the_ball","positioning","teamwork","vision","work_rate"]
@@ -78,7 +78,7 @@ func ensure_personality(player: Dictionary, seed: int) -> void:
 	var existing: Variant = player.get("personality", "")
 	if typeof(existing) == TYPE_STRING and not (existing as String).strip_edges().is_empty():
 		return
-	if typeof(existing) == TYPE_STRING_NAME and not StringName(existing).is_empty():
+	if typeof(existing) == TYPE_STRING_NAME and not str(existing).strip_edges().is_empty():
 		player["personality"] = str(existing)
 		return
 	var hidden: Dictionary = player.get("hidden_attributes", {})
