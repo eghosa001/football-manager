@@ -4,7 +4,7 @@ config_version=5
 
 [application]
 config/name="Football Dynasty"
-config/version="1.0.0"
+config/version="1.1.0"
 config/unique_name="com.footballdynasty.game"
 run/main_scene="res://game/scenes/career_app.tscn"
 config/features=PackedStringArray("4.7")
@@ -47,7 +47,7 @@ PlaytestDepthRuntime="*res://game/polish/playtest_depth_runtime_compat.gd"
 PlaytestUIFixesRuntime="*res://game/polish/playtest_ui_fixes_runtime_compat.gd"
 DynamicsResponsivenessRuntime="*res://game/polish/dynamics_responsiveness_runtime_compat.gd"
 CoreManagementRuntime="*res://game/polish/core_management_runtime_compat.gd"
-CoreStaffRecruitmentRuntime="*res://game/polish/core_staff_recruitment_runtime_compat.gd"
+CoreStaffRecruitmentRuntime="*res://game/polish/core_staff_recruitment_runtime.gd"
 CoreYouthRuntime="*res://game/polish/core_youth_runtime_compat.gd"
 LiveMatchRuntime="*res://game/polish/live_match_runtime.gd"
 ExactLeagueSelectorRuntime="*res://game/polish/exact_league_selector_runtime_compat.gd"
