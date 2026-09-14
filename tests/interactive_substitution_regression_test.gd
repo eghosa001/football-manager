@@ -1,6 +1,6 @@
 extends SceneTree
 
-const Engine = preload("res://simulation/match/full_match_engine_v2.gd")
+const MatchEngine = preload("res://simulation/match/full_match_engine_v2.gd")
 const Tactics = preload("res://simulation/tactics/tactics_manager.gd")
 
 func _init() -> void:
@@ -11,7 +11,7 @@ func _init() -> void:
 		for i in range(16):
 			var positions := ["GK","DR","DC","DC","DL","DM","MC","MC","AMR","AML","ST","ST","MC","DC","AMR","GK"]
 			players.append({"id":"%s-%02d" % [side,i],"club_id":side,"position":positions[i],"current_ability":70-i,"potential":75,"fitness":100,"morale":70,"attributes":{"stamina":70,"passing":70,"technique":70,"finishing":70,"dribbling":70,"decisions":70,"vision":70,"composure":70,"work_rate":70,"anticipation":70,"marking":70,"positioning":70,"pace":70,"acceleration":70,"agility":70,"balance":70,"reflexes":70,"one_on_ones":70,"goalkeeper_positioning":70,"handling":70}})
-	var baseline: Dictionary = Engine.new().simulate_match(home,away,players,424242,{})
+	var baseline: Dictionary = MatchEngine.new().simulate_match(home,away,players,424242,{})
 	assert(not baseline.has("error"))
 	var starters: Array = baseline.get("lineups",{}).get("home",[])
 	assert(starters.size() == 11)
@@ -22,7 +22,7 @@ func _init() -> void:
 			player_in = String(player.get("id",""))
 			break
 	assert(player_in != "")
-	var managed: Dictionary = Engine.new().simulate_match(home,away,players,424242,{"user_substitutions":[{"minute":55,"side":"home","player_out":player_out,"player_in":player_in}]})
+	var managed: Dictionary = MatchEngine.new().simulate_match(home,away,players,424242,{"user_substitutions":[{"minute":55,"side":"home","player_out":player_out,"player_in":player_in}]})
 	assert(not managed.has("error"))
 	var found := false
 	for row in managed.get("substitutions",[]):
