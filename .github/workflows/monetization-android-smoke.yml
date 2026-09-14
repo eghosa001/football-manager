@@ -51,13 +51,11 @@ jobs:
       - name: Mobile export contract
         run: bash tools/test-headless.sh tests/mobile_export_test.gd 180
 
-      - name: Install Android Gradle build template
-        run: godot --headless --editor --path . --install-android-build-template --quit
-
-      - name: Export debug monetization AAB
+      - name: Export debug monetization AAB with Gradle template
         run: |
           mkdir -p build/android
-          godot --headless --path . --export-debug "Android" build/android/FootballDynasty-1.1.0-monetization-smoke.aab
+          godot --headless --path . --install-android-build-template --export-debug "Android" build/android/FootballDynasty-1.1.0-monetization-smoke.aab
+          test -d android/build
           test -s build/android/FootballDynasty-1.1.0-monetization-smoke.aab
           sha256sum build/android/FootballDynasty-1.1.0-monetization-smoke.aab > build/android/FootballDynasty-1.1.0-monetization-smoke.aab.sha256
 
