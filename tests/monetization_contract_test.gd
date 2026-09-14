@@ -28,6 +28,9 @@ func _run() -> void:
 		'MAX_ANALYST_CREDITS := 3',
 		'analyst_credits',
 		'consume_analyst_report',
+		'update_consent_info',
+		'consent_form_dismissed',
+		'consent_resolved',
 		'reward_granted.emit',
 	]:
 		if not manager_text.contains(required):
@@ -35,6 +38,9 @@ func _run() -> void:
 			return
 	if manager_text.contains("show_interstitial_ad") or manager_text.contains("show_app_open_ad"):
 		_fail("forced/interstitial/app-open ad path must not exist in monetization manager")
+		return
+	if not manager_text.contains('if not consent_resolved:'):
+		_fail("rewarded ads must fail closed until consent flow is resolved")
 		return
 
 	var ui_text := FileAccess.get_file_as_string("res://game/monetization/monetization_ui_runtime.gd")
@@ -63,6 +69,12 @@ func _run() -> void:
 	if not bool(presets.get_value("preset.2.options", "gradle_build/use_gradle_build", false)):
 		_fail("Android Gradle build must remain enabled for monetization plugins")
 		return
+	if int(presets.get_value("preset.2.options", "version/code", 0)) != 10005:
+		_fail("monetized Android build must use versionCode 10005")
+		return
+	if String(presets.get_value("preset.2.options", "version/name", "")) != "1.1.0":
+		_fail("monetized Android build must use versionName 1.1.0")
+		return
 
 	var privacy_text := FileAccess.get_file_as_string("res://game/polish/privacy_runtime.gd")
 	for required in ["Google Play Billing", "rewarded advertising", "optional", "Data Safety"]:
@@ -70,5 +82,14 @@ func _run() -> void:
 			_fail("privacy disclosure missing: " + required)
 			return
 
-	print("[TEST] MONETIZATION CONTRACT PASS: Premium + restore + rewarded Analyst Reports + no pay-to-win enforced")
+	for required_path in [
+		"res://tools/install-monetization-plugins.sh",
+		"res://tools/prepare-monetization-smoke.sh",
+		"res://.github/workflows/monetization-android-smoke.yml",
+	]:
+		if not FileAccess.file_exists(required_path):
+			_fail("Android monetization integration gate missing: " + required_path)
+			return
+
+	print("[TEST] MONETIZATION CONTRACT PASS: Premium + restore + consent-gated rewarded Analyst Reports + no pay-to-win enforced")
 	quit(0)
