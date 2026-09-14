@@ -11,6 +11,11 @@ const PERCEPTION_REFRESH_TICKS := 2
 const STATE_REFRESH_TICKS := 3
 const PERCEPTION_RANGE := 32.0
 const BALL_PHYSICS_SUBSTEPS := 2
+# Ball flight, restarts and event timing stay at the engine's 10 Hz clock, but
+# full-team movement/perception does not need to be recomputed every 100 ms.
+# Replay frames are sampled every 15 ticks in full matches, so a 3-tick player
+# cadence still produces a freshly updated player state for every retained frame.
+const PLAYER_MOTION_REFRESH_TICKS := 3
 
 var _motion_states: Dictionary = {}
 var _perception_cache: Dictionary = {}
@@ -52,16 +57,18 @@ func simulate_continuous(home_lineup: Array, away_lineup: Array, seed: int, home
 	var marking_home: Dictionary = {}
 	var marking_away: Dictionary = {}
 	var pending_restart: Dictionary = {}
-	const MARKING_REFRESH_TICKS := 10
+	const MARKING_REFRESH_TICKS := 9
 
 	for tick in range(maxi(0,ticks)):
 		if tick % MARKING_REFRESH_TICKS == 0:
 			marking_home = _assignments(away_pos,home_pos)
 			marking_away = _assignments(home_pos,away_pos)
-		_move_side(home_lineup,home_pos,away_pos,ball,home_profile,loads.home,marking_home,possession=="home",dt,tick)
-		_move_side(away_lineup,away_pos,home_pos,ball,away_profile,loads.away,marking_away,possession=="away",dt,tick)
-		_move_goalkeeper(home_pos,home_lineup,ball,true)
-		_move_goalkeeper(away_pos,away_lineup,ball,false)
+		if tick % PLAYER_MOTION_REFRESH_TICKS == 0:
+			var motion_dt := dt * float(PLAYER_MOTION_REFRESH_TICKS)
+			_move_side(home_lineup,home_pos,away_pos,ball,home_profile,loads.home,marking_home,possession=="home",motion_dt,tick)
+			_move_side(away_lineup,away_pos,home_pos,ball,away_profile,loads.away,marking_away,possession=="away",motion_dt,tick)
+			_move_goalkeeper(home_pos,home_lineup,ball,true)
+			_move_goalkeeper(away_pos,away_lineup,ball,false)
 
 		for _substep in range(BALL_PHYSICS_SUBSTEPS):
 			BallClass.step(ball_state,dt/float(BALL_PHYSICS_SUBSTEPS),PITCH_LENGTH,PITCH_WIDTH)
