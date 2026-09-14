@@ -4,6 +4,7 @@ extends RefCounted
 const DatabaseLoaderClass = preload("res://data/database_loader.gd")
 const RealismProfileClass = preload("res://data/realism_profile.gd")
 const PlayerProfileClass = preload("res://simulation/players/player_profile.gd")
+const PlayerAttributesClass = preload("res://simulation/players/player_attributes.gd")
 const SpecialAbilityServiceClass = preload("res://simulation/players/special_ability_service.gd")
 const SeededRngClass = preload("res://core/rng/seeded_rng.gd")
 
@@ -54,10 +55,11 @@ func create(world: Dictionary, club: Dictionary, seed: int, unique_id: String, i
 	player["attributes"] = _attributes(position, ca, float(player.physical_maturity), seed, key)
 	var profile = PlayerProfileClass.new()
 	profile.ensure(player)
-	# Keep the persisted schema identical for freshly generated and reloaded players.
-	# A previous dictionary-shaped personality value was normalized to a string by
-	# CareerSession on load, which made the second season diverge after save/reload.
 	player["personality"] = profile.personality(player)
+	# CareerSession applies PlayerAttributes.ensure() after loading a save. Apply the
+	# same canonicalization at creation time so fresh and reloaded newgens have the
+	# same attribute/hidden/personality schema and deterministic season rollovers.
+	PlayerAttributesClass.new().ensure(player, seed)
 	var abilities = SpecialAbilityServiceClass.new()
 	player["special_abilities"] = abilities.assign_for_player(player, seed, key + 5000)
 	player["special_ability_labels"] = abilities.labels_for(player)
