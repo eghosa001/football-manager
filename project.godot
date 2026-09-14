@@ -10,6 +10,8 @@ run/main_scene="res://game/scenes/career_app.tscn"
 config/features=PackedStringArray("4.7")
 
 [autoload]
+Monetization="*res://game/monetization/monetization_manager.gd"
+MonetizationUIRuntime="*res://game/monetization/monetization_ui_runtime.gd"
 PolishRuntime="*res://game/polish/polish_runtime_compat.gd"
 CompletionRuntime="*res://game/polish/completion_runtime_compat.gd"
 TacticsRuntime="*res://game/polish/tactics_runtime.gd"
