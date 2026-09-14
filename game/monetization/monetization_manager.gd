@@ -13,6 +13,7 @@ const PREMIUM_PRODUCT_ID := "football_dynasty_premium"
 const SAVE_PATH := "user://monetization.cfg"
 const BILLING_CLASS := "BillingClient"
 const ADMOB_SCRIPT := "res://addons/AdmobPlugin/Admob.gd"
+const CONSENT_PARAMETERS_CLASS := "ConsentRequestParameters"
 const PRODUCT_TYPE_INAPP := 0
 const PURCHASE_STATE_PURCHASED := 1
 const PURCHASE_STATE_PENDING := 2
@@ -24,6 +25,7 @@ var is_premium: bool = false
 var analyst_credits: int = 0
 var billing_available: bool = false
 var rewarded_available: bool = false
+var consent_resolved: bool = false
 var status: String = "offline"
 var product_details: Dictionary = {}
 var pending_reward_id: String = ""
@@ -72,6 +74,9 @@ func request_rewarded_ad(reward_id: String = "analyst_credit") -> void:
 		return
 	if _admob == null:
 		_fail("Rewarded ads are not available on this build.")
+		return
+	if not consent_resolved:
+		_fail("Advertising privacy choices are still being resolved. Try again after the consent step finishes.")
 		return
 	pending_reward_id = reward_id
 	if rewarded_available:
@@ -208,15 +213,69 @@ func _init_rewarded_ads() -> void:
 	_connect_if_present(_admob, "rewarded_ad_failed_to_load", _on_rewarded_failed)
 	_connect_if_present(_admob, "rewarded_ad_user_earned_reward", _on_reward_earned)
 	_connect_if_present(_admob, "rewarded_ad_dismissed_full_screen_content", _on_rewarded_dismissed)
+	_connect_if_present(_admob, "consent_info_updated", _on_consent_info_updated)
+	_connect_if_present(_admob, "consent_info_update_failed", _on_consent_error)
+	_connect_if_present(_admob, "consent_form_loaded", _on_consent_form_loaded)
+	_connect_if_present(_admob, "consent_form_failed_to_load", _on_consent_error)
+	_connect_if_present(_admob, "consent_form_dismissed", _on_consent_form_dismissed)
 	add_child(_admob)
 	_admob.call("initialize")
 
 func _on_admob_initialized(_status_data = null) -> void:
 	if is_premium:
 		return
-	_admob.call("load_rewarded_ad")
+	_begin_consent_flow()
+
+func _begin_consent_flow() -> void:
+	consent_resolved = false
+	if _admob == null or not _admob.has_method("update_consent_info"):
+		_set_status("consent_unavailable")
+		return
+	if not ClassDB.class_exists(CONSENT_PARAMETERS_CLASS):
+		_set_status("consent_unavailable")
+		return
+	var parameters = ClassDB.instantiate(CONSENT_PARAMETERS_CLASS)
+	if parameters == null:
+		_set_status("consent_unavailable")
+		return
+	parameters.set("is_real", not OS.is_debug_build())
+	_admob.call("update_consent_info", parameters)
+	_set_status("consent_checking")
+
+func _on_consent_info_updated(_consent_info = null) -> void:
+	if _admob == null:
+		return
+	if _admob.has_method("is_consent_form_available") and bool(_admob.call("is_consent_form_available")):
+		_admob.call("load_consent_form")
+		_set_status("consent_form_loading")
+		return
+	_complete_consent_and_load_rewarded()
+
+func _on_consent_form_loaded(_consent_info = null) -> void:
+	if _admob != null and _admob.has_method("show_consent_form"):
+		_admob.call("show_consent_form")
+		_set_status("consent_form_showing")
+	else:
+		_set_status("consent_unavailable")
+
+func _on_consent_form_dismissed(_consent_info = null, _form_error = null) -> void:
+	_complete_consent_and_load_rewarded()
+
+func _on_consent_error(_error_data = null) -> void:
+	consent_resolved = false
+	rewarded_available = false
+	rewarded_ready_changed.emit(false)
+	_set_status("consent_error")
+
+func _complete_consent_and_load_rewarded() -> void:
+	consent_resolved = true
+	if _admob != null and not is_premium:
+		_admob.call("load_rewarded_ad")
+		_set_status("loading_rewarded_ad")
 
 func _on_rewarded_loaded(_ad_info = null, _response_info = null) -> void:
+	if not consent_resolved:
+		return
 	rewarded_available = true
 	rewarded_ready_changed.emit(true)
 	_set_status("rewarded_ready")
@@ -241,7 +300,7 @@ func _on_reward_earned(_ad_info = null, _reward_data = null) -> void:
 func _on_rewarded_dismissed(_ad_info = null) -> void:
 	rewarded_available = false
 	rewarded_ready_changed.emit(false)
-	if _admob != null and not is_premium:
+	if _admob != null and not is_premium and consent_resolved:
 		_admob.call_deferred("load_rewarded_ad")
 
 func _connect_if_present(object: Object, signal_name: StringName, callable: Callable) -> void:
