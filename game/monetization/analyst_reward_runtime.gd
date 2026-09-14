@@ -58,8 +58,6 @@ func _install_on_scouting_tab(tabs: TabContainer) -> void:
 		_update_panel(panel)
 
 func _refresh_buttons() -> void:
-	for node in get_tree().get_nodes_in_group("__never_used_monetization_group"):
-		pass
 	_refresh_node(get_tree().root)
 
 func _refresh_node(node: Node) -> void:
@@ -93,17 +91,17 @@ func _use_analyst_report(tabs: TabContainer) -> void:
 	if session == null or session.world.is_empty():
 		_show(app, "Start or load a career before requesting an analyst dossier.")
 		return
+	var monetization := get_node("/root/Monetization")
+	if not monetization.can_use_analyst_report():
+		_show(app, "No Analyst Report credit available. Use the Premium menu to earn one from an optional rewarded ad, or activate Premium.")
+		return
+
 	var command = CommandClass.new()
 	var candidates: Array = command.shortlist(session.world, session.managed_club_id, 12)
 	if candidates.is_empty():
 		_show(app, "No recruitment target is currently available for an analyst dossier.")
 		return
 	var target: Dictionary = candidates[0]
-	var monetization := get_node("/root/Monetization")
-	if not monetization.consume_analyst_report():
-		_show(app, "No Analyst Report credit available. Use the Premium menu to earn one from an optional rewarded ad, or activate Premium.")
-		return
-
 	var quality := _best_scout_quality(session.world, session.managed_club_id)
 	var report: Dictionary = ScoutingServiceClass.new().analyst_report(
 		session.world,
@@ -111,6 +109,12 @@ func _use_analyst_report(tabs: TabContainer) -> void:
 		maxi(65, quality),
 		int(session.seed) + int(session.world.get("day_index", 0)) + String(target.get("id", "")).hash()
 	)
+	if report.is_empty():
+		_show(app, "The analyst service could not produce a dossier. No credit was consumed.")
+		return
+	if not monetization.consume_analyst_report():
+		_show(app, "The dossier was prepared, but the Analyst Report credit was no longer available. No report was charged.")
+		return
 	_show(app, _format_report(target, report))
 	_refresh_buttons()
 
