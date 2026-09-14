@@ -75,6 +75,9 @@ func _run() -> void:
 	if not bool(ProjectSettings.get_setting("display/window/size/resizable", false)):
 		_fail("display/window/size/resizable should be true")
 		return
+	if not bool(ProjectSettings.get_setting("rendering/textures/vram_compression/import_etc2_astc", false)):
+		_fail("Android export requires rendering/textures/vram_compression/import_etc2_astc=true")
+		return
 	for required_path in [
 		"res://docs/PRIVACY_POLICY.md",
 		"res://game/polish/privacy_runtime.gd",
@@ -86,5 +89,5 @@ func _run() -> void:
 			_fail("monetized release asset missing: " + required_path)
 			return
 
-	print("[TEST] MOBILE EXPORT PASS: monetized 1.1.0, API36+AAB, ARM64, billing/ad privacy contract valid")
+	print("[TEST] MOBILE EXPORT PASS: monetized 1.1.0, API36+AAB, ARM64, ETC2/ASTC, billing/ad privacy contract valid")
 	quit(0)
