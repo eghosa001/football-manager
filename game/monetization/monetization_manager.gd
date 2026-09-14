@@ -7,6 +7,7 @@ signal purchase_pending(product_id: String)
 signal purchase_failed(message: String)
 signal rewarded_ready_changed(ready: bool)
 signal reward_granted(reward_id: String)
+signal analyst_credits_changed(credits: int)
 
 const PREMIUM_PRODUCT_ID := "football_dynasty_premium"
 const SAVE_PATH := "user://monetization.cfg"
@@ -17,8 +18,10 @@ const PURCHASE_STATE_PURCHASED := 1
 const PURCHASE_STATE_PENDING := 2
 const RESPONSE_OK := 0
 const RESPONSE_USER_CANCELED := 1
+const MAX_ANALYST_CREDITS := 3
 
 var is_premium: bool = false
+var analyst_credits: int = 0
 var billing_available: bool = false
 var rewarded_available: bool = false
 var status: String = "offline"
@@ -30,7 +33,7 @@ var _admob: Node
 var _pending_ack_tokens: Dictionary = {}
 
 func _ready() -> void:
-	_load_cached_entitlement()
+	_load_cached_state()
 	if OS.has_feature("android"):
 		_init_billing()
 		_init_rewarded_ads()
@@ -60,9 +63,12 @@ func restore_purchases() -> void:
 	_set_status("restoring")
 	_billing.call("query_purchases", PRODUCT_TYPE_INAPP)
 
-func request_rewarded_ad(reward_id: String) -> void:
+func request_rewarded_ad(reward_id: String = "analyst_credit") -> void:
 	if is_premium:
 		reward_granted.emit(reward_id)
+		return
+	if reward_id == "analyst_credit" and analyst_credits >= MAX_ANALYST_CREDITS:
+		_fail("You already have the maximum of %d Analyst Report credits." % MAX_ANALYST_CREDITS)
 		return
 	if _admob == null:
 		_fail("Rewarded ads are not available on this build.")
@@ -75,6 +81,19 @@ func request_rewarded_ad(reward_id: String) -> void:
 	else:
 		_set_status("loading_rewarded_ad")
 		_admob.call("load_rewarded_ad")
+
+func can_use_analyst_report() -> bool:
+	return is_premium or analyst_credits > 0
+
+func consume_analyst_report() -> bool:
+	if is_premium:
+		return true
+	if analyst_credits <= 0:
+		return false
+	analyst_credits -= 1
+	_save_cached_state()
+	analyst_credits_changed.emit(analyst_credits)
+	return true
 
 func premium_price_text() -> String:
 	for offer in product_details.get("one_time_purchase_offer_details", []):
@@ -213,6 +232,10 @@ func _on_reward_earned(_ad_info = null, _reward_data = null) -> void:
 		return
 	var granted := pending_reward_id
 	pending_reward_id = ""
+	if granted == "analyst_credit":
+		analyst_credits = mini(MAX_ANALYST_CREDITS, analyst_credits + 1)
+		_save_cached_state()
+		analyst_credits_changed.emit(analyst_credits)
 	reward_granted.emit(granted)
 
 func _on_rewarded_dismissed(_ad_info = null) -> void:
@@ -229,20 +252,22 @@ func _set_premium(value: bool) -> void:
 	if is_premium == value:
 		return
 	is_premium = value
-	_save_cached_entitlement()
+	_save_cached_state()
 	if is_premium:
 		rewarded_available = false
 		rewarded_ready_changed.emit(false)
 	premium_changed.emit(is_premium)
 
-func _load_cached_entitlement() -> void:
+func _load_cached_state() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SAVE_PATH) == OK:
 		is_premium = bool(cfg.get_value("entitlement", "premium", false))
+		analyst_credits = clampi(int(cfg.get_value("rewards", "analyst_credits", 0)), 0, MAX_ANALYST_CREDITS)
 
-func _save_cached_entitlement() -> void:
+func _save_cached_state() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("entitlement", "premium", is_premium)
+	cfg.set_value("rewards", "analyst_credits", analyst_credits)
 	cfg.save(SAVE_PATH)
 
 func _set_status(value: String) -> void:
