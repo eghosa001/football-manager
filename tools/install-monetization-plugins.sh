@@ -22,6 +22,32 @@ download_and_verify() {
   echo "$sha  $out" | sha256sum --check --status
 }
 
+install_plugin_from_tree() {
+  local src_root="$1"
+  local expected_name="$2"
+  local plugin_cfg
+  plugin_cfg="$(find "$src_root" -type f -name plugin.cfg -print | head -n 1 || true)"
+  if [[ -z "$plugin_cfg" ]]; then
+    echo "No plugin.cfg found in extracted $expected_name archive." >&2
+    echo "Archive contents:" >&2
+    find "$src_root" -maxdepth 4 -type f -print >&2
+    exit 1
+  fi
+
+  local plugin_dir
+  plugin_dir="$(dirname "$plugin_cfg")"
+  local found_name
+  found_name="$(basename "$plugin_dir")"
+  if [[ "$found_name" != "$expected_name" ]]; then
+    echo "Expected plugin directory '$expected_name' but archive contains '$found_name'." >&2
+    exit 1
+  fi
+
+  rm -rf "$ROOT/addons/$expected_name"
+  cp -R "$plugin_dir" "$ROOT/addons/$expected_name"
+  test -s "$ROOT/addons/$expected_name/plugin.cfg"
+}
+
 download_and_verify "$BILLING_URL" "$BILLING_SHA256" "$TMP/billing.zip"
 download_and_verify "$ADMOB_URL" "$ADMOB_SHA256" "$TMP/admob.zip"
 
@@ -29,19 +55,8 @@ mkdir -p "$TMP/billing" "$TMP/admob"
 unzip -q "$TMP/billing.zip" -d "$TMP/billing"
 unzip -q "$TMP/admob.zip" -d "$TMP/admob"
 
-copy_addons() {
-  local src_root="$1"
-  local addons_dir
-  addons_dir="$(find "$src_root" -type d -name addons -print -quit)"
-  if [[ -z "$addons_dir" ]]; then
-    echo "No addons directory found in $src_root" >&2
-    exit 1
-  fi
-  cp -R "$addons_dir"/. "$ROOT/addons"/
-}
-
-copy_addons "$TMP/billing"
-copy_addons "$TMP/admob"
+install_plugin_from_tree "$TMP/billing" "GodotGooglePlayBilling"
+install_plugin_from_tree "$TMP/admob" "AdmobPlugin"
 
 echo "Installed pinned monetization plugins into $ROOT/addons"
 echo "Billing: GodotGooglePlayBilling $BILLING_VERSION"
