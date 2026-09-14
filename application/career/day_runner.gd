@@ -8,6 +8,7 @@ const RecruitmentDailyClass = preload("res://application/career/recruitment_dail
 const CareerMatchdayServiceClass = preload("res://application/career/career_matchday_service.gd")
 const CareerCycleClass = preload("res://application/career/career_cycle.gd")
 const NewsEventConsumerClass = preload("res://application/career/news_event_consumer.gd")
+const PlayerValuationClass = preload("res://simulation/transfers/player_valuation_service.gd")
 
 func advance_day(world: Dictionary, history: Array, seed: int) -> Dictionary:
 	if world.is_empty(): return {"error":ERR_INVALID_DATA}
@@ -27,6 +28,11 @@ func advance_day(world: Dictionary, history: Array, seed: int) -> Dictionary:
 			if String(competition.get("competition_type", "league")) == "knockout" and not bool(competition.get("knockout_bracket", {}).get("complete", false)):
 				return {"error":ERR_BUSY,"message":"A cup has not completed; the new season cannot start yet."}
 		rollover = CareerCycleClass.new().complete_year(world, history, int(world.get("seed", seed)) + season_year * 97)
+		# Loading a career canonicalizes player market values. Do the same immediately
+		# after a live season rollover because ages, ability, contracts and squads all
+		# change here. Without this, the in-memory career can diverge from the same save
+		# after reopening it on the next season boundary.
+		PlayerValuationClass.new().refresh_world(world)
 		target_date = String(world.date)
 		InboxServiceClass.new().add_message(world, "season", "Welcome to the new season", "Season %d is ready. Review your squad registration, contracts and new fixtures." % int(world.season_year))
 	var managed_club_id := String(world.get("human_manager", {}).get("club_id", ""))
