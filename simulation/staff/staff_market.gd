@@ -103,6 +103,13 @@ func _generate_applicant(world: Dictionary, club_id: String, role: String, year:
 	ensure_staff_attributes(member, seed + key)
 	world.staff.append(member)
 	world.staff_applicants.append(String(member.id))
+	# Applicants are persistent staff entities as soon as they enter the world.
+	# Create the same default contract record that StaffContracts.ensure_world()
+	# would otherwise add only after a save/reload, keeping live and loaded state
+	# deterministic across season rollover boundaries.
+	world["staff_contracts"] = world.get("staff_contracts", [])
+	var multiplier := 2.0 if role in ["assistant_manager", "assistant"] else (3.0 if role == "manager" else 1.0)
+	world.staff_contracts.append({"id":"staff-contract-"+String(member.id),"staff_id":String(member.id),"club_id":"","start_year":year,"end_year":year+2,"weekly_wage":maxi(150, int(float(ability * ability) * multiplier))})
 
 func evaluate_manager_security(world: Dictionary, club_id: String, recent_points_per_game: float, board_patience: int = 50) -> Dictionary:
 	ensure_world(world)
@@ -182,5 +189,5 @@ func _range(seed: int, key: int, lo: int, hi: int) -> int:
 
 func _stable_key(text: String) -> int:
 	var value := 59
-	for character in text.to_utf8_buffer(): value = posmod(value * 163 + int(character), 2_147_483_647)
+	for character in text.to_utf8_buffer(): value = posmod(value * 163 + int(character),2_147_483_647)
 	return value
