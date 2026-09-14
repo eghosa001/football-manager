@@ -4,7 +4,7 @@ config_version=5
 
 [application]
 config/name="Football Dynasty"
-config/version="1.0.0-rc3"
+config/version="1.0.0"
 config/unique_name="com.footballdynasty.game"
 run/main_scene="res://game/scenes/career_app.tscn"
 config/features=PackedStringArray("4.7")
@@ -36,6 +36,7 @@ UI2IntegrationRuntime="*res://game/polish/ui2_integration_runtime_compat.gd"
 UI2RemainingRuntime="*res://game/polish/ui2_remaining_runtime_compat.gd"
 UI2LayoutFixRuntime="*res://game/polish/ui2_layout_fix_runtime.gd"
 UI2MenuRuntime="*res://game/polish/ui2_menu_runtime.gd"
+PrivacyRuntime="*res://game/polish/privacy_runtime.gd"
 PlaytestControlsRuntime="*res://game/polish/playtest_controls_runtime_compat.gd"
 BackgroundSaveRuntime="*res://game/polish/background_save_runtime_compat.gd"
 AudioSettingsRuntime="*res://game/polish/audio_settings_runtime_compat.gd"
