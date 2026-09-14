@@ -51,9 +51,13 @@ func create(world: Dictionary, club: Dictionary, seed: int, unique_id: String, i
 		"homegrown":nationality == country_id,"squad_status":"academy","newgen":true,"fictional_identity":true,
 	}
 	player["hidden_attributes"] = _hidden_attributes(seed, key, ca, potential)
-	player["personality"] = {"professionalism":int(player.hidden_attributes.professionalism),"ambition":int(player.hidden_attributes.ambition),"loyalty":int(player.hidden_attributes.loyalty)}
 	player["attributes"] = _attributes(position, ca, float(player.physical_maturity), seed, key)
-	PlayerProfileClass.new().ensure(player)
+	var profile = PlayerProfileClass.new()
+	profile.ensure(player)
+	# Keep the persisted schema identical for freshly generated and reloaded players.
+	# A previous dictionary-shaped personality value was normalized to a string by
+	# CareerSession on load, which made the second season diverge after save/reload.
+	player["personality"] = profile.personality(player)
 	var abilities = SpecialAbilityServiceClass.new()
 	player["special_abilities"] = abilities.assign_for_player(player, seed, key + 5000)
 	player["special_ability_labels"] = abilities.labels_for(player)
