@@ -1,0 +1,72 @@
+name: Android Monetization Smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'game/monetization/**'
+      - 'game/polish/privacy_runtime.gd'
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - 'tests/monetization_contract_test.gd'
+      - 'tests/mobile_export_test.gd'
+      - 'tools/install-monetization-plugins.sh'
+      - 'tools/prepare-monetization-smoke.sh'
+      - '.github/workflows/monetization-android-smoke.yml'
+
+concurrency:
+  group: monetization-android-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  android-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout clean source
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Setup Godot 4.7.2 with export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Prepare pinned billing and AdMob plugins
+        run: bash tools/prepare-monetization-smoke.sh
+
+      - name: Import monetization-enabled project
+        run: godot --headless --editor --path . --quit
+
+      - name: Monetization contract
+        run: bash tools/test-headless.sh tests/monetization_contract_test.gd 180
+
+      - name: Mobile export contract
+        run: bash tools/test-headless.sh tests/mobile_export_test.gd 180
+
+      - name: Install Android Gradle build template
+        run: godot --headless --editor --path . --install-android-build-template --quit
+
+      - name: Export debug monetization AAB
+        run: |
+          mkdir -p build/android
+          godot --headless --path . --export-debug "Android" build/android/FootballDynasty-1.1.0-monetization-smoke.aab
+          test -s build/android/FootballDynasty-1.1.0-monetization-smoke.aab
+          sha256sum build/android/FootballDynasty-1.1.0-monetization-smoke.aab > build/android/FootballDynasty-1.1.0-monetization-smoke.aab.sha256
+
+      - name: Upload debug smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: FootballDynasty-1.1.0-monetization-smoke
+          path: |
+            build/android/FootballDynasty-1.1.0-monetization-smoke.aab
+            build/android/FootballDynasty-1.1.0-monetization-smoke.aab.sha256
+          if-no-files-found: error
+          retention-days: 7
