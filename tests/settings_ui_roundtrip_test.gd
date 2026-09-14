@@ -40,7 +40,19 @@ func _run() -> void:
 	assert(bool(loaded.reduce_motion))
 	assert(bool(loaded.autosave))
 	assert(int(loaded.autosave_interval_days) == 11)
+
+	# Release UI references before deleting the scene and give queued/deferred UI
+	# cleanup two complete frames. This keeps the regression from reporting test-only
+	# ObjectDB leaks when the scene owns transient settings controls or decorators.
+	ui_scale = null
+	font_scale = null
+	contrast = null
+	motion = null
+	autosave = null
+	interval = null
+	apply = null
 	scene.queue_free()
+	await process_frame
 	await process_frame
 	if FileAccess.file_exists(settings_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(settings_path))
