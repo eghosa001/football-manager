@@ -2,6 +2,7 @@ class_name CareerCycleService
 extends "res://application/career/career_cycle_v2.gd"
 
 const ClubEconomyServiceClass = preload("res://simulation/finance/club_economy_service.gd")
+const PlayerValuationClass = preload("res://simulation/transfers/player_valuation_service.gd")
 
 # Stable production facade for the canonical career rollover implementation.
 # Versioned implementations remain behind this boundary until heavy RC3
@@ -11,3 +12,11 @@ func _init() -> void:
 	# facade boundary so all production career rollovers use hardened insolvency
 	# handling without leaking implementation details into callers.
 	_economy = ClubEconomyServiceClass.new()
+
+func complete_year(world: Dictionary, history: Array, season_seed: int, promotion_places: int = 3) -> Dictionary:
+	var result: Dictionary = super.complete_year(world, history, season_seed, promotion_places)
+	# CareerSession refreshes valuations whenever a save is loaded. Keep the live
+	# post-rollover world in that same canonical state so youth intake, ageing,
+	# transfers and contract changes cannot make save/reload diverge.
+	PlayerValuationClass.new().refresh_world(world)
+	return result
