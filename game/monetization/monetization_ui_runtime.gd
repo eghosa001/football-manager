@@ -23,6 +23,7 @@ func _wire_manager() -> void:
 	m.purchase_failed.connect(_set_message)
 	m.rewarded_ready_changed.connect(func(_ready): _refresh())
 	m.reward_granted.connect(_on_reward_granted)
+	m.analyst_credits_changed.connect(func(_credits): _refresh())
 
 func _process(_delta: float) -> void:
 	var now := Time.get_ticks_msec()
@@ -66,8 +67,8 @@ func _open_store(parent: Control) -> void:
 
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-410, -275)
-	panel.size = Vector2(820, 550)
+	panel.position = Vector2(-410, -290)
+	panel.size = Vector2(820, 580)
 	overlay.add_child(panel)
 
 	var margin := MarginContainer.new()
@@ -87,13 +88,13 @@ func _open_store(parent: Control) -> void:
 	column.add_child(title)
 
 	var intro := Label.new()
-	intro.text = "Support Football Dynasty with one permanent purchase. Core football management remains fully playable for free."
+	intro.text = "Support Football Dynasty with one permanent purchase. The complete core management career remains playable for free."
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.add_theme_font_size_override("font_size", 15)
 	column.add_child(intro)
 
 	var benefits := Label.new()
-	benefits.text = "PREMIUM INCLUDES\n• No rewarded-ad prompts — eligible convenience rewards become instant\n• Premium supporter status across careers\n• Premium-ready entitlement for advanced cosmetic/customisation packs\n• Restore ownership automatically through Google Play"
+	benefits.text = "PREMIUM INCLUDES\n• Unlimited instant Analyst Dossiers in Scouting — no rewarded ad required\n• No rewarded-ad prompts for Premium convenience features\n• Premium supporter status across careers\n• Premium-ready entitlement for future cosmetic/customisation packs\n• Restore ownership automatically through Google Play"
 	benefits.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	benefits.add_theme_font_size_override("font_size", 15)
 	column.add_child(benefits)
@@ -121,18 +122,18 @@ func _open_store(parent: Control) -> void:
 	column.add_child(separator)
 
 	var reward_title := Label.new()
-	reward_title.text = "OPTIONAL REWARDED AD"
+	reward_title.text = "OPTIONAL REWARDED AD — ANALYST REPORT CREDIT"
 	reward_title.add_theme_font_size_override("font_size", 17)
 	column.add_child(reward_title)
 
 	var reward_copy := Label.new()
-	reward_copy.text = "Free players may voluntarily watch a rewarded ad for a convenience reward. Ads are never forced between matches, transfers, tactics, saves, or Continue actions."
+	reward_copy.text = "Free players can voluntarily watch one rewarded ad to earn one persistent Analyst Report credit (maximum 3 stored). In Scouting, a credit generates an instant dossier on your current top recruitment target. It reveals decision-support information only; it never changes attributes, transfer outcomes, finances, fitness, or match results. Ads are never forced between matches, transfers, tactics, saves, or Continue actions."
 	reward_copy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(reward_copy)
 
 	_reward_button = Button.new()
-	_reward_button.custom_minimum_size = Vector2(360, 44)
-	_reward_button.pressed.connect(func(): get_node("/root/Monetization").request_rewarded_ad("supporter_convenience"))
+	_reward_button.custom_minimum_size = Vector2(420, 44)
+	_reward_button.pressed.connect(func(): get_node("/root/Monetization").request_rewarded_ad("analyst_credit"))
 	column.add_child(_reward_button)
 
 	_status_label = Label.new()
@@ -165,10 +166,13 @@ func _refresh() -> void:
 		_buy_button.disabled = m.is_premium
 	if _reward_button != null:
 		if m.is_premium:
-			_reward_button.text = "CLAIM CONVENIENCE REWARD"
-			_reward_button.disabled = false
+			_reward_button.text = "PREMIUM: ANALYST DOSSIERS UNLIMITED"
+			_reward_button.disabled = true
+		elif m.analyst_credits >= m.MAX_ANALYST_CREDITS:
+			_reward_button.text = "ANALYST CREDITS FULL (%d/%d)" % [m.analyst_credits, m.MAX_ANALYST_CREDITS]
+			_reward_button.disabled = true
 		else:
-			_reward_button.text = "WATCH REWARDED AD" if m.rewarded_available else "REWARDED AD LOADING"
+			_reward_button.text = "WATCH REWARDED AD — EARN 1 CREDIT (%d/%d)" % [m.analyst_credits, m.MAX_ANALYST_CREDITS] if m.rewarded_available else "REWARDED AD LOADING — CREDITS %d/%d" % [m.analyst_credits, m.MAX_ANALYST_CREDITS]
 			_reward_button.disabled = not m.rewarded_available
 	if _status_label != null:
 		_status_label.text = _friendly_status(m.status)
@@ -177,14 +181,16 @@ func _on_status_changed(_status: String) -> void:
 	_refresh()
 
 func _on_premium_changed(active: bool) -> void:
-	_set_message("Premium is active on this device." if active else "Premium is not active.")
+	_set_message("Premium is active on this device. Analyst Dossiers are unlimited." if active else "Premium is not active.")
 	_refresh()
 
 func _on_reward_granted(reward_id: String) -> void:
-	if reward_id == "supporter_convenience":
-		_set_message("Reward earned. The game confirmed the rewarded-ad completion event.")
+	if reward_id == "analyst_credit":
+		var m := get_node("/root/Monetization")
+		_set_message("Analyst Report credit earned and saved: %d/%d. Open Scouting in a career to use it." % [m.analyst_credits, m.MAX_ANALYST_CREDITS])
 	else:
 		_set_message("Reward earned: %s" % reward_id)
+	_refresh()
 
 func _set_message(message: String) -> void:
 	if _status_label != null and is_instance_valid(_status_label):
@@ -198,7 +204,7 @@ func _friendly_status(value: String) -> String:
 		"billing_plugin_missing": return "Billing plugin is not installed in this build. Purchases are disabled safely."
 		"purchase_pending": return "Purchase pending. Google Play will unlock Premium when payment completes."
 		"purchase_cancelled": return "Purchase cancelled. Nothing was charged by the game."
-		"rewarded_ready": return "Optional rewarded ad ready."
+		"rewarded_ready": return "Optional rewarded ad ready. Analyst credits can be stored up to 3."
 		"rewarded_unavailable": return "No rewarded ad is available right now. Core gameplay is unaffected."
 		"offline": return "Store services are available only in the Android Google Play build."
 		_: return value.replace("_", " ").capitalize()
