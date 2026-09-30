@@ -1,0 +1,73 @@
+name: Deep Validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: football-deep-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deep-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: true
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Import project
+        run: bash tools/test-headless.sh import 600
+
+      - name: Run full regression catalog
+        shell: bash
+        run: |
+          set -u
+          failures=0
+          while read -r test timeout; do
+            echo "===== $test ====="
+            if ! bash tools/test-headless.sh "$test" "$timeout"; then
+              failures=$((failures + 1))
+            fi
+          done <<'EOF'
+          tests/managed_matchday_compile_test.gd 120
+          tests/live_managed_match_regression_test.gd 240
+          tests/architecture_convergence_test.gd 600
+          tests/codebase_robustness_regression_test.gd 600
+          tests/app_speed_breakdown_test.gd 120
+          tests/selected_leagues_regression_test.gd 180
+          tests/squad_realism_regression_test.gd 120
+          tests/spatial_engine_robustness_test.gd 600
+          tests/market_realism_regression_test.gd 120
+          tests/competitive_bidding_regression_test.gd 120
+          tests/interactive_substitution_regression_test.gd 240
+          tests/ui2_runtime_integration_test.gd 600
+          tests/staff_ui_action_test.gd 600
+          tests/settings_ui_roundtrip_test.gd 600
+          tests/database_editor_ui_test.gd 600
+          tests/test_runner.gd 240
+          tests/career_session_test.gd 240
+          tests/save_safety_test.gd 600
+          tests/training_session_test.gd 600
+          tests/transfer_window_country_test.gd 600
+          tests/club_economy_service_test.gd 600
+          tests/career_rollover_test.gd 600
+          tests/production_readiness_contract_test.gd 600
+          tests/performance_baseline_test.gd 240
+          EOF
+          test "$failures" -eq 0
+
+      - name: Verify source remained clean
+        run: git diff --exit-code -- .
