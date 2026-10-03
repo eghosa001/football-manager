@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout clean source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           clean: true
 
